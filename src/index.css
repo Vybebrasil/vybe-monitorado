@@ -652,3 +652,92 @@ button:focus-visible, a:focus-visible, input:focus-visible, [role="button"]:focu
 
 .health-score-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 0.45rem; color: var(--cy-text-secondary); font: 0.55rem var(--font-mono); }
 .health-score-meta b { color: var(--health-color); }
+
+
+/* Sprint 5 — Registro de Impacto */
+.impact-registry { margin-bottom: 2rem; border-color: rgba(0,243,255,0.3); }
+.impact-registry-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.impact-registry h2 { margin-top: 0.4rem; color: #fff; font: 700 1.1rem var(--font-mono); letter-spacing: 0.05em; }
+.impact-registry-header p { margin-top: 0.35rem; color: var(--cy-text-secondary); font-size: 0.78rem; }
+.impact-add-btn, .impact-submit-btn { padding: 0.58rem 0.75rem; border: 1px solid var(--cy-neon-cyan); background: rgba(0,243,255,0.08); color: var(--cy-neon-cyan); cursor: pointer; font: 700 0.64rem var(--font-mono); white-space: nowrap; }
+.impact-add-btn:hover, .impact-submit-btn:hover { background: rgba(0,243,255,0.18); color: #fff; }
+.impact-form { display: flex; flex-direction: column; gap: 0.65rem; margin-top: 1rem; padding: 0.9rem; border: 1px solid rgba(0,243,255,0.25); background: rgba(0,243,255,0.035); }
+.impact-form input, .impact-form textarea, .impact-form select { width: 100%; padding: 0.65rem; border: 1px solid var(--cy-border); outline: none; background: #080808; color: #fff; font: 0.72rem var(--font-mono); }
+.impact-form textarea { min-height: 62px; resize: vertical; }
+.impact-form input:focus, .impact-form textarea:focus, .impact-form select:focus { border-color: var(--cy-neon-cyan); }
+.impact-form-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 0.55rem; }
+.impact-form-actions { display: flex; justify-content: flex-end; gap: 0.55rem; }
+.impact-submit-btn:disabled { cursor: wait; opacity: 0.6; }
+.impact-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-top: 1rem; }
+.impact-record { padding: 0.8rem; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.16); }
+.impact-record-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--cy-text-secondary); font: 0.58rem var(--font-mono); }
+.impact-result { font-weight: 700; letter-spacing: 0.05em; }
+.impact-result.improved { color: var(--cy-neon-green); }
+.impact-result.stable { color: var(--cy-neon-cyan); }
+.impact-result.worsened { color: var(--cy-neon-magenta); }
+.impact-result.inconclusive { color: var(--cy-neon-yellow); }
+.impact-record > strong { display: block; margin-top: 0.6rem; color: #fff; font-size: 0.8rem; }
+.impact-record > p { margin-top: 0.35rem; color: var(--cy-text-secondary); font-size: 0.7rem; line-height: 1.45; }
+.impact-record > small { display: block; margin-top: 0.6rem; color: var(--cy-text-secondary); font: 0.58rem var(--font-mono); }
+
+@media (max-width: 900px) {
+  .impact-form-grid, .impact-list { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .impact-registry-header { flex-direction: column; }
+  .impact-add-btn { align-self: flex-start; }
+  .impact-form-grid, .impact-list { grid-template-columns: 1fr; }
+}
+
+.decision-risk-summary { display: flex; align-items: center; gap: 0.55rem; margin: 0.9rem 0 0.7rem; padding: 0.6rem 0.75rem; border-left: 2px solid var(--cy-neon-cyan); background: rgba(0,243,255,0.04); }
+.decision-risk-summary.has-risk { border-left-color: var(--cy-neon-magenta); background: rgba(255,0,128,0.05); }
+.decision-risk-summary strong { color: var(--cy-neon-magenta); font: 700 1.2rem var(--font-mono); }
+.decision-risk-summary:not(.has-risk) strong { color: var(--cy-neon-green); }
+.decision-risk-summary span { color: #fff; font: 700 0.7rem var(--font-mono); }
+.decision-risk-summary small { color: var(--cy-text-secondary); font-size: 0.65rem; }
+.decision-see-more { width: 100%; margin-top: 0.65rem; padding: 0.55rem; border: 1px solid var(--cy-border); background: transparent; color: var(--cy-neon-cyan); cursor: pointer; font: 700 0.62rem var(--font-mono); }
+.decision-see-more:hover { border-color: var(--cy-neon-cyan); background: rgba(0,243,255,0.06); }
+
+
+/* Sprint 7 — analytics executiva e briefing */
+.executive-analytics { margin-bottom: 2rem; border-color: rgba(255,190,0,0.35); }
+.executive-analytics-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.executive-analytics h2 { margin-top: 0.4rem; color: #fff; font: 700 1.1rem var(--font-mono); letter-spacing: 0.05em; }
+.executive-analytics-header p { margin-top: 0.35rem; color: var(--cy-text-secondary); font-size: 0.78rem; }
+.analytics-read-badge { padding: 0.3rem 0.5rem; border: 1px solid var(--cy-neon-cyan); color: var(--cy-neon-cyan); font: 700 0.58rem var(--font-mono); white-space: nowrap; }
+.analytics-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; margin-top: 1rem; }
+.analytics-summary-grid > div { display: flex; min-height: 92px; flex-direction: column; justify-content: space-between; padding: 0.8rem; border: 1px solid var(--cy-border); background: rgba(255,255,255,0.02); }
+.analytics-summary-grid span { color: var(--cy-text-secondary); font: 700 0.58rem var(--font-mono); letter-spacing: 0.04em; }
+.analytics-summary-grid strong { color: var(--cy-neon-cyan); font: 700 1.45rem var(--font-mono); }
+.analytics-summary-grid strong.analytics-risk-value { color: var(--cy-neon-magenta); }
+.analytics-summary-grid small { color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.35; }
+.analytics-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-top: 0.9rem; }
+.analytics-block { padding: 0.85rem; border: 1px solid var(--cy-border); background: rgba(0,0,0,0.14); }
+.analytics-risk-card { margin-top: 0.65rem; padding: 0.65rem; border-left: 2px solid var(--cy-neon-yellow); background: rgba(234,179,8,0.04); }
+.analytics-risk-card.high { border-left-color: var(--cy-neon-magenta); background: rgba(255,0,128,0.045); }
+.analytics-risk-card > div { display: flex; flex-direction: column; gap: 0.3rem; }
+.analytics-risk-card > div span { color: var(--cy-neon-magenta); font: 700 0.58rem var(--font-mono); }
+.analytics-risk-card > div b { color: #fff; font-size: 0.75rem; }
+.analytics-risk-card p { margin-top: 0.35rem; color: var(--cy-text-secondary); font-size: 0.68rem; line-height: 1.4; }
+.analytics-risk-card small { display: block; margin-top: 0.35rem; color: var(--cy-neon-yellow); font-size: 0.62rem; line-height: 1.35; }
+.briefing-opening { margin: 0.8rem 0; color: #fff; font-size: 0.75rem; line-height: 1.5; }
+.briefing-priorities { margin: 0; padding-left: 1.25rem; color: var(--cy-text-secondary); font-size: 0.7rem; line-height: 1.6; }
+.briefing-priorities li::marker { color: var(--cy-neon-cyan); font-family: var(--font-mono); }
+.briefing-checkpoint { display: block; margin-top: 0.8rem; color: var(--cy-neon-yellow); font: 0.62rem var(--font-mono); }
+.analytics-pattern-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.8rem; }
+.analytics-pattern-row span { padding: 0.35rem 0.5rem; border: 1px solid rgba(255,255,255,0.12); color: var(--cy-text-secondary); font: 0.62rem var(--font-mono); }
+.analytics-pattern-row b { color: var(--cy-neon-cyan); }
+
+@media (max-width: 900px) {
+  .analytics-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .analytics-columns { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .executive-analytics-header { flex-direction: column; }
+  .analytics-read-badge { align-self: flex-start; }
+  .analytics-summary-grid { grid-template-columns: repeat(2, 1fr); gap: 0.45rem; }
+  .analytics-summary-grid > div { min-height: 78px; padding: 0.6rem; }
+  .analytics-summary-grid strong { font-size: 1.2rem; }
+}

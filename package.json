@@ -7,6 +7,7 @@
     "dev": "vite",
     "server": "node api/index.js",
     "build": "vite build",
+    "migrate:audits": "node scripts/migrate-legacy-audits.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

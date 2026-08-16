@@ -12,6 +12,9 @@ import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '.
 import { createVersionedAuditRecord } from './domain/audit-records.js';
 import { buildClientHealthScore } from './domain/health-score.js';
 import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend } from './domain/executive-snapshots.js';
+import { listImpactRecords, saveImpactRecord, updateImpactRecord } from './domain/impact-records.js';
+import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from './domain/health-snapshots.js';
+import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from './domain/decision-analytics.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -59,6 +62,29 @@ app.use(cors({
   }
 }));
 app.use(express.json());
+
+app.get('/api/healthz', (req, res) => {
+  const production = process.env.NODE_ENV === 'production';
+  res.json({
+    ok: true,
+    service: 'vybe-nexus-api',
+    mode: production ? 'production' : 'development',
+    commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'local',
+    access: 'public-link-read',
+    integrations: {
+      monday: Boolean(process.env.MONDAY_API_TOKEN),
+      calendar: Boolean(process.env.GOOGLE_CALENDAR_ICAL_URL),
+      gemini: Boolean(process.env.GEMINI_API_KEY)
+    },
+    persistence: {
+      decisions: production ? Boolean(process.env.NEXUS_DECISION_STORE_URL) : 'local-development',
+      snapshots: production ? Boolean(process.env.NEXUS_SNAPSHOT_STORE_URL) : 'local-development',
+      impacts: production ? Boolean(process.env.NEXUS_IMPACT_STORE_URL) : 'local-development',
+      health: production ? Boolean(process.env.NEXUS_HEALTH_STORE_URL) : 'local-development'
+    },
+    generatedAt: new Date().toISOString()
+  });
+});
 
 const PORT = 3001;
 
@@ -554,9 +580,13 @@ app.get('/api/dashboard/metrics', async (req, res) => {
 app.get('/api/executive/decisions', async (req, res) => {
   try {
     const decisions = await listDecisionRecords();
+    const now = Date.now();
+    const active = decisions.filter(decision => !['normalized', 'dismissed'].includes(decision.status));
+    const atRisk = active.filter(decision => !decision.checkpointAt || new Date(decision.checkpointAt).getTime() < now);
     res.json({
       success: true,
       decisions,
+      riskSummary: { total: decisions.length, active: active.length, atRisk: atRisk.length, overdueCheckpoint: atRisk.filter(decision => decision.checkpointAt).length, missingCheckpoint: atRisk.filter(decision => !decision.checkpointAt).length },
       meta: { source: 'Nexus Decision Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' }
     });
   } catch (error) {
@@ -606,6 +636,76 @@ app.post('/api/executive/snapshots', requireAdminAccess, async (req, res) => {
   }
 });
 
+// Impacto executivo — leitura aberta por link, escrita técnica controlada.
+app.get('/api/executive/impacts', async (req, res) => {
+  try {
+    const impacts = await listImpactRecords();
+    res.json({ success: true, impacts, meta: { source: 'Nexus Impact Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = error.code === 'IMPACT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.post('/api/executive/impacts', requireAdminAccess, async (req, res) => {
+  try {
+    const impact = await saveImpactRecord(req.body);
+    res.status(201).json({ success: true, impact });
+  } catch (error) {
+    const status = error.code === 'INVALID_IMPACT' ? 400 : error.code === 'IMPACT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.patch('/api/executive/impacts/:id', requireAdminAccess, async (req, res) => {
+  try {
+    const impact = await updateImpactRecord(req.params.id, req.body);
+    res.json({ success: true, impact });
+  } catch (error) {
+    const status = error.code === 'INVALID_IMPACT' ? 400 : error.code === 'IMPACT_NOT_FOUND' ? 404 : error.code === 'IMPACT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.get('/api/executive/health/:clientId', async (req, res) => {
+  try {
+    const snapshots = await listHealthSnapshots(req.params.clientId);
+    res.json({ success: true, snapshots, trend: summarizeHealthTrend(snapshots), meta: { source: 'Nexus Health Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = error.code === 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.get('/api/executive/analytics', async (req, res) => {
+  try {
+    const [decisions, impacts, healthSnapshots] = await Promise.all([
+      listDecisionRecords(),
+      listImpactRecords(),
+      listHealthSnapshots()
+    ]);
+    let snapshot = {};
+    try {
+      const [bottlenecks, posts, demands] = await Promise.all([
+        mondayIntegration.getClientBottlenecks(),
+        mondayIntegration.getOpenPosts(),
+        mondayIntegration.getDelayedDemands()
+      ]);
+      snapshot = buildExecutiveSnapshot({ bottlenecks, posts, demands, generatedAt: new Date().toISOString() });
+    } catch (sourceError) {
+      console.warn('[API] Briefing sem snapshot vivo:', sourceError.message);
+    }
+    const effectiveness = summarizeDecisionEffectiveness(decisions, impacts);
+    const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
+    const patterns = summarizePortfolioPatterns({ decisions, impacts, healthSnapshots });
+    const briefing = buildExecutiveBriefing({ snapshot, effectiveness, risks: persistentRisks, patterns });
+    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing }, meta: { source: 'Nexus Executive Analytics', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
 // NOVO ENDPOINT: Client Logs (Dossiê)
 app.get('/api/dashboard/clients-logs', async (req, res) => {
   try {
@@ -623,7 +723,7 @@ app.get('/api/dashboard/clients-logs', async (req, res) => {
       return rowName === name || rowName.includes(name) || name.includes(rowName);
     });
 
-    logs.forEach(client => {
+    for (const client of logs) {
       const clientNameLower = client.name.toLowerCase();
       client.futureMeetings = futureMeetings.filter(m => m.title.toLowerCase().includes(clientNameLower));
       const clientPosts = findClientPosts(client.name);
@@ -668,7 +768,14 @@ app.get('/api/dashboard/clients-logs', async (req, res) => {
         missingDashboard,
         auditStatus: client.auditStatus || 'not_integrated'
       });
-    });
+      if (process.env.NEXUS_HEALTH_AUTOSAVE === 'true') {
+        try {
+          await saveHealthSnapshot({ clientId: client.id || client.name, clientName: client.name, healthScore: client.healthScore });
+        } catch (healthError) {
+          console.warn('[API] Health Snapshot não persistido:', healthError.message);
+        }
+      }
+    }
 
     res.json({
       success: true,

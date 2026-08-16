@@ -316,6 +316,7 @@ function DecisionRegistry() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ title: '', context: '', ownerRole: 'CMO/COO', priority: 'medium', clientId: '', directive: '', checkpointAt: '' });
 
@@ -324,7 +325,7 @@ function DecisionRegistry() {
     try {
       const response = await fetch('/api/executive/decisions');
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Registro aguardando datastore e autenticação de perfil.');
+      if (!response.ok) throw new Error(data.error || 'Registro aguardando datastore configurado para escrita técnica.');
       setDecisions(data.decisions || []);
       setError('');
     } catch (err) {
@@ -360,6 +361,10 @@ function DecisionRegistry() {
       setSaving(false);
     }
   };
+
+  const activeDecisions = decisions.filter(decision => !['normalized', 'dismissed'].includes(decision.status));
+  const now = Date.now();
+  const atRiskDecisions = activeDecisions.filter(decision => !decision.checkpointAt || new Date(decision.checkpointAt).getTime() < now);
 
   const handleStatusChange = async (decision, status) => {
     try {
@@ -403,9 +408,10 @@ function DecisionRegistry() {
       )}
 
       {error && <div className="decision-registry-notice"><Info size={14} /> {error}</div>}
+      {!loading && decisions.length > 0 && <div className={`decision-risk-summary ${atRiskDecisions.length > 0 ? 'has-risk' : ''}`}><strong>{atRiskDecisions.length}</strong><span>decisões em risco</span><small>{atRiskDecisions.length > 0 ? 'checkpoint vencido ou ausente' : 'nenhum checkpoint crítico detectado'}</small></div>}
       {loading ? <div className="decision-registry-empty">Carregando decisões executivas...</div> : decisions.length === 0 ? <div className="decision-registry-empty">Nenhuma decisão registrada. Use esta área para formalizar diretrizes, não para acompanhar tarefas.</div> : (
         <div className="decision-list">
-          {decisions.slice(0, 6).map(decision => (
+          {decisions.slice(0, showAll ? decisions.length : 5).map(decision => (
             <article className="decision-record" key={decision.id}>
               <div className="decision-record-top"><span className={`decision-priority ${decision.priority}`}>{decision.priority?.toUpperCase()}</span><select value={decision.status} onChange={event => handleStatusChange(decision, event.target.value)} aria-label={`Status da decisão ${decision.title}`}>{Object.entries(decisionStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
               <strong>{decision.title}</strong>
@@ -413,6 +419,7 @@ function DecisionRegistry() {
               <div className="decision-record-meta"><span>{decision.ownerRole}</span>{decision.clientId && <span>{decision.clientId}</span>}{decision.checkpointAt && <span>Checkpoint: {formatDate(decision.checkpointAt)}</span>}<span><Clock size={11} /> {decision.history?.length || 1} eventos</span></div>
             </article>
           ))}
+          {decisions.length > 5 && <button type="button" className="decision-see-more" onClick={() => setShowAll(current => !current)}>{showAll ? 'MOSTRAR MENOS' : `VER MAIS (${decisions.length - 5})`}</button>}
         </div>
       )}
     </section>
@@ -455,6 +462,109 @@ function ExecutiveHistory() {
           <div><span>JANELA 7 DIAS</span><strong>{trend?.windows?.['7d'] ?? 0}</strong><small>snapshots</small></div>
           <div><span>JANELA 30 / 90 DIAS</span><strong>{trend?.windows?.['30d'] ?? 0} / {trend?.windows?.['90d'] ?? 0}</strong><small>snapshots</small></div>
         </div>
+      )}
+    </section>
+  );
+}
+
+const impactResultLabels = { improved: 'MELHOROU', stable: 'ESTÁVEL', worsened: 'PIOROU', inconclusive: 'INCONCLUSIVO' };
+
+function ImpactRegistry() {
+  const [impacts, setImpacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ decisionId: '', clientId: '', baseline: '', observedIndicator: '', result: 'inconclusive', checkpointAt: '', notes: '' });
+
+  const loadImpacts = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/executive/impacts');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Registro de Impacto ainda não configurado.');
+      setImpacts(data.impacts || []);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Registro de Impacto indisponível.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadImpacts(); }, []);
+  const updateField = (field, value) => setForm(current => ({ ...current, [field]: value }));
+
+  const handleCreate = async event => {
+    event.preventDefault();
+    if (saving || !form.decisionId.trim() || !form.observedIndicator.trim()) return;
+    setSaving(true);
+    try {
+      const response = await fetch('/api/executive/impacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o impacto.');
+      setImpacts(current => [data.impact, ...current]);
+      setForm({ decisionId: '', clientId: '', baseline: '', observedIndicator: '', result: 'inconclusive', checkpointAt: '', notes: '' });
+      setShowForm(false);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Não foi possível registrar o impacto.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="impact-registry card" aria-labelledby="impact-registry-title">
+      <div className="impact-registry-header">
+        <div>
+          <div className="executive-kicker"><Activity size={15} /> IMPACT REGISTRY · NEXUS</div>
+          <h2 id="impact-registry-title">DECISÕES EM ACOMPANHAMENTO</h2>
+          <p>Registre o resultado observado depois de uma diretriz, sem marcar tarefas do Monday como resolvidas.</p>
+        </div>
+        <button type="button" className="impact-add-btn" onClick={() => setShowForm(current => !current)}>{showForm ? 'FECHAR' : '+ REGISTRAR IMPACTO'}</button>
+      </div>
+      {showForm && (
+        <form className="impact-form" onSubmit={handleCreate}>
+          <div className="impact-form-grid"><input value={form.decisionId} onChange={event => updateField('decisionId', event.target.value)} placeholder="ID ou referência da decisão" aria-label="Decisão relacionada" required /><input value={form.clientId} onChange={event => updateField('clientId', event.target.value)} placeholder="Cliente ou carteira" aria-label="Cliente ou carteira" /><input type="date" value={form.checkpointAt} onChange={event => updateField('checkpointAt', event.target.value)} aria-label="Data do checkpoint" /><select value={form.result} onChange={event => updateField('result', event.target.value)} aria-label="Resultado do impacto">{Object.entries(impactResultLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+          <textarea value={form.baseline} onChange={event => updateField('baseline', event.target.value)} placeholder="Baseline: como estava antes da diretriz" aria-label="Baseline" />
+          <textarea value={form.observedIndicator} onChange={event => updateField('observedIndicator', event.target.value)} placeholder="Indicador observado e evidência do resultado" aria-label="Indicador observado" required />
+          <textarea value={form.notes} onChange={event => updateField('notes', event.target.value)} placeholder="Notas do checkpoint (opcional)" aria-label="Notas do checkpoint" />
+          <div className="impact-form-actions"><button type="button" className="decision-cancel-btn" onClick={() => setShowForm(false)}>CANCELAR</button><button type="submit" className="impact-submit-btn" disabled={saving}>{saving ? 'SALVANDO...' : 'SALVAR IMPACTO'}</button></div>
+        </form>
+      )}
+      {error && <div className="decision-registry-notice"><Info size={14} /> {error}</div>}
+      {loading ? <div className="decision-registry-empty">Carregando impactos...</div> : impacts.length === 0 ? <div className="decision-registry-empty">Nenhum checkpoint registrado. O impacto só deve ser avaliado com evidência, não por percepção isolada.</div> : <div className="impact-list">{impacts.slice(0, 6).map(impact => <article className="impact-record" key={impact.id}><div className="impact-record-top"><span className={`impact-result ${impact.result}`}>{impactResultLabels[impact.result] || impact.result}</span><span>{impact.checkpointAt ? `Checkpoint: ${formatDate(impact.checkpointAt)}` : 'Sem checkpoint'}</span></div><strong>{impact.clientId || 'Carteira'}</strong><p>{impact.observedIndicator}</p><small>{impact.decisionId} · {impact.history?.length || 1} eventos</small></article>)}</div>}
+    </section>
+  );
+}
+
+function ExecutiveAnalytics() {
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAllRisks, setShowAllRisks] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/executive/analytics')
+      .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Analytics executiva aguardando histórico persistido.');
+        setAnalytics(data.analytics);
+      })
+      .catch(err => setError(err.message || 'Analytics executiva indisponível.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section className="executive-analytics card" aria-labelledby="executive-analytics-title">
+      <div className="executive-analytics-header"><div><div className="executive-kicker"><Activity size={15} /> EXECUTIVE ANALYTICS · SPRINT 7</div><h2 id="executive-analytics-title">RESULTADO E RISCO PERSISTENTE</h2><p>O que mudou, quais decisões funcionaram e onde a liderança precisa intervir.</p></div><span className="analytics-read-badge">SOMENTE LEITURA · LINK</span></div>
+      {loading ? <div className="executive-history-empty">Calculando analytics executiva...</div> : error ? <div className="executive-history-notice"><Info size={14} /> {error}</div> : (
+        <>
+          <div className="analytics-summary-grid"><div><span>DECISÕES AVALIADAS</span><strong>{analytics.effectiveness.evaluatedDecisions}</strong><small>{analytics.effectiveness.pendingEvaluation} aguardando impacto</small></div><div><span>TAXA DE SINAL POSITIVO</span><strong>{analytics.effectiveness.positiveRate === null ? '—' : `${analytics.effectiveness.positiveRate}%`}</strong><small>{analytics.effectiveness.label}</small></div><div><span>RISCOS PERSISTENTES</span><strong className={analytics.persistentRisks.length ? 'analytics-risk-value' : ''}>{analytics.persistentRisks.length}</strong><small>decisões, impactos ou clientes</small></div><div><span>PADRÕES DETECTADOS</span><strong>{analytics.patterns.patterns.length}</strong><small>{analytics.patterns.note}</small></div></div>
+          <div className="analytics-columns"><div className="analytics-block"><div className="executive-block-heading"><AlertTriangle size={15} /><span>RISCO PERSISTENTE</span></div>{analytics.persistentRisks.length === 0 ? <div className="executive-empty">Nenhum risco persistente identificado no histórico disponível.</div> : analytics.persistentRisks.slice(0, showAllRisks ? analytics.persistentRisks.length : 5).map(risk => <article className={`analytics-risk-card ${risk.severity}`} key={risk.id}><div><span>{risk.severity?.toUpperCase()}</span><b>{risk.title}</b></div><p>{risk.reason}</p><small>{risk.recommendedAction}</small></article>)}{analytics.persistentRisks.length > 5 && <button type="button" className="decision-see-more" onClick={() => setShowAllRisks(current => !current)}>{showAllRisks ? 'MOSTRAR MENOS' : `VER MAIS (${analytics.persistentRisks.length - 5})`}</button>}</div><div className="analytics-block"><div className="executive-block-heading"><CheckCircle2 size={15} /><span>BRIEFING DE LIDERANÇA</span></div><p className="briefing-opening">{analytics.briefing.opening}</p><ol className="briefing-priorities">{analytics.briefing.priorities.map((priority, index) => <li key={`${priority}-${index}`}>{priority}</li>)}</ol><small className="briefing-checkpoint">{analytics.briefing.nextCheckpoint}</small></div></div>
+          {analytics.patterns.patterns.length > 0 && <div className="analytics-pattern-row">{analytics.patterns.patterns.map(pattern => <span key={pattern.label}><b>{pattern.count}</b> {pattern.label}</span>)}</div>}
+        </>
       )}
     </section>
   );
@@ -581,6 +691,8 @@ function CommandCenter() {
       <ExecutiveCockpit snapshot={metrics.executiveSnapshot} />
       <DecisionRegistry />
       <ExecutiveHistory />
+      <ImpactRegistry />
+      <ExecutiveAnalytics />
 
       <details className="production-evidence">
         <summary className="production-evidence-summary">
