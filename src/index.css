@@ -767,3 +767,38 @@ button:focus-visible, a:focus-visible, input:focus-visible, [role="button"]:focu
 .analytics-alert-item b { color: #fff; font-size: 0.7rem; }
 .analytics-alert-item small { color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.35; }
 @media (max-width: 720px) { .analytics-alert-list { grid-template-columns: 1fr; } }
+
+/* Sprint 9 — memória executiva e cenários */
+.executive-memory, .scenario-planner { margin-bottom: 2rem; border-color: rgba(0,243,255,0.28); }
+.executive-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.executive-section-header h2 { margin-top: 0.4rem; color: #fff; font: 700 1.1rem var(--font-mono); letter-spacing: 0.05em; }
+.executive-section-header p { margin-top: 0.35rem; color: var(--cy-text-secondary); font-size: 0.78rem; }
+.memory-toolbar { display: flex; align-items: center; gap: 0.7rem; margin-top: 1rem; }
+.memory-toolbar input { flex: 1; min-width: 0; padding: 0.65rem 0.7rem; border: 1px solid var(--cy-border); background: rgba(0,0,0,0.2); color: #fff; font: 0.68rem var(--font-mono); }
+.memory-toolbar input:focus { outline: 1px solid var(--cy-neon-cyan); }
+.memory-toolbar > span { color: var(--cy-text-secondary); font: 700 0.58rem var(--font-mono); white-space: nowrap; }
+.memory-list { display: grid; gap: 0.5rem; margin-top: 0.8rem; }
+.memory-item { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem; border: 1px solid var(--cy-border); background: rgba(255,255,255,0.02); }
+.memory-item-main, .memory-item-impact { display: flex; flex-direction: column; gap: 0.25rem; }
+.memory-item-main { min-width: 0; }
+.memory-item-main b { color: #fff; font-size: 0.74rem; }
+.memory-item-main small, .memory-item-impact small { color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.35; }
+.memory-status-tag, .impact-tag { align-self: flex-start; color: var(--cy-neon-cyan); font: 700 0.55rem var(--font-mono); text-transform: uppercase; }
+.impact-tag.improved { color: #73f58b; }
+.impact-tag.worsened { color: var(--cy-neon-magenta); }
+.impact-tag.stable, .impact-tag.inconclusive { color: var(--cy-neon-yellow); }
+.impact-pending { color: var(--cy-neon-yellow); font: 700 0.56rem var(--font-mono); white-space: nowrap; }
+.scenario-badge { padding: 0.3rem 0.5rem; border: 1px solid var(--cy-neon-yellow); color: var(--cy-neon-yellow); font: 700 0.58rem var(--font-mono); }
+.scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; margin-top: 1rem; }
+.scenario-card { padding: 0.8rem; border: 1px solid var(--cy-border); background: rgba(255,255,255,0.02); }
+.scenario-card-top { display: flex; justify-content: space-between; gap: 0.4rem; color: var(--cy-neon-cyan); font: 700 0.58rem var(--font-mono); }
+.scenario-card-top small { color: var(--cy-text-secondary); }
+.scenario-card h3 { margin: 0.7rem 0 0.45rem; color: #fff; font-size: 0.8rem; }
+.scenario-question { min-height: 42px; color: var(--cy-text-secondary); font-size: 0.68rem; line-height: 1.4; }
+.scenario-signals { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.65rem; color: var(--cy-text-secondary); font-size: 0.62rem; }
+.scenario-signals b { color: var(--cy-neon-cyan); font: 700 0.56rem var(--font-mono); }
+.scenario-recommendation { margin-top: 0.75rem; color: #fff; font-size: 0.67rem; line-height: 1.4; }
+.scenario-recommendation b { color: var(--cy-neon-yellow); font: 700 0.56rem var(--font-mono); }
+.scenario-limit { display: block; margin-top: 0.75rem; color: var(--cy-text-secondary); font-size: 0.58rem; line-height: 1.3; }
+@media (max-width: 920px) { .scenario-grid { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .executive-section-header { flex-direction: column; } .memory-item { flex-direction: column; } .memory-item-impact { align-items: flex-start; } }

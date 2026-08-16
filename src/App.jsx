@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clients } from './data/clients';
-import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink, Info, Filter, ListChecks, ChevronRight, X, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink, Info, Filter, ListChecks, ChevronRight, X, CheckCircle2, History, GitBranch } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const formatDate = (dateStr) => {
@@ -595,6 +595,35 @@ function ExecutiveAnalytics() {
   );
 }
 
+function DecisionMemory() {
+  const [memory, setMemory] = useState(null);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(true);
+      fetch(`/api/executive/memory${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`)
+        .then(response => response.json())
+        .then(data => setMemory(data.memory || null))
+        .catch(() => setMemory(null))
+        .finally(() => setLoading(false));
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const records = memory?.records || [];
+  return <section className="executive-memory card" aria-labelledby="executive-memory-title"><div className="executive-section-header"><div><div className="executive-kicker"><History size={15} /> EXECUTIVE MEMORY · SPRINT 9</div><h2 id="executive-memory-title">MEMÓRIA DE DECISÕES</h2><p>Consulte diretrizes, evidências e impactos anteriores sem reproduzir a fila do Monday.</p></div><span className="analytics-read-badge">LEITURA PÚBLICA · LINK</span></div><div className="memory-toolbar"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar decisão, cliente ou diretriz..." aria-label="Buscar na memória executiva" /><span>{loading ? 'BUSCANDO...' : `${memory?.total || 0} REGISTROS`}</span></div>{!loading && records.length === 0 ? <div className="executive-history-empty">Nenhuma decisão encontrada no histórico disponível.</div> : <div className="memory-list">{records.slice(0, showAll ? records.length : 5).map(record => <article className="memory-item" key={record.id}><div className="memory-item-main"><span className="memory-status-tag">{record.status}</span><b>{record.title}</b><small>{record.clientId || 'Carteira'} · {record.ownerRole}</small></div><div className="memory-item-impact">{record.impact ? <><span className={`impact-tag ${record.impact.result}`}>{record.impact.result}</span><small>{record.impact.observedIndicator || 'Impacto registrado'}</small></> : <span className="impact-pending">IMPACTO PENDENTE</span>}</div></article>)}</div>}{records.length > 5 && <button type="button" className="decision-see-more" onClick={() => setShowAll(current => !current)}>{showAll ? 'MOSTRAR MENOS' : `VER MAIS (${records.length - 5})`}</button>}</section>;
+}
+
+function ScenarioPlanner() {
+  const [scenarios, setScenarios] = useState([]);
+  const [error, setError] = useState('');
+  useEffect(() => { fetch('/api/executive/scenarios').then(async response => { const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'Cenários aguardando histórico persistido.'); setScenarios(data.scenarios || []); }).catch(error => setError(error.message)); }, []);
+  return <section className="scenario-planner card" aria-labelledby="scenario-planner-title"><div className="executive-section-header"><div><div className="executive-kicker"><GitBranch size={15} /> EXECUTIVE PLANNING · SPRINT 9</div><h2 id="scenario-planner-title">CENÁRIOS DE PLANEJAMENTO</h2><p>Simulações executivas para orientar CMO e COO. Não são previsões nem alteram o Monday.</p></div><span className="scenario-badge">SIMULAÇÃO</span></div>{error ? <div className="executive-history-notice"><Info size={14} /> {error}</div> : <div className="scenario-grid">{scenarios.map(scenario => <article className="scenario-card" key={scenario.id}><div className="scenario-card-top"><span>{scenario.audience}</span><small>CONFIANÇA {scenario.confidence}</small></div><h3>{scenario.title}</h3><p className="scenario-question">{scenario.question}</p><div className="scenario-signals"><b>SINAIS</b>{scenario.signals.map(signal => <span key={signal}>{signal}</span>)}</div><p className="scenario-recommendation"><b>HIPÓTESE:</b> {scenario.recommendation}</p><small className="scenario-limit">As premissas devem ser revisadas antes de uma diretriz.</small></article>)}</div>}</section>;
+}
+
 function CommandCenter() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -718,6 +747,8 @@ function CommandCenter() {
       <ExecutiveHistory />
       <ImpactRegistry />
       <ExecutiveAnalytics />
+      <DecisionMemory />
+      <ScenarioPlanner />
 
       <details className="production-evidence">
         <summary className="production-evidence-summary">

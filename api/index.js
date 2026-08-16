@@ -17,7 +17,8 @@ import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from '.
 import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from './domain/decision-analytics.js';
 import { buildExecutiveBriefingDocument } from './domain/executive-briefing.js';
 import { buildExecutiveAlerts } from './domain/executive-alerts.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { buildDecisionMemory, buildExecutiveScenarios } from './domain/executive-planning.js';
+import { GoogleGenerativeAI } from '@google-generative-ai';
 import dotenv from 'dotenv';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -675,6 +676,27 @@ app.get('/api/executive/health/:clientId', async (req, res) => {
     res.json({ success: true, snapshots, trend: summarizeHealthTrend(snapshots), meta: { source: 'Nexus Health Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
   } catch (error) {
     const status = error.code === 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.get('/api/executive/memory', async (req, res) => {
+  try {
+    const [decisions, impacts] = await Promise.all([listDecisionRecords(), listImpactRecords()]);
+    res.json({ success: true, memory: buildDecisionMemory({ decisions, impacts, query: req.query.q }), meta: { source: 'Nexus Executive Memory', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.get('/api/executive/scenarios', async (req, res) => {
+  try {
+    const [decisions, impacts, healthSnapshots] = await Promise.all([listDecisionRecords(), listImpactRecords(), listHealthSnapshots()]);
+    const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
+    res.json({ success: true, scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }), meta: { source: 'Nexus Executive Scenarios', mode: 'simulation', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
   }
 });
