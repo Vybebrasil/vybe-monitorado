@@ -1263,9 +1263,14 @@ function CommandCenter() {
                     ) : item.isSetup ? (
                       <div style={{ color: 'var(--cy-neon-magenta)', fontSize: '0.8rem' }}>Ação necessária no Monday</div>
                     ) : (
-                      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)' }}>
+                      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={{ color: item.isDelayedPrazo ? 'var(--cy-neon-yellow)' : 'inherit' }}>Prazo: {formatDate(item.prazo)}</span>
                         <span style={{ color: item.isDelayedVeiculacao ? 'var(--cy-neon-magenta)' : 'inherit' }}>Veic.: {formatDate(item.veiculacao)}</span>
+                        {(item.responsavel || item.editorDesigner) && (
+                           <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--cy-neon-cyan)', border: '1px solid rgba(0,243,255,0.2)' }}>
+                             👤 {item.responsavel || item.editorDesigner}
+                           </span>
+                        )}
                         <a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12}/> Abrir Post</a>
                       </div>
                     )}
