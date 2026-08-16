@@ -1,6 +1,10 @@
 const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(value)));
 
-const scoreStatus = score => score >= 75 ? 'healthy' : score >= 50 ? 'attention' : 'risk';
+const scoreThresholds = () => ({
+  healthy: Number(process.env.NEXUS_HEALTH_HEALTHY_THRESHOLD || 75),
+  attention: Number(process.env.NEXUS_HEALTH_ATTENTION_THRESHOLD || 50)
+});
+const scoreStatus = score => { const thresholds = scoreThresholds(); return score >= thresholds.healthy ? 'healthy' : score >= thresholds.attention ? 'attention' : 'risk'; };
 const statusLabel = status => ({ healthy: 'SAUDÁVEL', attention: 'SOB OBSERVAÇÃO', risk: 'RISCO EXECUTIVO' }[status]);
 
 export function buildClientHealthScore({
@@ -46,6 +50,7 @@ export function buildClientHealthScore({
     trend,
     delta,
     period: { windowDays: 30, reference: 'current executive snapshot' },
+    calibration: { thresholds: scoreThresholds(), source: 'Nexus Health Score v2 default thresholds; configurable by environment.' },
     capturedAt,
     explanation: 'Score executivo explicável. Não representa receita, margem ou satisfação sem essas fontes integradas.',
     factors: [

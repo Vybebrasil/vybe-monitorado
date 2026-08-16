@@ -544,6 +544,20 @@ function ExecutiveAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAllRisks, setShowAllRisks] = useState(false);
+  const [meetingMode, setMeetingMode] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
+
+  const copyBriefing = async () => {
+    const markdown = analytics?.briefingDocument?.markdown;
+    if (!markdown) return;
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setCopyStatus('BRIEFING COPIADO');
+      setTimeout(() => setCopyStatus(''), 2200);
+    } catch {
+      setCopyStatus('COPIE MANUALMENTE');
+    }
+  };
 
   useEffect(() => {
     fetch('/api/executive/analytics')
@@ -558,10 +572,21 @@ function ExecutiveAnalytics() {
 
   return (
     <section className="executive-analytics card" aria-labelledby="executive-analytics-title">
-      <div className="executive-analytics-header"><div><div className="executive-kicker"><Activity size={15} /> EXECUTIVE ANALYTICS · SPRINT 7</div><h2 id="executive-analytics-title">RESULTADO E RISCO PERSISTENTE</h2><p>O que mudou, quais decisões funcionaram e onde a liderança precisa intervir.</p></div><span className="analytics-read-badge">SOMENTE LEITURA · LINK</span></div>
-      {loading ? <div className="executive-history-empty">Calculando analytics executiva...</div> : error ? <div className="executive-history-notice"><Info size={14} /> {error}</div> : (
+      <div className="executive-analytics-header"><div><div className="executive-kicker"><Activity size={15} /> EXECUTIVE ANALYTICS · SPRINT 8</div><h2 id="executive-analytics-title">RESULTADO E RISCO PERSISTENTE</h2><p>O que mudou, quais decisões funcionaram e onde a liderança precisa intervir.</p></div><div className="analytics-header-actions"><span className="analytics-read-badge">SOMENTE LEITURA · LINK</span><button type="button" className="meeting-mode-btn" onClick={() => setMeetingMode(current => !current)}>{meetingMode ? 'FECHAR MODO REUNIÃO' : 'MODO REUNIÃO'}</button><button type="button" className="briefing-copy-btn" onClick={copyBriefing} disabled={!analytics}>{copyStatus || 'COPIAR BRIEFING'}</button></div></div>
+      {loading ? <div className="executive-history-empty">Calculando analytics executiva...</div> : error ? <div className="executive-history-notice"><Info size={14} /> {error}</div> : meetingMode ? (
+        <div className="meeting-briefing">
+          <div className="meeting-briefing-kicker">BRIEFING EXECUTIVO · MODO REUNIÃO</div>
+          <h3>{analytics.briefingDocument?.title || 'Briefing Executivo do Nexus'}</h3>
+          <p className="meeting-opening">{analytics.briefingDocument?.opening}</p>
+          <div className="meeting-section"><span>PRIORIDADES</span><ol>{(analytics.briefingDocument?.priorities || []).map((priority, index) => <li key={`${priority}-${index}`}>{priority}</li>)}</ol></div>
+          <div className="meeting-section"><span>RISCOS PERSISTENTES</span>{(analytics.briefingDocument?.risks || []).length ? analytics.briefingDocument.risks.slice(0, 5).map(risk => <p key={risk.id}><b>{risk.title}</b> — {risk.reason}</p>) : <p>Nenhum risco persistente identificado.</p>}</div>
+          <div className="meeting-section"><span>CHECKPOINT</span><p>{analytics.briefingDocument?.nextCheckpoint}</p></div>
+          <small>Leitura executiva por link. Fontes operacionais permanecem no Monday e no Vybe Painel.</small>
+        </div>
+      ) : (
         <>
           <div className="analytics-summary-grid"><div><span>DECISÕES AVALIADAS</span><strong>{analytics.effectiveness.evaluatedDecisions}</strong><small>{analytics.effectiveness.pendingEvaluation} aguardando impacto</small></div><div><span>TAXA DE SINAL POSITIVO</span><strong>{analytics.effectiveness.positiveRate === null ? '—' : `${analytics.effectiveness.positiveRate}%`}</strong><small>{analytics.effectiveness.label}</small></div><div><span>RISCOS PERSISTENTES</span><strong className={analytics.persistentRisks.length ? 'analytics-risk-value' : ''}>{analytics.persistentRisks.length}</strong><small>decisões, impactos ou clientes</small></div><div><span>PADRÕES DETECTADOS</span><strong>{analytics.patterns.patterns.length}</strong><small>{analytics.patterns.note}</small></div></div>
+          {(analytics.alerts || []).length > 0 && <div className="analytics-alert-strip"><div className="executive-block-heading"><AlertTriangle size={15} /><span>ALERTAS EXECUTIVOS · SOMENTE LEITURA</span></div><div className="analytics-alert-list">{analytics.alerts.slice(0, 5).map(alert => <article key={alert.id} className={`analytics-alert-item ${alert.severity}`}><span>{alert.label}</span><b>{alert.title}</b><small>{alert.reason}</small></article>)}</div></div>}
           <div className="analytics-columns"><div className="analytics-block"><div className="executive-block-heading"><AlertTriangle size={15} /><span>RISCO PERSISTENTE</span></div>{analytics.persistentRisks.length === 0 ? <div className="executive-empty">Nenhum risco persistente identificado no histórico disponível.</div> : analytics.persistentRisks.slice(0, showAllRisks ? analytics.persistentRisks.length : 5).map(risk => <article className={`analytics-risk-card ${risk.severity}`} key={risk.id}><div><span>{risk.severity?.toUpperCase()}</span><b>{risk.title}</b></div><p>{risk.reason}</p><small>{risk.recommendedAction}</small></article>)}{analytics.persistentRisks.length > 5 && <button type="button" className="decision-see-more" onClick={() => setShowAllRisks(current => !current)}>{showAllRisks ? 'MOSTRAR MENOS' : `VER MAIS (${analytics.persistentRisks.length - 5})`}</button>}</div><div className="analytics-block"><div className="executive-block-heading"><CheckCircle2 size={15} /><span>BRIEFING DE LIDERANÇA</span></div><p className="briefing-opening">{analytics.briefing.opening}</p><ol className="briefing-priorities">{analytics.briefing.priorities.map((priority, index) => <li key={`${priority}-${index}`}>{priority}</li>)}</ol><small className="briefing-checkpoint">{analytics.briefing.nextCheckpoint}</small></div></div>
           {analytics.patterns.patterns.length > 0 && <div className="analytics-pattern-row">{analytics.patterns.patterns.map(pattern => <span key={pattern.label}><b>{pattern.count}</b> {pattern.label}</span>)}</div>}
         </>

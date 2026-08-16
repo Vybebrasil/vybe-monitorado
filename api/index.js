@@ -15,6 +15,8 @@ import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend }
 import { listImpactRecords, saveImpactRecord, updateImpactRecord } from './domain/impact-records.js';
 import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from './domain/health-snapshots.js';
 import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from './domain/decision-analytics.js';
+import { buildExecutiveBriefingDocument } from './domain/executive-briefing.js';
+import { buildExecutiveAlerts } from './domain/executive-alerts.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -699,7 +701,9 @@ app.get('/api/executive/analytics', async (req, res) => {
     const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
     const patterns = summarizePortfolioPatterns({ decisions, impacts, healthSnapshots });
     const briefing = buildExecutiveBriefing({ snapshot, effectiveness, risks: persistentRisks, patterns });
-    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing }, meta: { source: 'Nexus Executive Analytics', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    const briefingDocument = buildExecutiveBriefingDocument({ analytics: { effectiveness, persistentRisks, patterns, briefing } });
+    const alerts = buildExecutiveAlerts({ risks: persistentRisks, effectiveness, freshness: 'live' });
+    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing, briefingDocument, alerts }, meta: { source: 'Nexus Executive Analytics', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
   } catch (error) {
     const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
