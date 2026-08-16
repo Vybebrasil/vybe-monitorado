@@ -39,6 +39,51 @@ const CLIENT_HANDLES = {
   irecemodas: 'irecemodas'
 };
 
+
+const AI_PLACEHOLDER_MARKERS = [
+  'um texto curto e direto relatando',
+  'parágrafo forte, visão estratégica baseada',
+  'nome do problema (baseado nos dados reais)',
+  'fato comprovado que prova o problema',
+  'por que isso é um problema?',
+  'o que ganhamos ao resolver',
+  'passo prático 1'
+];
+
+function validateAIAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') {
+    throw new Error('[INVALID_AI_OUTPUT] A análise precisa ser um objeto JSON.');
+  }
+
+  const text = value => typeof value === 'string' ? value.trim() : '';
+  const hasPlaceholder = value => AI_PLACEHOLDER_MARKERS.some(marker => text(value).toLowerCase().includes(marker));
+  const fields = [analysis.igStats, analysis.cmoDirective];
+  if (fields.some(value => !text(value) || hasPlaceholder(value))) {
+    throw new Error('[INVALID_AI_OUTPUT] A análise contém texto vazio ou placeholder. Nenhum dado foi salvo.');
+  }
+  if (!Array.isArray(analysis.issues) || analysis.issues.length === 0) {
+    throw new Error('[INVALID_AI_OUTPUT] A análise precisa conter pelo menos um diagnóstico.');
+  }
+
+  const issues = analysis.issues.map(issue => ({
+    title: text(issue?.title),
+    evidence: text(issue?.evidence),
+    rationale: text(issue?.rationale),
+    impact: text(issue?.impact),
+    steps: Array.isArray(issue?.steps) ? issue.steps.map(text).filter(Boolean) : []
+  }));
+
+  const invalidIssue = issues.some(issue =>
+    Object.entries(issue).some(([key, value]) => key !== 'steps' && (!value || hasPlaceholder(value))) ||
+    issue.steps.length === 0 || issue.steps.some(hasPlaceholder)
+  );
+  if (invalidIssue) {
+    throw new Error('[INVALID_AI_OUTPUT] Um ou mais diagnósticos contêm texto vazio ou placeholder. Nenhum dado foi salvo.');
+  }
+
+  return { igStats: text(analysis.igStats), cmoDirective: text(analysis.cmoDirective), issues };
+}
+
 async function generateAIAnalysis(client, scrapedData) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -132,7 +177,7 @@ app.post('/api/audit/:id', async (req, res) => {
     const match = new RegExp(`id:\\s*["']${clientId}["']\\s*,\\s*name:\\s*["'](.*?)["']\\s*,\\s*niche:\\s*["'](.*?)["']`).exec(clientsFileContent);
     const clientBase = { name: match ? match[1] : clientId, niche: match ? match[2] : '' };
     
-    const aiAnalysis = await generateAIAnalysis(clientBase, scrapedData);
+    const aiAnalysis = validateAIAnalysis(await generateAIAnalysis(clientBase, scrapedData));
 
     // 3. Atualizar clients.js
     console.log(`[API] 3/3 - Atualizando src/data/clients.js...`);
@@ -230,9 +275,9 @@ Sempre retorne as chaves EXATAMENTE como pedidas.`;
 // NOVO ENDPOINT: Salva o JSON colado pelo usuário
 app.post('/api/save/:id', express.json(), (req, res) => {
   const clientId = req.params.id;
-  const aiAnalysis = req.body;
 
   try {
+    const aiAnalysis = validateAIAnalysis(req.body);
     const clientsFilePath = join(__dirname, '..', 'src', 'data', 'clients.js');
     let clientsFileContent = readFileSync(clientsFilePath, 'utf-8');
 
@@ -326,7 +371,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         bottlenecks,
         posts,
         demands
-      }
+      },
+      meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live' }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar métricas do Monday:", error);
@@ -351,7 +397,8 @@ app.get('/api/dashboard/clients-logs', async (req, res) => {
 
     res.json({
       success: true,
-      logs
+      logs,
+      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live' }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar logs de clientes:", error);

@@ -166,9 +166,9 @@ export const clients = [
       coreAsset: "Selo IBD Não-Transgênico / Canal Armazém do Campo (distribuição nacional)",
       googleRating: "Reconhecimento Nacional",
       officialSite: "linktr.ee/_copirece",
-      igStats: `Um texto curto e direto relatando APENAS fatos (seguidores, tempo sem postar, engajamento médio). Sem adjetivos ou jargões.`
+      igStats: `Auditoria pendente: os dados públicos de Instagram ainda não foram validados nesta versão.`
     },
-    cmoDirective: `Parágrafo forte, visão estratégica baseada nos fatos descritos. O que está errado? Qual o risco? Linguagem afiada.`,
+    cmoDirective: `Análise ainda não validada. Execute uma auditoria baseada em dados reais antes de registrar uma diretiva estratégica.`,
     kpis: ["Brand Equity", "Share of Voice", "Margem de Lucro Bruta"],
     channels: [
       {
@@ -176,13 +176,13 @@ export const clients = [
         status: "critical",
         issues: [
           {
-            title: `Nome do Problema (Baseado nos dados reais)`,
-            evidence: `Fato comprovado que prova o problema`,
-            rationale: `Por que isso é um problema?`,
-            impact: `O que ganhamos ao resolver`,
+            title: `Auditoria pendente — evidências ainda não validadas`,
+            evidence: `Não há evidências de Instagram validadas para este cliente nesta versão do Nexus.`,
+            rationale: `Sem uma coleta atualizada, qualquer conclusão pode transformar hipótese em fato.`,
+            impact: `A próxima auditoria poderá registrar um diagnóstico rastreável e acionável.`,
             steps: [
-              `Passo prático 1`,
-              `Passo prático 2`
+              `Executar a coleta de dados públicos do perfil`,
+              `Validar as evidências antes de publicar a recomendação`
             ]
           }
         ]

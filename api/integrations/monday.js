@@ -50,22 +50,33 @@ class MondayIntegration {
     const token = this.getToken();
     if (!token) throw new Error("MONDAY_API_TOKEN not found.");
 
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-        'API-Version': '2024-01'
-      },
-      body: JSON.stringify({ query: graphqlQuery })
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+          'API-Version': '2024-01'
+        },
+        body: JSON.stringify({ query: graphqlQuery }),
+        signal: controller.signal
+      });
 
-    const data = await response.json();
-    if (data.errors) {
-      console.error("Monday GraphQL Error:", JSON.stringify(data.errors, null, 2));
-      throw new Error("Erro na query do Monday");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`Monday respondeu com HTTP ${response.status}.`);
+      if (data.errors) {
+        console.error("Monday GraphQL Error:", JSON.stringify(data.errors, null, 2));
+        throw new Error("Erro na query do Monday.");
+      }
+      return data.data;
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('A sincronização com o Monday excedeu 20 segundos.');
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    return data.data;
   }
 
   // 1. Clientes sem planejamento ou com dashboard atrasado

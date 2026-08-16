@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clients } from './data/clients';
-import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink } from 'lucide-react';
+import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink, Info } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const formatDate = (dateStr) => {
@@ -11,12 +11,90 @@ const formatDate = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
+
+const formatDateTime = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const PLACEHOLDER_MARKERS = [
+  'um texto curto e direto relatando',
+  'parágrafo forte, visão estratégica baseada',
+  'nome do problema (baseado nos dados reais)',
+  'fato comprovado que prova o problema',
+  'por que isso é um problema?',
+  'o que ganhamos ao resolver',
+  'passo prático 1',
+  'auditoria pendente',
+  'análise ainda não validada'
+];
+
+const isPlaceholderText = (value) => {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return PLACEHOLDER_MARKERS.some(marker => normalized.includes(marker));
+};
+
+const hasPendingAudit = (client) => {
+  const intelligence = client?.businessIntelligence || {};
+  const issueValues = (client?.channels || []).flatMap(channel =>
+    (channel.issues || []).flatMap(issue => Object.values(issue))
+  );
+  return [intelligence.igStats, client?.cmoDirective, ...issueValues].some(isPlaceholderText);
+};
+
+const getValidAuditChannels = (client) => (client?.channels || [])
+  .map(channel => ({
+    ...channel,
+    issues: (channel.issues || []).filter(issue => !Object.values(issue).some(isPlaceholderText))
+  }))
+  .filter(channel => channel.issues.length > 0);
+
+const activateOnKeyboard = (event, callback) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    callback();
+  }
+};
+
+function SyncOverlay({ text }) {
+  return (
+    <div className="sync-overlay" role="status" aria-live="polite">
+      <RefreshCw size={56} className="spin" style={{ marginBottom: '1.5rem', color: 'var(--cy-neon-purple)' }} />
+      <div className="sync-kicker">LIVE DATA PIPELINE</div>
+      <h1>SYNC</h1>
+      <h2>SINCRONIZAÇÃO MONDAY.COM</h2>
+      <p>{text || 'Consultando dados atuais...'}</p>
+      <div className="sync-progress" aria-hidden="true"><span /></div>
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }) {
+  return (
+    <div className="error-state" role="alert">
+      <ServerCrash size={34} color="var(--cy-neon-magenta)" />
+      <div>
+        <h2>FALHA NA SINCRONIZAÇÃO</h2>
+        <p>{message || 'Não foi possível carregar os dados agora.'}</p>
+      </div>
+      <button type="button" className="retry-btn" onClick={onRetry}>
+        <RefreshCw size={14} /> TENTAR NOVAMENTE
+      </button>
+    </div>
+  );
+}
+
 function DemandItem({ demand }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <li style={{ padding: '0.5rem 8px 0.5rem 0', borderBottom: '1px solid #222', fontSize: '0.85rem' }}>
       <div 
+        role="button" tabIndex={0} aria-expanded={isOpen}
+        onKeyDown={(event) => activateOnKeyboard(event, () => setIsOpen(!isOpen))}
         onClick={() => setIsOpen(!isOpen)} 
         style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
       >
@@ -59,7 +137,7 @@ function ClientPostsRow({ row, sortMode }) {
 
   return (
     <React.Fragment>
-      <tr onClick={() => setIsOpen(!isOpen)} style={{ borderBottom: '1px solid #222', cursor: 'pointer' }}>
+      <tr role="button" tabIndex={0} aria-expanded={isOpen} onKeyDown={(event) => activateOnKeyboard(event, () => setIsOpen(!isOpen))} onClick={() => setIsOpen(!isOpen)} style={{ borderBottom: '1px solid #222', cursor: 'pointer' }}>
         <td style={{ padding: '0.5rem 0', color: hasDelayedVeic ? 'var(--cy-neon-magenta)' : (hasDelayedPrazo ? 'var(--cy-neon-yellow)' : '#fff'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {isOpen ? <ChevronUp size={14} color="var(--cy-text-secondary)"/> : <ChevronDown size={14} color="var(--cy-text-secondary)"/>}
           {row.name}
@@ -111,8 +189,8 @@ function CommandCenter() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [scanProgress, setScanProgress] = useState(0);
-  const [scanText, setScanText] = useState("Iniciando conexão segura...");
+  const [scanText, setScanText] = useState("Consultando dados atuais do Monday.com...");
+  const [meta, setMeta] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
   const [tableSortMode, setTableSortMode] = useState('veic');
   const [hoveredBar, setHoveredBar] = useState(null);
@@ -159,66 +237,34 @@ function CommandCenter() {
     return { title, items };
   };
 
+  const loadMetrics = async () => {
+    setLoading(true);
+    setError('');
+    setScanText('Consultando dados atuais do Monday.com...');
+
+    try {
+      const response = await fetch('/api/dashboard/metrics');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(`Command Center: ${data.error || 'não foi possível carregar as métricas do Monday.com.'}`);
+      }
+      setMetrics(data.metrics);
+      setMeta(data.meta || null);
+      setScanText('Sincronização concluída.');
+    } catch (err) {
+      setError(err.message || 'Erro de conexão com a API do Command Center.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const progressInterval = setInterval(() => {
-      setScanProgress(p => {
-        if (p < 30) { setScanText("Conectando à API GraphQL do Monday.com..."); return p + 2; }
-        if (p < 60) { setScanText("Sincronizando Boards de Clientes, Demanda e Conteúdo..."); return p + 3; }
-        if (p < 90) { setScanText("Cruzando gargalos operacionais e calculando postagens..."); return p + 1.5; }
-        if (p < 98) { setScanText("Montando Command Center executivo..."); return p + 0.5; }
-        return 98;
-      });
-    }, 100);
-
-    fetch('/api/dashboard/metrics')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setMetrics(data.metrics);
-        } else {
-          setError(data.error || 'Erro ao carregar métricas');
-        }
-      })
-      .catch(err => setError('Erro de conexão com a API do Command Center.'))
-      .finally(() => {
-        setScanProgress(100);
-        setScanText("Sincronização concluída!");
-        setTimeout(() => {
-          clearInterval(progressInterval);
-          setLoading(false);
-        }, 500);
-      });
-
-    return () => clearInterval(progressInterval);
+    loadMetrics();
   }, []);
 
-  if (loading) return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(10, 10, 12, 0.95)',
-      backdropFilter: 'blur(10px)',
-      zIndex: 9999,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--cy-neon-purple)'
-    }}>
-      <RefreshCw size={56} className="spin" style={{ marginBottom: '1.5rem', color: 'var(--cy-neon-purple)' }} />
-      <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: '3rem', margin: '0 0 1rem 0', textShadow: '0 0 20px rgba(157, 0, 255, 0.5)' }}>
-        {Math.floor(scanProgress)}%
-      </h1>
-      <h2 style={{ fontFamily: 'var(--font-mono)', letterSpacing: '2px', margin: 0, color: '#fff' }}>SINCRONIZAÇÃO MONDAY.COM</h2>
-      <p style={{ color: 'var(--cy-text-secondary)', marginTop: '0.5rem', fontSize: '1.1rem', fontFamily: 'var(--font-mono)' }}>{scanText}</p>
-      
-      <div style={{ width: '400px', height: '6px', background: 'rgba(255,255,255,0.05)', marginTop: '2rem', borderRadius: '3px', overflow: 'hidden' }}>
-        <div style={{ width: `${scanProgress}%`, height: '100%', background: 'var(--cy-neon-purple)', boxShadow: '0 0 10px var(--cy-neon-purple)', transition: 'width 0.2s ease-out' }}></div>
-      </div>
-    </div>
-  );
+  if (loading) return <SyncOverlay text={scanText} />;
 
-  if (error) return <div className="container" style={{color: 'red', textAlign: 'center', paddingTop: '4rem'}}>{error}</div>;
+  if (error) return <ErrorState message={error} onRetry={loadMetrics} />;
 
   return (
     <div className="container" style={{ padding: '2rem' }}>
@@ -229,27 +275,30 @@ function CommandCenter() {
             VISÃO EXECUTIVA DE OPERAÇÕES - MONDAY.COM
           </p>
         </div>
-        <span className="header-badge" style={{borderColor: 'var(--cy-neon-purple)', color: 'var(--cy-neon-purple)'}}>EXECUTIVE_OVERVIEW</span>
+        <div className="header-meta">
+          <span className="header-badge" style={{borderColor: 'var(--cy-neon-purple)', color: 'var(--cy-neon-purple)'}}>EXECUTIVE_OVERVIEW</span>
+          <span className="sync-meta" aria-live="polite">{meta?.source || 'Monday.com'} · {meta?.generatedAt ? `ATUALIZADO ${formatDateTime(meta.generatedAt)}` : 'ATUALIZAÇÃO RECENTE'}</span>
+        </div>
       </header>
 
       {/* KPI SECTION */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div className="kpi-card" onClick={() => setActiveModal('fila')} style={{ borderTop: '3px solid #fff' }}>
+      <div className="kpi-overview-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+        <div className="kpi-card" role="button" tabIndex={0} aria-label="Abrir itens em fila" onClick={() => setActiveModal('fila')} onKeyDown={(event) => activateOnKeyboard(event, () => setActiveModal('fila'))} style={{ borderTop: '3px solid #fff' }}>
           <Layers size={20} color="var(--cy-text-secondary)" style={{ position: 'absolute', top: '10px', right: '10px', opacity: 0.5 }} />
           <span style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Total em Fila</span>
           <span style={{ color: '#fff', fontSize: '3rem', fontWeight: 'bold' }}>{metrics.posts.ranking.reduce((acc, c) => acc + c.open, 0)}</span>
         </div>
-        <div className="kpi-card" onClick={() => setActiveModal('equipe')} style={{ borderTop: '3px solid var(--cy-neon-yellow)' }}>
+        <div className="kpi-card" role="button" tabIndex={0} aria-label="Abrir atrasos da equipe" onClick={() => setActiveModal('equipe')} onKeyDown={(event) => activateOnKeyboard(event, () => setActiveModal('equipe'))} style={{ borderTop: '3px solid var(--cy-neon-yellow)' }}>
           <Clock size={20} color="var(--cy-neon-yellow)" style={{ position: 'absolute', top: '10px', right: '10px', opacity: 0.5 }} />
           <span style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Atraso Equipe</span>
           <span style={{ color: 'var(--cy-neon-yellow)', fontSize: '3rem', fontWeight: 'bold', textShadow: '0 0 15px rgba(255, 234, 0, 0.4)' }}>{metrics.posts.ranking.reduce((acc, c) => acc + c.delayedPrazo, 0)}</span>
         </div>
-        <div className="kpi-card" onClick={() => setActiveModal('cliente')} style={{ borderTop: '3px solid var(--cy-neon-magenta)' }}>
+        <div className="kpi-card" role="button" tabIndex={0} aria-label="Abrir atrasos do cliente" onClick={() => setActiveModal('cliente')} onKeyDown={(event) => activateOnKeyboard(event, () => setActiveModal('cliente'))} style={{ borderTop: '3px solid var(--cy-neon-magenta)' }}>
           <AlertTriangle size={20} color="var(--cy-neon-magenta)" style={{ position: 'absolute', top: '10px', right: '10px', opacity: 0.5 }} />
           <span style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Atraso Cliente</span>
           <span style={{ color: 'var(--cy-neon-magenta)', fontSize: '3rem', fontWeight: 'bold', textShadow: '0 0 15px rgba(255, 0, 102, 0.4)' }}>{metrics.posts.ranking.reduce((acc, c) => acc + c.delayedVeiculacao, 0)}</span>
         </div>
-        <div className="kpi-card" onClick={() => setActiveModal('setup')} style={{ borderTop: '3px solid var(--cy-neon-cyan)' }}>
+        <div className="kpi-card" role="button" tabIndex={0} aria-label="Abrir demandas e setup" onClick={() => setActiveModal('setup')} onKeyDown={(event) => activateOnKeyboard(event, () => setActiveModal('setup'))} style={{ borderTop: '3px solid var(--cy-neon-cyan)' }}>
           <ActivitySquare size={20} color="var(--cy-neon-cyan)" style={{ position: 'absolute', top: '10px', right: '10px', opacity: 0.5 }} />
           <span style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Demandas + Setup</span>
           <span style={{ color: 'var(--cy-neon-cyan)', fontSize: '3rem', fontWeight: 'bold', textShadow: '0 0 15px rgba(0, 243, 255, 0.4)' }}>{metrics.demands.length + metrics.bottlenecks.missingPlanning.length}</span>
@@ -257,7 +306,7 @@ function CommandCenter() {
       </div>
 
       {/* CHARTS SECTION - Custom SVG */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+      <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
         {/* BAR CHART custom */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ color: '#fff', marginBottom: '1.5rem', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px', opacity: 0.7 }}>Gargalos de Produção por Cliente</h3>
@@ -269,7 +318,8 @@ function CommandCenter() {
               const pctAgencia = (c.delayedVeiculacao / maxTotal) * 100;
               const isHovered = hoveredBar === i;
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}
+                <div key={i} role="button" tabIndex={0} aria-label={`Ver gargalos de ${c.name}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}
+                  onKeyDown={(event) => activateOnKeyboard(event, () => setBarModalClient(c))}
                   onMouseEnter={() => setHoveredBar(i)}
                   onMouseLeave={() => setHoveredBar(null)}
                   onClick={() => setBarModalClient(c)}
@@ -401,7 +451,7 @@ function CommandCenter() {
                 <h2 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '4px' }}>{barModalClient.name}</h2>
                 <span style={{ fontSize: '0.75rem', color: 'var(--cy-text-secondary)', letterSpacing: '1px' }}>GARGALOS DE PRODUCÃO</span>
               </div>
-              <button onClick={() => setBarModalClient(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+              <button type="button" aria-label="Fechar detalhes do cliente" onClick={() => setBarModalClient(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={{ background: 'rgba(255,234,0,0.08)', border: '1px solid rgba(255,234,0,0.2)', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
@@ -506,7 +556,7 @@ function CommandCenter() {
                 <h2 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '4px' }}>{personModalData.name}</h2>
                 <span style={{ fontSize: '0.72rem', color: 'var(--cy-text-secondary)', letterSpacing: '1px' }}>{personModalData.tipo?.toUpperCase() || 'EQUIPE'} &nbsp;&bull;&nbsp; {personModalData.posts.length} POSTS ATRASADOS</span>
               </div>
-              <button onClick={() => setPersonModalData(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1, padding: '0' }}>×</button>
+              <button type="button" aria-label="Fechar detalhes do responsável" onClick={() => setPersonModalData(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1, padding: '0' }}>×</button>
             </div>
 
             {/* KPIs */}
@@ -556,7 +606,7 @@ function CommandCenter() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+      <div className="bottom-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
         {/* BOTTLENECKS */}
         <div className="card critical" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
@@ -640,7 +690,7 @@ function CommandCenter() {
           <div className="card modal-content" style={{ width: '90%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px', padding: 0 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: '1.5rem', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ color: '#fff', margin: 0 }}>{getModalContent().title}</h2>
-              <button onClick={() => setActiveModal(null)} style={{ background: 'transparent', border: 'none', color: 'var(--cy-text-secondary)', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
+              <button type="button" aria-label="Fechar lista de detalhes" onClick={() => setActiveModal(null)} style={{ background: 'transparent', border: 'none', color: 'var(--cy-text-secondary)', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
             </div>
             <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -689,22 +739,39 @@ function Dashboard({ onSelectClient }) {
       </header>
 
       <div className="grid">
-        {clients.map(client => (
-          <div key={client.id} className={`card ${client.status}`} onClick={() => onSelectClient(client)}>
-            <div className="card-header">
-              <div>
-                <h3>{client.name}</h3>
-                <span className="niche-badge">{client.niche}</span>
+        {clients.map(client => {
+          const auditPending = hasPendingAudit(client);
+          return (
+            <div
+              key={client.id}
+              className={`card ${client.status}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir auditoria de ${client.name}`}
+              onClick={() => onSelectClient(client)}
+              onKeyDown={(event) => activateOnKeyboard(event, () => onSelectClient(client))}
+            >
+              <div className="card-header">
+                <div>
+                  <h3>{client.name}</h3>
+                  <span className="niche-badge">{client.niche}</span>
+                </div>
+                <div className="card-header-actions">
+                  <span className={`audit-state ${auditPending ? 'pending' : 'ready'}`}>
+                    {auditPending ? 'AUDITORIA PENDENTE' : 'AUDITORIA ATIVA'}
+                  </span>
+                  <Terminal size={24} color={auditPending ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-cyan)'} />
+                </div>
               </div>
-              <Terminal size={24} color={client.status === 'critical' ? 'var(--cy-neon-magenta)' : 'var(--cy-neon-yellow)'} />
+              <div style={{marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--cy-border)'}}>
+                <p style={{fontSize: '0.85rem', color: 'var(--cy-text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
+                  <strong style={{color: 'var(--cy-text-primary)'}}>{auditPending ? 'STATUS:' : 'DIR:'}</strong>{' '}
+                  {auditPending ? 'Aguardando uma auditoria baseada em dados reais e validada pela equipe.' : client.cmoDirective}
+                </p>
+              </div>
             </div>
-            <div style={{marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--cy-border)'}}>
-              <p style={{fontSize: '0.85rem', color: 'var(--cy-text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
-                <strong style={{color: 'var(--cy-text-primary)'}}>DIR:</strong> {client.cmoDirective}
-              </p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -715,7 +782,7 @@ function IssueAccordion({ issue }) {
 
   return (
     <div className={`accordion ${isOpen ? 'open' : ''}`}>
-      <div className="accordion-header" onClick={() => setIsOpen(!isOpen)}>
+      <div className="accordion-header" role="button" tabIndex={0} aria-expanded={isOpen} onKeyDown={(event) => activateOnKeyboard(event, () => setIsOpen(!isOpen))} onClick={() => setIsOpen(!isOpen)}>
         <div className="accordion-title">
           <ServerCrash size={16} className="text-magenta" />
           <span>{issue.title}</span>
@@ -1043,6 +1110,9 @@ function BusinessIntelligence({ data, clientId }) {
 }
 
 function ClientDetail({ client, onBack }) {
+  const auditPending = hasPendingAudit(client);
+  const validChannels = getValidAuditChannels(client);
+
   return (
     <div className="container">
       <div className="detail-view">
@@ -1051,18 +1121,24 @@ function ClientDetail({ client, onBack }) {
             <h1>{client.name}</h1>
             <p style={{fontFamily: 'var(--font-mono)', color: 'var(--cy-neon-cyan)', marginTop: '0.5rem'}}>ID: {client.id} // {client.niche}</p>
           </div>
-          <button className="back-btn" onClick={onBack}>
+          <button type="button" className="back-btn" onClick={onBack}>
             <ArrowLeft size={16} /> SYSTEM.BACK()
           </button>
         </header>
 
-        {/* MÓDULO DE BUSINESS INTELLIGENCE NOVO */}
         <BusinessIntelligence data={client.businessIntelligence} clientId={client.id} />
 
-        <section className="cmo-directive">
-          <div className="cmo-title"><ShieldAlert size={20} /> CMO PRIME DIRECTIVE</div>
-          <p className="cmo-text">{client.cmoDirective}</p>
-        </section>
+        {auditPending ? (
+          <section className="audit-pending" role="status">
+            <div className="audit-pending-title"><AlertTriangle size={18} /> AUDITORIA AGUARDANDO VALIDAÇÃO</div>
+            <p>Este cliente ainda não possui uma análise baseada em dados reais validada. O Nexus ocultou textos provisórios para evitar conclusões sem evidência.</p>
+          </section>
+        ) : (
+          <section className="cmo-directive">
+            <div className="cmo-title"><ShieldAlert size={20} /> CMO PRIME DIRECTIVE</div>
+            <p className="cmo-text">{client.cmoDirective}</p>
+          </section>
+        )}
 
         <section className="kpi-wrapper">
           <div className="kpi-title"><Crosshair size={16} /> TARGET KPIs (MONITORAMENTO OBRIGATÓRIO)</div>
@@ -1075,25 +1151,31 @@ function ClientDetail({ client, onBack }) {
           </div>
         </section>
 
-        <section className="channel-container">
-          <h2 className="channel-header">EVIDENCE-BASED AUDIT</h2>
-          <div className="channel-grid">
-            {client.channels.map((channel, idx) => (
-              <div key={idx} className="channel-card">
-                <div className="channel-card-head">
-                  <div className="channel-name"><Layers size={18} color="var(--cy-neon-cyan)" /> {channel.name}</div>
-                  <span className={`status-badge ${channel.status}`}>{channel.status}</span>
+        {validChannels.length > 0 ? (
+          <section className="channel-container">
+            <h2 className="channel-header">EVIDENCE-BASED AUDIT</h2>
+            <div className="channel-grid">
+              {validChannels.map((channel, idx) => (
+                <div key={idx} className="channel-card">
+                  <div className="channel-card-head">
+                    <div className="channel-name"><Layers size={18} color="var(--cy-neon-cyan)" /> {channel.name}</div>
+                    <span className={`status-badge ${channel.status}`}>{channel.status}</span>
+                  </div>
+                  <div className="channel-body">
+                    {channel.issues.map((issue, i) => (
+                      <IssueAccordion key={i} issue={issue} />
+                    ))}
+                  </div>
                 </div>
-                
-                <div className="channel-body">
-                  {channel.issues.map((issue, i) => (
-                    <IssueAccordion key={i} issue={issue} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="audit-pending" role="status">
+            <div className="audit-pending-title"><Info size={18} /> SEM EVIDÊNCIAS PUBLICADAS</div>
+            <p>As análises detalhadas aparecerão aqui depois que uma auditoria válida for salva.</p>
+          </section>
+        )}
       </div>
     </div>
   );
@@ -1104,126 +1186,134 @@ function ClientLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedClient, setExpandedClient] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [meta, setMeta] = useState(null);
+
+  const loadLogs = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/dashboard/clients-logs');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(`Dossiê de Clientes: ${data.error || 'não foi possível carregar o histórico de relacionamento.'}`);
+      }
+      setLogs(data.logs || []);
+      setMeta(data.meta || null);
+    } catch (err) {
+      setError(err.message || 'Erro de conexão com o Dossiê de Clientes.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetch('/api/dashboard/clients-logs')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setLogs(data.logs);
-        } else {
-          setError(data.error || 'Erro ao carregar dossiê');
-        }
-      })
-      .catch(err => setError('Erro de conexão'))
-      .finally(() => setLoading(false));
+    loadLogs();
   }, []);
 
-  if (loading) return <div style={{ color: 'var(--cy-neon-cyan)', padding: '2rem', textAlign: 'center' }}>Carregando Dossiê de Clientes...</div>;
-  if (error) return <div style={{ color: 'red', padding: '2rem' }}>{error}</div>;
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredLogs = logs.filter(client => !normalizedSearch || client.name.toLowerCase().includes(normalizedSearch));
+  const criticalCount = logs.filter(client => client.daysSinceLastMeeting >= 30).length;
+  const noHistoryCount = logs.filter(client => !client.lastMeetingDate).length;
+  const scheduledCount = logs.reduce((total, client) => total + (client.futureMeetings?.length || 0), 0);
+
+  if (loading) return <SyncOverlay text="Carregando histórico de relacionamento e próximas reuniões..." />;
+  if (error) return <ErrorState message={error} onRetry={loadLogs} />;
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0 }}>DOSSIÊ <span style={{ color: 'var(--cy-neon-yellow)' }}>DE CLIENTES</span></h1>
-        <p style={{ color: 'var(--cy-text-secondary)', fontFamily: 'var(--font-mono)' }}>Histórico de Manutenção e Relacionamento</p>
+    <div className="container client-logs-page">
+      <header className="header logs-header">
+        <div>
+          <h1>DOSSIÊ <span className="glitch-text" style={{ color: 'var(--cy-neon-yellow)' }}>DE CLIENTES</span></h1>
+          <p style={{ color: 'var(--cy-text-secondary)', fontFamily: 'var(--font-mono)' }}>Histórico de Manutenção e Relacionamento</p>
+        </div>
+        <div className="header-meta">
+          <span className="header-badge" style={{ background: 'var(--cy-neon-yellow)', color: '#050505' }}>RELATIONSHIP DATA</span>
+          <span className="sync-meta">{meta?.generatedAt ? `ATUALIZADO ${formatDateTime(meta.generatedAt)}` : 'ATUALIZAÇÃO RECENTE'}</span>
+        </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-        {logs.map((client, idx) => {
+      <div className="logs-toolbar">
+        <label className="client-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Buscar cliente..."
+            aria-label="Buscar cliente no dossiê"
+          />
+        </label>
+        <span className="filter-count">{filteredLogs.length} de {logs.length} clientes</span>
+      </div>
+
+      <div className="logs-summary" aria-label="Resumo do dossiê">
+        <div><strong>{logs.length}</strong><span>CLIENTES</span></div>
+        <div className="critical"><strong>{criticalCount}</strong><span>CRÍTICOS</span></div>
+        <div className="warning"><strong>{noHistoryCount}</strong><span>SEM HISTÓRICO</span></div>
+        <div className="info"><strong>{scheduledCount}</strong><span>REUNIÕES AGENDADAS</span></div>
+      </div>
+
+      <div className="logs-grid">
+        {filteredLogs.map((client) => {
           const isCritical = client.daysSinceLastMeeting >= 30;
           const isWarning = client.daysSinceLastMeeting >= 15 && client.daysSinceLastMeeting < 30;
-          const isOk = client.daysSinceLastMeeting < 15;
           const isExpanded = expandedClient === client.name;
-
           let statusColor = 'var(--cy-neon-cyan)';
           let statusText = 'SAUDÁVEL';
           if (isCritical) { statusColor = 'var(--cy-neon-magenta)'; statusText = 'CRÍTICO'; }
           else if (isWarning) { statusColor = 'var(--cy-neon-yellow)'; statusText = 'ATENÇÃO'; }
-
-          if (!client.lastMeetingDate) {
-            statusColor = '#666';
-            statusText = 'SEM HISTÓRICO';
-          }
+          if (!client.lastMeetingDate) { statusColor = '#666'; statusText = 'SEM HISTÓRICO'; }
 
           return (
-            <div key={idx} style={{
-              background: 'var(--cy-card-bg)',
-              border: `1px solid ${statusColor}`,
-              borderRadius: '8px',
-              padding: '1.5rem',
-              boxShadow: isCritical ? '0 0 15px rgba(255,0,102,0.2)' : 'none',
-              display: 'flex',
-              flexDirection: 'column'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>{client.name}</h3>
-                <span style={{
-                  fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '1px',
-                  padding: '4px 8px', borderRadius: '4px',
-                  background: `rgba(${isCritical ? '255,0,102' : isWarning ? '255,234,0' : '0,243,255'}, 0.1)`,
-                  color: statusColor, border: `1px solid ${statusColor}`
-                }}>
-                  {statusText}
-                </span>
+            <div key={client.name} className={`client-log-card ${isCritical ? 'critical' : ''}`} style={{ borderColor: statusColor }}>
+              <div className="client-log-card-header">
+                <h3>{client.name}</h3>
+                <span className="client-log-status" style={{ color: statusColor, borderColor: statusColor }}>{statusText}</span>
               </div>
 
-              <div style={{ marginBottom: '1.5rem', color: 'var(--cy-text-secondary)', fontSize: '0.9rem' }}>
+              <div className="client-log-age" style={{ color: statusColor }}>
                 {client.daysSinceLastMeeting !== null ? (
-                  <span>Última reunião: <strong style={{color: statusColor}}>{client.daysSinceLastMeeting} dias atrás</strong> ({formatDate(client.lastMeetingDate)})</span>
+                  <span>Última reunião: <strong>{client.daysSinceLastMeeting} dias atrás</strong> ({formatDate(client.lastMeetingDate)})</span>
                 ) : (
                   <span>Nenhuma reunião anterior registrada.</span>
                 )}
               </div>
 
               {client.futureMeetings && client.futureMeetings.length > 0 && (
-                <div style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#fff', fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Clock size={14} color="var(--cy-neon-yellow)" /> PRÓXIMAS AGENDADAS
-                  </div>
+                <div className="future-meetings">
+                  <div className="future-meetings-title"><Clock size={14} color="var(--cy-neon-yellow)" /> PRÓXIMAS AGENDADAS</div>
                   {client.futureMeetings.map((fm, i) => (
-                    <div key={i} style={{ fontSize: '0.8rem', color: 'var(--cy-neon-yellow)' }}>
-                      • {formatDate(fm.date.split('T')[0])} - {fm.title}
-                    </div>
+                    <div key={i}>{formatDate(fm.date.split('T')[0])} — {fm.title}</div>
                   ))}
                 </div>
               )}
 
-              <button 
+              <button
+                type="button"
+                aria-expanded={isExpanded}
                 onClick={() => setExpandedClient(isExpanded ? null : client.name)}
-                style={{
-                  background: 'transparent', border: '1px solid var(--cy-border)', color: '#fff',
-                  padding: '8px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: 'auto'
-                }}>
+                className="history-btn"
+              >
                 {isExpanded ? 'OCULTAR HISTÓRICO' : 'VER HISTÓRICO COMPLETO'}
                 {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
 
               {isExpanded && (
-                <div style={{ marginTop: '1rem', borderTop: '1px solid var(--cy-border)', paddingTop: '1rem' }}>
+                <div className="history-content">
                   {client.meetings.length === 0 ? (
-                    <div style={{ fontSize: '0.85rem', color: '#666' }}>Sem histórico no Monday.</div>
+                    <div className="empty-history">Sem histórico no Monday.</div>
                   ) : (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                      {client.meetings.map((m, i) => (
-                        <li key={i} style={{ padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                            <span style={{ color: '#fff', fontWeight: '500' }}>{formatDate(m.date)}</span>
-                            <span style={{ color: 'var(--cy-text-secondary)', fontSize: '0.75rem' }}>{m.status || 'Sem status'}</span>
+                    <ul>
+                      {client.meetings.map((meeting, i) => (
+                        <li key={i}>
+                          <div className="history-row">
+                            <span>{formatDate(meeting.date)}</span>
+                            <span>{meeting.status || 'Sem status'}</span>
                           </div>
-                          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                            {m.pauta ? (
-                              <a href={m.pauta} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
-                                <ExternalLink size={12} /> Pauta
-                              </a>
-                            ) : <span style={{ color: '#444', fontSize: '0.8rem' }}>Sem pauta</span>}
-                            
-                            {m.ata ? (
-                              <a href={m.ata} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-yellow)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
-                                <ExternalLink size={12} /> Ata
-                              </a>
-                            ) : <span style={{ color: '#444', fontSize: '0.8rem' }}>Sem ata</span>}
+                          <div className="history-links">
+                            {meeting.pauta ? <a href={meeting.pauta} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Pauta</a> : <span>Sem pauta</span>}
+                            {meeting.ata ? <a href={meeting.ata} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Ata</a> : <span>Sem ata</span>}
                           </div>
                         </li>
                       ))}
@@ -1234,6 +1324,7 @@ function ClientLogs() {
             </div>
           );
         })}
+        {filteredLogs.length === 0 && <div className="empty-state">Nenhum cliente encontrado para “{searchTerm}”.</div>}
       </div>
     </div>
   );
@@ -1244,7 +1335,7 @@ function App() {
   const [selectedClient, setSelectedClient] = useState(null);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--cy-bg)' }}>
+    <div className="app-shell" style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--cy-bg)' }}>
       {/* SIDEBAR NAVEGAÇÃO */}
       <nav style={{
         width: '240px',
@@ -1260,6 +1351,9 @@ function App() {
         </div>
 
         <button
+          type="button"
+          aria-label="Abrir Command Center"
+          aria-pressed={activeTab === 'commandCenter'}
           onClick={() => { setActiveTab('commandCenter'); setSelectedClient(null); }}
           style={{
             display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem',
@@ -1275,6 +1369,9 @@ function App() {
         </button>
 
         <button
+          type="button"
+          aria-label="Abrir Auditoria IA"
+          aria-pressed={activeTab === 'audit'}
           onClick={() => { setActiveTab('audit'); setSelectedClient(null); }}
           style={{
             display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem',
@@ -1290,6 +1387,9 @@ function App() {
         </button>
 
         <button
+          type="button"
+          aria-label="Abrir Dossiê de Clientes"
+          aria-pressed={activeTab === 'clientLogs'}
           onClick={() => { setActiveTab('clientLogs'); setSelectedClient(null); }}
           style={{
             display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem',
@@ -1306,7 +1406,7 @@ function App() {
       </nav>
 
       {/* ÁREA PRINCIPAL */}
-      <main style={{ flex: 1, overflowY: 'auto' }}>
+      <main className="app-main" style={{ flex: 1, overflowY: 'auto' }}>
         {activeTab === 'commandCenter' && <CommandCenter />}
         {activeTab === 'clientLogs' && <ClientLogs />}
         {activeTab === 'audit' && (
