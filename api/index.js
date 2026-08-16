@@ -10,6 +10,7 @@ import { getFutureMeetings } from './integrations/calendar.js';
 import { buildExecutiveSnapshot } from './domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from './domain/executive-records.js';
 import { createVersionedAuditRecord } from './domain/audit-records.js';
+import { buildClientHealthScore } from './domain/health-score.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -577,11 +578,12 @@ app.patch('/api/executive/decisions/:id', requireAdminAccess, async (req, res) =
 // NOVO ENDPOINT: Client Logs (Dossiê)
 app.get('/api/dashboard/clients-logs', async (req, res) => {
   try {
-    const [logs, futureMeetings, posts, demands] = await Promise.all([
+    const [logs, futureMeetings, posts, demands, bottlenecks] = await Promise.all([
       mondayIntegration.getClientLogs(),
       getFutureMeetings(),
       mondayIntegration.getOpenPosts(),
-      mondayIntegration.getDelayedDemands()
+      mondayIntegration.getDelayedDemands(),
+      mondayIntegration.getClientBottlenecks()
     ]);
 
     const findClientPosts = clientName => (posts.ranking || []).find(row => {
@@ -623,12 +625,24 @@ app.get('/api/dashboard/clients-logs', async (req, res) => {
         delayedDemands,
         nextAction
       };
+      const missingPlanning = (bottlenecks.missingPlanning || []).some(name => name.toLowerCase() === clientNameLower || name.toLowerCase().includes(clientNameLower) || clientNameLower.includes(name.toLowerCase()));
+      const missingDashboard = (bottlenecks.missingDashboard || []).some(name => name.toLowerCase() === clientNameLower || name.toLowerCase().includes(clientNameLower) || clientNameLower.includes(name.toLowerCase()));
+      client.healthScore = buildClientHealthScore({
+        clientName: client.name,
+        daysSinceLastMeeting: client.daysSinceLastMeeting,
+        openPosts,
+        delayedPosts,
+        delayedDemands,
+        missingPlanning,
+        missingDashboard,
+        auditStatus: client.auditStatus || 'not_integrated'
+      });
     });
 
     res.json({
       success: true,
       logs,
-      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live' }
+      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live', healthModel: 'client-health-v1' }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar logs de clientes:", error);

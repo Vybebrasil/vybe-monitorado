@@ -280,6 +280,142 @@ function ExecutiveCockpit({ snapshot }) {
   );
 }
 
+const decisionStatusLabels = {
+  decision_needed: 'DECISÃO NECESSÁRIA',
+  directive_defined: 'DIRETRIZ DEFINIDA',
+  impact_tracking: 'MONITORANDO IMPACTO',
+  normalized: 'NORMALIZADA',
+  dismissed: 'DESCARTADA'
+};
+
+function HealthScoreCard({ healthScore }) {
+  if (!healthScore) return null;
+  const color = healthScore.status === 'healthy' ? 'var(--cy-neon-green)' : healthScore.status === 'attention' ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-magenta)';
+  return (
+    <div className="health-score-card" style={{ '--health-color': color }}>
+      <div className="health-score-header"><span>CLIENT HEALTH · V1</span><strong>{healthScore.score}%</strong></div>
+      <div className="health-score-label">{healthScore.label}</div>
+      <div className="health-factor-grid">
+        {(healthScore.factors || []).map(factor => (
+          <div key={factor.key} title={factor.reason}>
+            <span>{factor.label}</span>
+            <b>{factor.score}</b>
+          </div>
+        ))}
+      </div>
+      <small>{healthScore.explanation}</small>
+    </div>
+  );
+}
+
+function DecisionRegistry() {
+  const [decisions, setDecisions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ title: '', context: '', ownerRole: 'CMO/COO', priority: 'medium', clientId: '', directive: '', checkpointAt: '' });
+
+  const loadDecisions = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/executive/decisions');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Registro aguardando datastore e autenticação de perfil.');
+      setDecisions(data.decisions || []);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Registro de decisões indisponível.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadDecisions(); }, []);
+
+  const updateField = (field, value) => setForm(current => ({ ...current, [field]: value }));
+
+  const handleCreate = async event => {
+    event.preventDefault();
+    if (saving || !form.title.trim() || !form.context.trim()) return;
+    setSaving(true);
+    try {
+      const response = await fetch('/api/executive/decisions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível registrar a decisão.');
+      setDecisions(current => [data.decision, ...current]);
+      setForm({ title: '', context: '', ownerRole: 'CMO/COO', priority: 'medium', clientId: '', directive: '', checkpointAt: '' });
+      setShowForm(false);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Não foi possível registrar a decisão.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (decision, status) => {
+    try {
+      const response = await fetch(`/api/executive/decisions/${decision.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, note: `Status atualizado pela liderança no Cockpit: ${decisionStatusLabels[status]}.` })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar a decisão.');
+      setDecisions(current => current.map(item => item.id === decision.id ? data.decision : item));
+    } catch (err) {
+      setError(err.message || 'Não foi possível atualizar a decisão.');
+    }
+  };
+
+  return (
+    <section className="decision-registry card" aria-labelledby="decision-registry-title">
+      <div className="decision-registry-header">
+        <div>
+          <div className="executive-kicker"><ListChecks size={15} /> DECISION REGISTRY · NEXUS</div>
+          <h2 id="decision-registry-title">REGISTRO DE DECISÕES EXECUTIVAS</h2>
+          <p>Registre diretrizes e checkpoints sem alterar status ou itens de produção no Monday.</p>
+        </div>
+        <button type="button" className="decision-add-btn" onClick={() => setShowForm(current => !current)}>{showForm ? 'FECHAR' : '+ REGISTRAR DECISÃO'}</button>
+      </div>
+
+      {showForm && (
+        <form className="decision-form" onSubmit={handleCreate}>
+          <input value={form.title} onChange={event => updateField('title', event.target.value)} placeholder="Título da decisão executiva" aria-label="Título da decisão" required />
+          <textarea value={form.context} onChange={event => updateField('context', event.target.value)} placeholder="Contexto e evidência que motivaram a decisão" aria-label="Contexto da decisão" required />
+          <div className="decision-form-grid">
+            <input value={form.clientId} onChange={event => updateField('clientId', event.target.value)} placeholder="Cliente relacionado (opcional)" aria-label="Cliente relacionado" />
+            <select value={form.ownerRole} onChange={event => updateField('ownerRole', event.target.value)} aria-label="Responsável executivo"><option>CMO/COO</option><option>CMO</option><option>COO</option><option>Liderança</option></select>
+            <select value={form.priority} onChange={event => updateField('priority', event.target.value)} aria-label="Prioridade"><option value="critical">Crítica</option><option value="high">Alta</option><option value="medium">Média</option><option value="low">Baixa</option></select>
+            <input type="date" value={form.checkpointAt} onChange={event => updateField('checkpointAt', event.target.value)} aria-label="Data do checkpoint" />
+          </div>
+          <textarea value={form.directive} onChange={event => updateField('directive', event.target.value)} placeholder="Diretriz definida ou próxima decisão (opcional)" aria-label="Diretriz da decisão" />
+          <div className="decision-form-actions"><button type="button" className="decision-cancel-btn" onClick={() => setShowForm(false)}>CANCELAR</button><button type="submit" className="decision-submit-btn" disabled={saving}>{saving ? 'SALVANDO...' : 'SALVAR NO NEXUS'}</button></div>
+        </form>
+      )}
+
+      {error && <div className="decision-registry-notice"><Info size={14} /> {error}</div>}
+      {loading ? <div className="decision-registry-empty">Carregando decisões executivas...</div> : decisions.length === 0 ? <div className="decision-registry-empty">Nenhuma decisão registrada. Use esta área para formalizar diretrizes, não para acompanhar tarefas.</div> : (
+        <div className="decision-list">
+          {decisions.slice(0, 6).map(decision => (
+            <article className="decision-record" key={decision.id}>
+              <div className="decision-record-top"><span className={`decision-priority ${decision.priority}`}>{decision.priority?.toUpperCase()}</span><select value={decision.status} onChange={event => handleStatusChange(decision, event.target.value)} aria-label={`Status da decisão ${decision.title}`}>{Object.entries(decisionStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+              <strong>{decision.title}</strong>
+              <p>{decision.context}</p>
+              <div className="decision-record-meta"><span>{decision.ownerRole}</span>{decision.clientId && <span>{decision.clientId}</span>}{decision.checkpointAt && <span>Checkpoint: {formatDate(decision.checkpointAt)}</span>}<span><Clock size={11} /> {decision.history?.length || 1} eventos</span></div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CommandCenter() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -399,6 +535,7 @@ function CommandCenter() {
       </header>
 
       <ExecutiveCockpit snapshot={metrics.executiveSnapshot} />
+      <DecisionRegistry />
 
       <details className="production-evidence">
         <summary className="production-evidence-summary">
@@ -956,7 +1093,7 @@ function Dashboard({ onSelectClient }) {
                 </div>
                 <div className="card-header-actions">
                   <span className={`audit-state ${auditPending ? 'pending' : 'ready'}`}>
-                    {auditPending ? 'AUDITORIA PENDENTE' : 'AUDITORIA ATIVA'}
+                    {auditPending ? 'AUDITORIA PENDENTE' : 'AUDITORIA LEGACY · VALIDAR'}
                   </span>
                   <Terminal size={24} color={auditPending ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-cyan)'} />
                 </div>
@@ -1317,6 +1454,24 @@ function BusinessIntelligence({ data, clientId, auditPending }) {
   );
 }
 
+function AuditGovernance({ auditPending }) {
+  const status = auditPending ? 'pending_validation' : 'legacy_unvalidated';
+  const statusLabel = auditPending ? 'PENDENTE DE VALIDAÇÃO' : 'LEGACY · NÃO VALIDADA';
+  const statusColor = auditPending ? 'var(--cy-neon-yellow)' : 'var(--cy-text-secondary)';
+  return (
+    <section className="audit-governance" aria-label="Governança da Auditoria IA">
+      <div className="audit-governance-heading"><ShieldAlert size={16} /> GOVERNANÇA DA AUDITORIA IA</div>
+      <div className="audit-governance-grid">
+        <div><span>STATUS</span><strong style={{ color: statusColor }}>{statusLabel}</strong></div>
+        <div><span>CONFIANÇA</span><strong style={{ color: statusColor }}>{auditPending ? 'NÃO VERIFICADA' : 'LEGADO'}</strong></div>
+        <div><span>VERSÃO</span><strong>AGUARDANDO DATASTORE</strong></div>
+        <div><span>FONTE</span><strong>{status === 'pending_validation' ? 'AUDITORIA PENDENTE' : 'CLIENTS.JS · LEGADO'}</strong></div>
+      </div>
+      <p>O conteúdo exibido abaixo é contexto estratégico e não deve ser tratado como evidência validada até existir fonte, versão, responsável e validação humana persistidos.</p>
+    </section>
+  );
+}
+
 function ClientDetail({ client, onBack }) {
   const auditPending = hasPendingAudit(client);
   const validChannels = getValidAuditChannels(client);
@@ -1335,6 +1490,7 @@ function ClientDetail({ client, onBack }) {
         </header>
 
         <BusinessIntelligence data={client.businessIntelligence} clientId={client.id} auditPending={auditPending} />
+        <AuditGovernance auditPending={auditPending} />
 
         {auditPending ? (
           <section className="audit-pending" role="status">
@@ -1504,6 +1660,7 @@ function ClientLogs() {
                 )}
               </div>
 
+              <HealthScoreCard healthScore={client.healthScore} />
               <div className="client-operational">
                 <div><strong>{client.operational?.openPosts || 0}</strong><span>posts abertos</span></div>
                 <div><strong>{client.operational?.delayedPosts || 0}</strong><span>conteúdos atrasados</span></div>
