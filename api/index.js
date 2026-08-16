@@ -8,6 +8,8 @@ import { auditProfile } from './scraper-module.js';
 import mondayIntegration from './integrations/monday.js';
 import { getFutureMeetings } from './integrations/calendar.js';
 import { buildExecutiveSnapshot } from './domain/executive.js';
+import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from './domain/executive-records.js';
+import { createVersionedAuditRecord } from './domain/audit-records.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -36,6 +38,13 @@ function requireAdminAccess(req, res, next) {
   }
   if (!adminTokenMatches(req)) {
     return res.status(401).json({ error: 'Autorização administrativa necessária.' });
+  }
+  return next();
+}
+
+function blockLegacyFilePersistence(req, res, next) {
+  if (isProduction) {
+    return res.status(503).json({ error: 'Persistência legada em clients.js desativada. Configure o datastore versionado da Auditoria IA.' });
   }
   return next();
 }
@@ -175,7 +184,7 @@ Sempre retorne as chaves EXATAMENTE como pedidas.`;
   }
 }
 
-app.post('/api/audit/:id', requireAdminAccess, async (req, res) => {
+app.post('/api/audit/:id', requireAdminAccess, blockLegacyFilePersistence, async (req, res) => {
   const clientId = req.params.id;
   const handle = CLIENT_HANDLES[clientId];
 
@@ -306,7 +315,7 @@ Sempre retorne as chaves EXATAMENTE como pedidas.`;
 });
 
 // NOVO ENDPOINT: Salva o JSON colado pelo usuário
-app.post('/api/save/:id', requireAdminAccess, express.json(), (req, res) => {
+app.post('/api/save/:id', requireAdminAccess, blockLegacyFilePersistence, express.json(), (req, res) => {
   const clientId = req.params.id;
 
   try {
@@ -382,13 +391,13 @@ app.post('/api/save/:id', requireAdminAccess, express.json(), (req, res) => {
 
     clientsFileContent = replaceFirstChannelIssues(clientsFileContent, clientId, newIssuesJs);
 
-    writeFileSync(clientsFilePath, clientsFileContent, 'utf-8');
-    res.json({ success: true });
+        writeFileSync(clientsFilePath, clientsFileContent, 'utf-8');
+    const auditRecord = createVersionedAuditRecord({ clientId, analysis: aiAnalysis, source: 'manual_json' });
+    res.json({ success: true, auditRecord });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
-
 
 
 function daysLate(dateStr) {
@@ -527,6 +536,41 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   } catch (error) {
     console.error("[API] Erro ao buscar métricas do Monday:", error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Registro de Decisões Executivas — não altera status ou itens no Monday.
+app.get('/api/executive/decisions', requireAdminAccess, async (req, res) => {
+  try {
+    const decisions = await listDecisionRecords();
+    res.json({
+      success: true,
+      decisions,
+      meta: { source: 'Nexus Decision Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' }
+    });
+  } catch (error) {
+    const status = error.code === 'PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.post('/api/executive/decisions', requireAdminAccess, async (req, res) => {
+  try {
+    const decision = await saveDecisionRecord(req.body);
+    res.status(201).json({ success: true, decision });
+  } catch (error) {
+    const status = error.code === 'INVALID_DECISION' ? 400 : error.code === 'PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.patch('/api/executive/decisions/:id', requireAdminAccess, async (req, res) => {
+  try {
+    const decision = await updateDecisionRecord(req.params.id, req.body);
+    res.json({ success: true, decision });
+  } catch (error) {
+    const status = error.code === 'INVALID_DECISION' ? 400 : error.code === 'DECISION_NOT_FOUND' ? 404 : error.code === 'PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
   }
 });
 

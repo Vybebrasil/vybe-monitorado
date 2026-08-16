@@ -12,6 +12,10 @@ O runtime oficial está em `api/index.js`, conforme o rewrite definido em `verce
 
 O contrato executivo principal é `metrics.executiveSnapshot`, produzido por `api/domain/executive.js`. Os campos operacionais antigos continuam temporariamente disponíveis como evidência contextual e serão reduzidos em uma etapa posterior.
 
+O Registro de Decisões Executivas está em `api/domain/executive-records.js` e nas rotas `/api/executive/decisions`. Ele usa armazenamento local apenas em desenvolvimento, protegido por `.gitignore`; em produção retorna indisponibilidade controlada até que `NEXUS_DECISION_STORE_URL` seja conectado a um datastore versionado. Os estados são do Nexus (`decision_needed`, `directive_defined`, `impact_tracking`, `normalized` e `dismissed`) e não são status do Monday.
+
+O contrato versionado da Auditoria IA está em `api/domain/audit-records.js`. Ele registra versão, schema, fonte, captura, confiança, evidência, diretiva e histórico de validação. A migração definitiva ainda depende do datastore de produção.
+
 ## Segurança de operações sensíveis
 
 As rotas de auditoria, geração de prompt e salvamento exigem `NEXUS_ADMIN_TOKEN` quando configurado e, em produção, devem ser consideradas indisponíveis até que essa variável exista. O frontend público não deve expor esse token. A autenticação de usuário e autorização por perfil são a próxima evolução necessária para liberar essas ações com segurança.
