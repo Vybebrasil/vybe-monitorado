@@ -802,3 +802,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, [role="button"]:focu
 .scenario-limit { display: block; margin-top: 0.75rem; color: var(--cy-text-secondary); font-size: 0.58rem; line-height: 1.3; }
 @media (max-width: 920px) { .scenario-grid { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .executive-section-header { flex-direction: column; } .memory-item { flex-direction: column; } .memory-item-impact { align-items: flex-start; } }
+
+/* Sprint 10 — aprendizado executivo */
+.outcome-learning { margin-bottom: 2rem; border-color: rgba(255,190,0,0.3); }
+.learning-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-top: 1rem; }
+.learning-card { min-height: 155px; padding: 0.75rem; border: 1px solid var(--cy-border); background: rgba(255,255,255,0.02); }
+.learning-card-top { display: flex; justify-content: space-between; gap: 0.4rem; color: var(--cy-neon-cyan); font: 700 0.56rem var(--font-mono); }
+.learning-card-top small { color: var(--cy-text-secondary); }
+.learning-card h3 { margin: 0.75rem 0 0.45rem; color: #fff; font-size: 0.76rem; }
+.learning-card p { min-height: 44px; color: var(--cy-text-secondary); font-size: 0.68rem; line-height: 1.4; }
+.learning-card > small { display: block; margin-top: 0.6rem; color: var(--cy-text-secondary); font-size: 0.58rem; line-height: 1.35; }
+.learning-note { display: block; margin-top: 0.8rem; color: var(--cy-text-secondary); font-size: 0.62rem; }
+@media (max-width: 1000px) { .learning-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .learning-grid { grid-template-columns: 1fr; } .learning-card { min-height: 0; } }
+
+.scenario-comparison { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.1); color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.35; }
+.scenario-comparison > b { color: var(--cy-neon-cyan); font: 700 0.56rem var(--font-mono); }
+.scenario-comparison strong { color: #fff; }
