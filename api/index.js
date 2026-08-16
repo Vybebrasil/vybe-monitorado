@@ -19,7 +19,7 @@ import { buildExecutiveBriefingDocument } from './domain/executive-briefing.js';
 import { buildExecutiveAlerts } from './domain/executive-alerts.js';
 import { buildDecisionMemory, buildExecutiveScenarios } from './domain/executive-planning.js';
 import { buildOutcomeLearning } from './domain/outcome-learning.js';
-import { GoogleGenerativeAI } from '@google-generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
