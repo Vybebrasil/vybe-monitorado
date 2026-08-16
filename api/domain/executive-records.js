@@ -12,9 +12,9 @@ export const DECISION_STATUSES = [
 
 export const DECISION_PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
-const isProduction = process.env.NODE_ENV === 'production';
-const dataDirectory = process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
-const decisionsPath = join(dataDirectory, 'executive-decisions.json');
+const isProduction = () => process.env.NODE_ENV === 'production';
+const dataDirectory = () => process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
+const decisionsPath = () => join(dataDirectory(), 'executive-decisions.json');
 
 function text(value, maxLength = 2000) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
@@ -75,9 +75,9 @@ export function createDecisionRecord(payload) {
 }
 
 async function readLocalRecords() {
-  if (isProduction) throw decisionStoreUnavailable();
+  if (isProduction()) throw decisionStoreUnavailable();
   try {
-    const content = await readFile(decisionsPath, 'utf8');
+    const content = await readFile(decisionsPath(), 'utf8');
     const parsed = JSON.parse(content);
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
@@ -87,11 +87,11 @@ async function readLocalRecords() {
 }
 
 async function writeLocalRecords(records) {
-  if (isProduction) throw decisionStoreUnavailable();
-  await mkdir(dataDirectory, { recursive: true });
-  const temporaryPath = `${decisionsPath}.tmp`;
+  if (isProduction()) throw decisionStoreUnavailable();
+  await mkdir(dataDirectory(), { recursive: true });
+  const temporaryPath = `${decisionsPath()}.tmp`;
   await writeFile(temporaryPath, JSON.stringify(records, null, 2), 'utf8');
-  await rename(temporaryPath, decisionsPath);
+  await rename(temporaryPath, decisionsPath());
 }
 
 export async function listDecisionRecords() {

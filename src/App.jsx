@@ -193,6 +193,8 @@ function ExecutiveCockpit({ snapshot }) {
   const [lens, setLens] = useState('cmo');
   const safeSnapshot = snapshot || {};
   const summary = safeSnapshot.summary || {};
+  const snapshotSourceStatus = safeSnapshot.sourceStatus || (safeSnapshot.generatedAt || safeSnapshot.capturedAt ? 'live' : 'stale');
+  const snapshotTimestamp = safeSnapshot.generatedAt || safeSnapshot.capturedAt;
   const stability = safeSnapshot.portfolioStability || {};
   const activeLens = safeSnapshot.lenses?.[lens] || {
     title: lens === 'cmo' ? 'LENTE CMO' : 'LENTE COO',
@@ -243,8 +245,8 @@ function ExecutiveCockpit({ snapshot }) {
         </div>
         <div className="executive-summary-card">
           <span>FONTE</span>
-          <strong className="executive-source">{safeSnapshot.sourceStatus === 'live' ? 'LIVE' : 'STALE'}</strong>
-          <small>{safeSnapshot.source || 'Monday.com'} · {formatDateTime(safeSnapshot.generatedAt)}</small>
+          <strong className="executive-source">{snapshotSourceStatus === 'live' ? 'LIVE' : 'STALE'}</strong>
+          <small>{safeSnapshot.source || 'Monday.com'} · {formatDateTime(snapshotTimestamp)}</small>
         </div>
       </div>
 
@@ -293,8 +295,9 @@ function HealthScoreCard({ healthScore }) {
   const color = healthScore.status === 'healthy' ? 'var(--cy-neon-green)' : healthScore.status === 'attention' ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-magenta)';
   return (
     <div className="health-score-card" style={{ '--health-color': color }}>
-      <div className="health-score-header"><span>CLIENT HEALTH · V1</span><strong>{healthScore.score}%</strong></div>
+      <div className="health-score-header"><span>CLIENT HEALTH · V2</span><strong>{healthScore.score}%</strong></div>
       <div className="health-score-label">{healthScore.label}</div>
+      <div className="health-score-meta"><span>CONFIANÇA: <b>{healthScore.confidence || 'partial'}</b></span><span>TENDÊNCIA: <b>{healthScore.trend || 'not_available'}</b></span></div>
       <div className="health-factor-grid">
         {(healthScore.factors || []).map(factor => (
           <div key={factor.key} title={factor.reason}>
@@ -410,6 +413,47 @@ function DecisionRegistry() {
               <div className="decision-record-meta"><span>{decision.ownerRole}</span>{decision.clientId && <span>{decision.clientId}</span>}{decision.checkpointAt && <span>Checkpoint: {formatDate(decision.checkpointAt)}</span>}<span><Clock size={11} /> {decision.history?.length || 1} eventos</span></div>
             </article>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExecutiveHistory() {
+  const [trend, setTrend] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/executive/snapshots?limit=90')
+      .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Histórico executivo ainda não configurado.');
+        setTrend(data.trend || null);
+      })
+      .catch(err => setError(err.message || 'Histórico executivo indisponível.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const directionLabel = { improving: 'MELHORANDO', declining: 'PIORANDO', stable: 'ESTÁVEL', not_available: 'AGUARDANDO BASE' };
+  const directionColor = trend?.direction === 'improving' ? 'var(--cy-neon-green)' : trend?.direction === 'declining' ? 'var(--cy-neon-magenta)' : 'var(--cy-neon-yellow)';
+
+  return (
+    <section className="executive-history card" aria-labelledby="executive-history-title">
+      <div className="executive-history-header">
+        <div>
+          <div className="executive-kicker"><Activity size={15} /> HISTÓRICO EXECUTIVO · TRANSPARÊNCIA</div>
+          <h2 id="executive-history-title">TRAJETÓRIA DA CARTEIRA</h2>
+          <p>Snapshots do Nexus para diferenciar incidente pontual de tendência executiva.</p>
+        </div>
+        <span className="history-source-badge">LEITURA PÚBLICA POR LINK</span>
+      </div>
+      {loading ? <div className="executive-history-empty">Consultando histórico...</div> : error ? <div className="executive-history-notice"><Info size={14} /> {error} Os dados atuais continuam disponíveis; a série histórica depende do datastore.</div> : (
+        <div className="executive-history-grid">
+          <div><span>SITUAÇÃO ATUAL</span><strong>{trend?.current ?? '—'}{trend?.current !== null && trend?.current !== undefined ? '%' : ''}</strong><small>último snapshot</small></div>
+          <div><span>VARIAÇÃO</span><strong style={{ color: directionColor }}>{trend?.delta === null || trend?.delta === undefined ? '—' : `${trend.delta > 0 ? '+' : ''}${trend.delta} p.p.`}</strong><small>{directionLabel[trend?.direction] || 'AGUARDANDO BASE'}</small></div>
+          <div><span>JANELA 7 DIAS</span><strong>{trend?.windows?.['7d'] ?? 0}</strong><small>snapshots</small></div>
+          <div><span>JANELA 30 / 90 DIAS</span><strong>{trend?.windows?.['30d'] ?? 0} / {trend?.windows?.['90d'] ?? 0}</strong><small>snapshots</small></div>
         </div>
       )}
     </section>
@@ -536,6 +580,7 @@ function CommandCenter() {
 
       <ExecutiveCockpit snapshot={metrics.executiveSnapshot} />
       <DecisionRegistry />
+      <ExecutiveHistory />
 
       <details className="production-evidence">
         <summary className="production-evidence-summary">

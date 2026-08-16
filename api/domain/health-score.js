@@ -12,6 +12,7 @@ export function buildClientHealthScore({
   missingPlanning = false,
   missingDashboard = false,
   auditStatus = 'not_integrated',
+  previousScore = null,
   capturedAt = new Date().toISOString()
 }) {
   const relationshipScore = daysSinceLastMeeting === null || daysSinceLastMeeting === undefined
@@ -32,12 +33,19 @@ export function buildClientHealthScore({
     evidenceScore * 0.1
   );
   const status = scoreStatus(score);
+  const confidence = auditStatus === 'validated' && !missingPlanning && !missingDashboard ? 'high' : auditStatus === 'not_integrated' || missingPlanning || missingDashboard ? 'partial' : 'medium';
+  const delta = typeof previousScore === 'number' ? score - previousScore : null;
+  const trend = delta === null ? 'not_available' : delta > 2 ? 'improving' : delta < -2 ? 'declining' : 'stable';
 
   return {
-    model: 'client-health-v1',
+    model: 'client-health-v2',
     score,
     status,
     label: statusLabel(status),
+    confidence,
+    trend,
+    delta,
+    period: { windowDays: 30, reference: 'current executive snapshot' },
     capturedAt,
     explanation: 'Score executivo explicável. Não representa receita, margem ou satisfação sem essas fontes integradas.',
     factors: [
@@ -81,7 +89,8 @@ export function buildClientHealthScore({
         score: clamp(evidenceScore),
         weight: 0.1,
         reason: auditStatus === 'validated' ? 'Auditoria validada humanamente.' : 'Auditoria ainda não está validada no datastore executivo.',
-        source: auditStatus === 'validated' ? 'Nexus Audit Registry' : 'Migração pendente'
+        source: auditStatus === 'validated' ? 'Nexus Audit Registry' : 'Migração pendente',
+        capturedAt
       }
     ]
   };

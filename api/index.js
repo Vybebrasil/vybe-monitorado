@@ -11,6 +11,7 @@ import { buildExecutiveSnapshot } from './domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from './domain/executive-records.js';
 import { createVersionedAuditRecord } from './domain/audit-records.js';
 import { buildClientHealthScore } from './domain/health-score.js';
+import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend } from './domain/executive-snapshots.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -520,6 +521,15 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       demands,
       generatedAt: new Date().toISOString()
     });
+    let snapshotSaved = false;
+    if (process.env.NEXUS_SNAPSHOT_AUTOSAVE === 'true') {
+      try {
+        await saveExecutiveSnapshot(executiveSnapshot);
+        snapshotSaved = true;
+      } catch (snapshotError) {
+        console.warn('[API] Snapshot executivo não persistido:', snapshotError.message);
+      }
+    }
 
     res.json({
       success: true,
@@ -532,7 +542,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         filters: attention.filters,
         executiveSnapshot
       },
-      meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live' }
+      meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live', snapshotSaved }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar métricas do Monday:", error);
@@ -541,7 +551,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
 });
 
 // Registro de Decisões Executivas — não altera status ou itens no Monday.
-app.get('/api/executive/decisions', requireAdminAccess, async (req, res) => {
+app.get('/api/executive/decisions', async (req, res) => {
   try {
     const decisions = await listDecisionRecords();
     res.json({
@@ -571,6 +581,27 @@ app.patch('/api/executive/decisions/:id', requireAdminAccess, async (req, res) =
     res.json({ success: true, decision });
   } catch (error) {
     const status = error.code === 'INVALID_DECISION' ? 400 : error.code === 'DECISION_NOT_FOUND' ? 404 : error.code === 'PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+// Histórico executivo — leitura aberta pelo link, escrita controlada pela infraestrutura.
+app.get('/api/executive/snapshots', async (req, res) => {
+  try {
+    const snapshots = await listExecutiveSnapshots({ limit: Number(req.query.limit) || 90 });
+    res.json({ success: true, snapshots, trend: summarizeSnapshotTrend(snapshots), meta: { source: 'Nexus Snapshot Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+  } catch (error) {
+    const status = error.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.post('/api/executive/snapshots', requireAdminAccess, async (req, res) => {
+  try {
+    const snapshot = await saveExecutiveSnapshot(req.body?.snapshot || req.body);
+    res.status(201).json({ success: true, snapshot });
+  } catch (error) {
+    const status = error.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
     res.status(status).json({ error: error.message });
   }
 });
@@ -642,7 +673,7 @@ app.get('/api/dashboard/clients-logs', async (req, res) => {
     res.json({
       success: true,
       logs,
-      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live', healthModel: 'client-health-v1' }
+      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live', healthModel: 'client-health-v2' }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar logs de clientes:", error);
