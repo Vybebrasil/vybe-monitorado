@@ -356,6 +356,112 @@ app.post('/api/save/:id', express.json(), (req, res) => {
   }
 });
 
+
+
+function daysLate(dateStr) {
+  if (!dateStr) return 0;
+  const due = new Date(dateStr);
+  if (Number.isNaN(due.getTime())) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.ceil((today - due) / (1000 * 60 * 60 * 24)));
+}
+
+function buildAttentionQueue({ bottlenecks, posts, demands }) {
+  const items = [];
+  const addItem = item => items.push({ ...item, score: item.score ?? 0 });
+
+  (posts?.ranking || []).forEach(row => {
+    (row.details || []).forEach(post => {
+      if (!post.isDelayedPrazo && !post.isDelayedVeiculacao) return;
+      const dueDate = post.isDelayedVeiculacao ? post.veiculacao : post.prazo;
+      const lateDays = Math.max(daysLate(post.prazo), daysLate(post.veiculacao));
+      const reasons = [
+        post.isDelayedPrazo ? 'Prazo interno vencido' : null,
+        post.isDelayedVeiculacao ? 'Veiculação vencida' : null
+      ].filter(Boolean);
+      addItem({
+        key: `post-${post.id}`,
+        type: 'content',
+        priority: post.isDelayedPrazo && post.isDelayedVeiculacao || lateDays >= 14 ? 'critical' : 'warning',
+        title: post.name,
+        client: row.name,
+        owner: post.responsavel || post.editorDesigner || 'Sem responsável',
+        dueDate,
+        status: post.status || 'Sem status',
+        reason: reasons.join(' + '),
+        lateDays,
+        url: `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${post.id}`,
+        score: 100 + lateDays + (post.isDelayedPrazo && post.isDelayedVeiculacao ? 25 : 0)
+      });
+    });
+  });
+
+  (demands || []).forEach(demand => {
+    const lateDays = daysLate(demand.prazo);
+    addItem({
+      key: `demand-${demand.id}`,
+      type: 'demand',
+      priority: lateDays >= 14 ? 'critical' : 'warning',
+      title: demand.name,
+      client: demand.cliente || 'Sem cliente',
+      owner: 'Operação',
+      dueDate: demand.prazo,
+      status: demand.status || 'Sem status',
+      reason: 'Demanda vencida',
+      lateDays,
+      url: `https://gestaovybes-team.monday.com/boards/8385559107/pulses/${demand.id}`,
+      score: 80 + lateDays
+    });
+  });
+
+  const planning = new Set(bottlenecks?.missingPlanning || []);
+  planning.forEach(client => addItem({
+    key: `planning-${client}`,
+    type: 'setup',
+    priority: 'critical',
+    title: 'Planejamento estratégico ausente',
+    client,
+    owner: 'Operação',
+    dueDate: null,
+    status: 'Sem planejamento',
+    reason: 'Setup necessário',
+    lateDays: null,
+    score: 70
+  }));
+
+  const dashboard = new Set(bottlenecks?.missingDashboard || []);
+  dashboard.forEach(client => addItem({
+    key: `dashboard-${client}`,
+    type: 'setup',
+    priority: 'warning',
+    title: 'Dashboard pendente ou desatualizado',
+    client,
+    owner: 'Operação',
+    dueDate: null,
+    status: 'Dashboard pendente',
+    reason: 'Setup necessário',
+    lateDays: null,
+    score: 60
+  }));
+
+  items.sort((a, b) => b.score - a.score);
+  const clients = [...new Set(items.map(item => item.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const responsaveis = [...new Set(items.map(item => item.owner).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  return {
+    items,
+    summary: {
+      total: items.length,
+      critical: items.filter(item => item.priority === 'critical').length,
+      content: items.filter(item => item.type === 'content').length,
+      demands: items.filter(item => item.type === 'demand').length,
+      setup: items.filter(item => item.type === 'setup').length
+    },
+    filters: { clients, responsaveis }
+  };
+}
+
 // NOVO ENDPOINT: Command Center / Métricas Executivas do Monday
 app.get('/api/dashboard/metrics', async (req, res) => {
   try {
@@ -364,13 +470,17 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       mondayIntegration.getOpenPosts(),
       mondayIntegration.getDelayedDemands()
     ]);
+    const attention = buildAttentionQueue({ bottlenecks, posts, demands });
 
     res.json({
       success: true,
       metrics: {
         bottlenecks,
         posts,
-        demands
+        demands,
+        attentionQueue: attention.items,
+        attentionSummary: attention.summary,
+        filters: attention.filters
       },
       meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live' }
     });
@@ -383,16 +493,52 @@ app.get('/api/dashboard/metrics', async (req, res) => {
 // NOVO ENDPOINT: Client Logs (Dossiê)
 app.get('/api/dashboard/clients-logs', async (req, res) => {
   try {
-    const logs = await mondayIntegration.getClientLogs();
-    const futureMeetings = await getFutureMeetings();
+    const [logs, futureMeetings, posts, demands] = await Promise.all([
+      mondayIntegration.getClientLogs(),
+      getFutureMeetings(),
+      mondayIntegration.getOpenPosts(),
+      mondayIntegration.getDelayedDemands()
+    ]);
 
-    // Mesclar reuniões futuras com os clientes baseados no nome
+    const findClientPosts = clientName => (posts.ranking || []).find(row => {
+      const rowName = row.name.toLowerCase();
+      const name = clientName.toLowerCase();
+      return rowName === name || rowName.includes(name) || name.includes(rowName);
+    });
+
     logs.forEach(client => {
-      // Procura eventos cujo título contém o nome do cliente (case insensitive)
       const clientNameLower = client.name.toLowerCase();
-      
-      const clientFutures = futureMeetings.filter(m => m.title.toLowerCase().includes(clientNameLower));
-      client.futureMeetings = clientFutures;
+      client.futureMeetings = futureMeetings.filter(m => m.title.toLowerCase().includes(clientNameLower));
+      const clientPosts = findClientPosts(client.name);
+      const delayedDemands = (demands || []).filter(demand => {
+        const demandClient = (demand.cliente || '').toLowerCase();
+        return demandClient === clientNameLower || demandClient.includes(clientNameLower) || clientNameLower.includes(demandClient);
+      }).length;
+      const openPosts = clientPosts?.open || 0;
+      const delayedPosts = (clientPosts?.delayedPrazo || 0) + (clientPosts?.delayedVeiculacao || 0);
+      const relationshipStatus = client.daysSinceLastMeeting === null
+        ? 'no-history'
+        : client.daysSinceLastMeeting >= 30
+          ? 'critical'
+          : client.daysSinceLastMeeting >= 15
+            ? 'warning'
+            : 'healthy';
+      const nextAction = client.futureMeetings.length > 0
+        ? 'Preparar próxima reunião'
+        : client.daysSinceLastMeeting === null
+          ? 'Agendar primeira reunião'
+          : delayedPosts > 0 || delayedDemands > 0
+            ? 'Destravar operação atrasada'
+            : 'Manter cadência de relacionamento';
+
+      client.relationshipStatus = relationshipStatus;
+      client.meetingCount = client.meetings.length;
+      client.operational = {
+        openPosts,
+        delayedPosts,
+        delayedDemands,
+        nextAction
+      };
     });
 
     res.json({

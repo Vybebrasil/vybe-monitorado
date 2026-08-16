@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clients } from './data/clients';
-import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink, Info } from 'lucide-react';
+import { ShieldAlert, Activity, GitCommit, ServerCrash, Terminal, Layers, Crosshair, ArrowLeft, BarChart2, ChevronDown, ChevronUp, Search, Target, MapPin, Globe, Star, Database, RefreshCw, LayoutDashboard, AlertTriangle, Clock, ActivitySquare, ExternalLink, Info, Filter, ListChecks, ChevronRight, X, CheckCircle2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const formatDate = (dateStr) => {
@@ -58,6 +58,10 @@ const activateOnKeyboard = (event, callback) => {
     callback();
   }
 };
+
+
+const attentionTypeLabels = { content: 'CONTEÚDO', demand: 'DEMANDA', setup: 'SETUP' };
+const attentionPriorityLabels = { critical: 'CRÍTICO', warning: 'ATENÇÃO' };
 
 function SyncOverlay({ text }) {
   return (
@@ -197,6 +201,7 @@ function CommandCenter() {
   const [hoveredDonut, setHoveredDonut] = useState(null);
   const [barModalClient, setBarModalClient] = useState(null);
   const [personModalData, setPersonModalData] = useState(null);
+  const [attentionFilters, setAttentionFilters] = useState({ search: '', client: 'Todos', type: 'Todos', responsavel: 'Todos' });
 
   const getModalContent = () => {
     if (!activeModal || !metrics) return { title: '', items: [] };
@@ -262,6 +267,27 @@ function CommandCenter() {
     loadMetrics();
   }, []);
 
+
+  const attentionItems = metrics?.attentionQueue || [];
+  const attentionMeta = metrics?.filters || { clients: [], responsaveis: [] };
+  const filteredAttention = attentionItems.filter(item => {
+    const search = attentionFilters.search.trim().toLowerCase();
+    const matchesSearch = !search || [item.title, item.client, item.owner, item.reason].filter(Boolean).join(' ').toLowerCase().includes(search);
+    const matchesClient = attentionFilters.client === 'Todos' || item.client === attentionFilters.client;
+    const matchesType = attentionFilters.type === 'Todos' || item.type === attentionFilters.type;
+    const matchesOwner = attentionFilters.responsavel === 'Todos' || item.owner === attentionFilters.responsavel;
+    return matchesSearch && matchesClient && matchesType && matchesOwner;
+  });
+  const attentionSummary = metrics?.attentionSummary || {
+    total: attentionItems.length,
+    critical: attentionItems.filter(item => item.priority === 'critical').length,
+    content: attentionItems.filter(item => item.type === 'content').length,
+    demands: attentionItems.filter(item => item.type === 'demand').length,
+    setup: attentionItems.filter(item => item.type === 'setup').length
+  };
+  const hasAttentionFilters = Object.values(attentionFilters).some(value => value !== '' && value !== 'Todos');
+  const resetAttentionFilters = () => setAttentionFilters({ search: '', client: 'Todos', type: 'Todos', responsavel: 'Todos' });
+
   if (loading) return <SyncOverlay text={scanText} />;
 
   if (error) return <ErrorState message={error} onRetry={loadMetrics} />;
@@ -304,6 +330,77 @@ function CommandCenter() {
           <span style={{ color: 'var(--cy-neon-cyan)', fontSize: '3rem', fontWeight: 'bold', textShadow: '0 0 15px rgba(0, 243, 255, 0.4)' }}>{metrics.demands.length + metrics.bottlenecks.missingPlanning.length}</span>
         </div>
       </div>
+
+
+
+      <section className="attention-panel card" aria-labelledby="attention-title">
+        <div className="attention-panel-header">
+          <div>
+            <div className="attention-kicker"><ListChecks size={15} /> DAILY OPERATIONS</div>
+            <h2 id="attention-title">O QUE EXIGE ATENÇÃO HOJE?</h2>
+            <p>Fila priorizada de conteúdos, demandas e setups que precisam de decisão.</p>
+          </div>
+          <span className="attention-total">{attentionSummary.total} itens</span>
+        </div>
+
+        <div className="attention-summary">
+          <div className="attention-summary-card critical"><strong>{attentionSummary.critical}</strong><span>CRÍTICOS</span></div>
+          <div className="attention-summary-card"><strong>{attentionSummary.content}</strong><span>CONTEÚDOS</span></div>
+          <div className="attention-summary-card"><strong>{attentionSummary.demands}</strong><span>DEMANDAS</span></div>
+          <div className="attention-summary-card"><strong>{attentionSummary.setup}</strong><span>SETUPS</span></div>
+        </div>
+
+        <div className="attention-filters" aria-label="Filtros da fila operacional">
+          <label className="attention-search">
+            <Search size={15} aria-hidden="true" />
+            <input
+              type="search"
+              value={attentionFilters.search}
+              onChange={(event) => setAttentionFilters(current => ({ ...current, search: event.target.value }))}
+              placeholder="Buscar item, cliente ou responsável..."
+              aria-label="Buscar na fila de atenção"
+            />
+          </label>
+          <select value={attentionFilters.client} onChange={(event) => setAttentionFilters(current => ({ ...current, client: event.target.value }))} aria-label="Filtrar por cliente">
+            <option value="Todos">Todos os clientes</option>
+            {attentionMeta.clients.map(client => <option key={client} value={client}>{client}</option>)}
+          </select>
+          <select value={attentionFilters.type} onChange={(event) => setAttentionFilters(current => ({ ...current, type: event.target.value }))} aria-label="Filtrar por tipo">
+            <option value="Todos">Todos os tipos</option>
+            <option value="content">Conteúdo</option>
+            <option value="demand">Demanda</option>
+            <option value="setup">Setup</option>
+          </select>
+          <select value={attentionFilters.responsavel} onChange={(event) => setAttentionFilters(current => ({ ...current, responsavel: event.target.value }))} aria-label="Filtrar por responsável">
+            <option value="Todos">Todos os responsáveis</option>
+            {attentionMeta.responsaveis.map(owner => <option key={owner} value={owner}>{owner}</option>)}
+          </select>
+          {hasAttentionFilters && <button type="button" className="clear-filter-btn" onClick={resetAttentionFilters}><X size={14} /> Limpar</button>}
+        </div>
+
+        <div className="attention-list">
+          {filteredAttention.slice(0, 10).map(item => (
+            <div className="attention-row" key={item.key}>
+              <div className="attention-row-top">
+                <div className="attention-tags">
+                  <span className={`attention-priority ${item.priority}`}>{attentionPriorityLabels[item.priority] || item.priority}</span>
+                  <span className={`attention-type ${item.type}`}>{attentionTypeLabels[item.type] || item.type}</span>
+                </div>
+                {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="attention-open">Abrir no Monday <ChevronRight size={14} /></a>}
+              </div>
+              <strong className="attention-title">{item.title}</strong>
+              <div className="attention-context">
+                <span>{item.client}</span>
+                <span>{item.owner}</span>
+                <span>{item.reason}</span>
+                {item.dueDate && <span>Prazo {formatDate(item.dueDate)}</span>}
+              </div>
+            </div>
+          ))}
+          {filteredAttention.length === 0 && <div className="empty-state">Nenhum item corresponde aos filtros atuais.</div>}
+        </div>
+        {filteredAttention.length > 10 && <div className="attention-footer">Mostrando 10 de {filteredAttention.length} itens filtrados. Use os filtros para reduzir a fila.</div>}
+      </section>
 
       {/* CHARTS SECTION - Custom SVG */}
       <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
@@ -824,11 +921,11 @@ function IssueAccordion({ issue }) {
   );
 }
 
-function BusinessIntelligence({ data, clientId }) {
+function BusinessIntelligence({ data, clientId, auditPending }) {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanText, setScanText] = useState("");
-  const [lastScan, setLastScan] = useState("Há 2 horas");
+  const [lastScan, setLastScan] = useState("Não sincronizado nesta sessão");
 
   const handleScan = async () => {
     if (isScanning || !clientId) return;
@@ -966,6 +1063,7 @@ function BusinessIntelligence({ data, clientId }) {
       <div className="bi-header">
         <div className="cmo-title" style={{marginBottom: 0}}>
           <Database size={20} className="text-cyan" /> COMPANY INTELLIGENCE
+            <span className={`audit-confidence ${auditPending ? 'pending' : 'review'}`}>{auditPending ? 'AUDITORIA PENDENTE' : 'REVISAR EVIDÊNCIAS'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--cy-text-secondary)', fontFamily: 'var(--font-mono)' }}>
@@ -1095,6 +1193,15 @@ function BusinessIntelligence({ data, clientId }) {
             </div>
           </div>
         )}
+        {data.igStats && (
+          <div className="bi-card bi-card-wide">
+            <Database size={16} className="text-cyan" />
+            <div>
+              <div className="bi-label">Base observada</div>
+              <div className="bi-value">{data.igStats}</div>
+            </div>
+          </div>
+        )}
         {data.coreAsset && (
           <div className="bi-card">
             <ShieldAlert size={16} className="text-magenta" />
@@ -1126,7 +1233,7 @@ function ClientDetail({ client, onBack }) {
           </button>
         </header>
 
-        <BusinessIntelligence data={client.businessIntelligence} clientId={client.id} />
+        <BusinessIntelligence data={client.businessIntelligence} clientId={client.id} auditPending={auditPending} />
 
         {auditPending ? (
           <section className="audit-pending" role="status">
@@ -1188,6 +1295,8 @@ function ClientLogs() {
   const [expandedClient, setExpandedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [meta, setMeta] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [sortMode, setSortMode] = useState('priority');
 
   const loadLogs = async () => {
     setLoading(true);
@@ -1212,7 +1321,10 @@ function ClientLogs() {
   }, []);
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredLogs = logs.filter(client => !normalizedSearch || client.name.toLowerCase().includes(normalizedSearch));
+  const filteredLogs = [...logs]
+    .filter(client => !normalizedSearch || client.name.toLowerCase().includes(normalizedSearch))
+    .filter(client => statusFilter === 'Todos' || client.relationshipStatus === statusFilter)
+    .sort((a, b) => sortMode === 'name' ? a.name.localeCompare(b.name, 'pt-BR') : (b.daysSinceLastMeeting ?? 9999) - (a.daysSinceLastMeeting ?? 9999));
   const criticalCount = logs.filter(client => client.daysSinceLastMeeting >= 30).length;
   const noHistoryCount = logs.filter(client => !client.lastMeetingDate).length;
   const scheduledCount = logs.reduce((total, client) => total + (client.futureMeetings?.length || 0), 0);
@@ -1244,6 +1356,17 @@ function ClientLogs() {
             aria-label="Buscar cliente no dossiê"
           />
         </label>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filtrar clientes por status">
+          <option value="Todos">Todos os status</option>
+          <option value="critical">Críticos</option>
+          <option value="warning">Atenção</option>
+          <option value="no-history">Sem histórico</option>
+          <option value="healthy">Saudáveis</option>
+        </select>
+        <select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Ordenar clientes">
+          <option value="priority">Ordenar por prioridade</option>
+          <option value="name">Ordenar por nome</option>
+        </select>
         <span className="filter-count">{filteredLogs.length} de {logs.length} clientes</span>
       </div>
 
@@ -1279,6 +1402,13 @@ function ClientLogs() {
                   <span>Nenhuma reunião anterior registrada.</span>
                 )}
               </div>
+
+              <div className="client-operational">
+                <div><strong>{client.operational?.openPosts || 0}</strong><span>posts abertos</span></div>
+                <div><strong>{client.operational?.delayedPosts || 0}</strong><span>conteúdos atrasados</span></div>
+                <div><strong>{client.operational?.delayedDemands || 0}</strong><span>demandas</span></div>
+              </div>
+              <div className="next-action"><CheckCircle2 size={14} /> <span><b>PRÓXIMA AÇÃO:</b> {client.operational?.nextAction || 'Revisar situação do cliente'}</span></div>
 
               {client.futureMeetings && client.futureMeetings.length > 0 && (
                 <div className="future-meetings">
