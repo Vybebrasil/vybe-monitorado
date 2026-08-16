@@ -189,6 +189,97 @@ function ClientPostsRow({ row, sortMode }) {
   );
 }
 
+function ExecutiveCockpit({ snapshot }) {
+  const [lens, setLens] = useState('cmo');
+  const safeSnapshot = snapshot || {};
+  const summary = safeSnapshot.summary || {};
+  const stability = safeSnapshot.portfolioStability || {};
+  const activeLens = safeSnapshot.lenses?.[lens] || {
+    title: lens === 'cmo' ? 'LENTE CMO' : 'LENTE COO',
+    question: 'Qual decisão executiva precisa ser tomada?',
+    focus: []
+  };
+  const risks = (safeSnapshot.executiveRisks || []).filter(risk => lens === 'cmo' ? risk.ownerRole !== 'COO' : risk.ownerRole !== 'CMO').slice(0, 5);
+  const decisions = (safeSnapshot.decisionsNeeded || []).filter(decision => lens === 'cmo' ? decision.ownerRole !== 'COO' : decision.ownerRole !== 'CMO').slice(0, 3);
+  const stabilityColor = stability.status === 'stable' ? 'var(--cy-neon-green)' : stability.status === 'attention' ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-magenta)';
+
+  return (
+    <section className="executive-cockpit card" aria-labelledby="executive-cockpit-title">
+      <div className="executive-cockpit-header">
+        <div>
+          <div className="executive-kicker"><Target size={15} /> COMMAND LAYER · CMO / COO</div>
+          <h2 id="executive-cockpit-title">COCKPIT DE COMANDO E DECISÃO</h2>
+          <p>{activeLens.question}</p>
+        </div>
+        <div className="executive-lens-switch" role="group" aria-label="Escolher lente executiva">
+          {['cmo', 'coo'].map(option => (
+            <button key={option} type="button" className={lens === option ? 'active' : ''} onClick={() => setLens(option)}>
+              {option.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="executive-lens-context">
+        <strong>{activeLens.title}</strong>
+        <span>{activeLens.focus.join(' · ')}</span>
+      </div>
+
+      <div className="executive-summary-grid">
+        <div className="executive-summary-card stability" style={{ '--signal-color': stabilityColor }}>
+          <span>ESTABILIDADE OPERACIONAL · PROXY</span>
+          <strong>{stability.score ?? '—'}%</strong>
+          <small>{stability.label || 'Aguardando dados'}</small>
+        </div>
+        <div className="executive-summary-card">
+          <span>RISCOS EXECUTIVOS</span>
+          <strong>{summary.executiveRisks ?? 0}</strong>
+          <small>agrupados por causa e cliente</small>
+        </div>
+        <div className="executive-summary-card">
+          <span>DECISÕES NECESSÁRIAS</span>
+          <strong>{summary.decisionsNeeded ?? 0}</strong>
+          <small>sem alterar status de produção</small>
+        </div>
+        <div className="executive-summary-card">
+          <span>FONTE</span>
+          <strong className="executive-source">{safeSnapshot.sourceStatus === 'live' ? 'LIVE' : 'STALE'}</strong>
+          <small>{safeSnapshot.source || 'Monday.com'} · {formatDateTime(safeSnapshot.generatedAt)}</small>
+        </div>
+      </div>
+
+      <div className="executive-columns">
+        <div className="executive-block">
+          <div className="executive-block-heading"><AlertTriangle size={15} /><span>SINAIS QUE MERECEM DECISÃO</span></div>
+          {risks.length > 0 ? risks.map(risk => (
+            <article className={`executive-risk ${risk.severity || 'medium'}`} key={risk.id}>
+              <div className="executive-risk-top"><span className="executive-risk-severity">{risk.severityLabel || risk.severity}</span><span>{risk.ownerRole}</span></div>
+              <strong>{risk.title}</strong>
+              <p>{risk.whyItMatters}</p>
+              <div className="executive-risk-action"><b>DECISÃO:</b> {risk.recommendedDecision}</div>
+              {risk.evidence?.[0]?.url && <a href={risk.evidence[0].url} target="_blank" rel="noreferrer" className="executive-evidence-link"><ExternalLink size={12} /> Ver evidência operacional</a>}
+            </article>
+          )) : <div className="executive-empty">Nenhum sinal executivo nesta lente.</div>}
+        </div>
+
+        <div className="executive-block decisions">
+          <div className="executive-block-heading"><CheckCircle2 size={15} /><span>AGENDA DE LIDERANÇA</span></div>
+          {decisions.length > 0 ? decisions.map(decision => (
+            <article className="executive-decision" key={decision.id}>
+              <span className="executive-decision-priority">{decision.priority || 'ATENÇÃO'}</span>
+              <strong>{decision.title}</strong>
+              <p>{decision.context}</p>
+              <small>Responsável executivo: {decision.ownerRole}</small>
+            </article>
+          )) : <div className="executive-empty">Nenhuma decisão pendente nesta lente.</div>}
+        </div>
+      </div>
+
+      <p className="executive-disclaimer"><Info size={13} /> {stability.explanation || 'Os sinais são uma camada interpretativa sobre fontes operacionais e devem ser validados pela liderança.'}</p>
+    </section>
+  );
+}
+
 function CommandCenter() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -298,15 +389,23 @@ function CommandCenter() {
         <div>
           <h1>VYBE <span className="glitch-text" style={{color: 'var(--cy-neon-purple)'}}>NEXUS</span></h1>
           <p style={{fontFamily: 'var(--font-mono)', marginTop: '0.5rem', color: 'var(--cy-text-secondary)'}}>
-            VISÃO EXECUTIVA DE OPERAÇÕES - MONDAY.COM
+            COCKPIT DE COMANDO E DECISÃO - CMO / COO
           </p>
         </div>
         <div className="header-meta">
-          <span className="header-badge" style={{borderColor: 'var(--cy-neon-purple)', color: 'var(--cy-neon-purple)'}}>EXECUTIVE_OVERVIEW</span>
+          <span className="header-badge" style={{borderColor: 'var(--cy-neon-purple)', color: 'var(--cy-neon-purple)'}}>COMMAND_LAYER</span>
           <span className="sync-meta" aria-live="polite">{meta?.source || 'Monday.com'} · {meta?.generatedAt ? `ATUALIZADO ${formatDateTime(meta.generatedAt)}` : 'ATUALIZAÇÃO RECENTE'}</span>
         </div>
       </header>
 
+      <ExecutiveCockpit snapshot={metrics.executiveSnapshot} />
+
+      <details className="production-evidence">
+        <summary className="production-evidence-summary">
+          <div><span className="evidence-kicker"><Layers size={14} /> MONDAY / EVIDÊNCIA CONTEXTUAL</span><strong>Ver detalhes de produção e execução</strong><small>O Vybe Painel e o Monday continuam sendo a fonte e a camada de operação.</small></div>
+          <ChevronDown size={18} />
+        </summary>
+        <div className="production-evidence-content">
       {/* KPI SECTION */}
       <div className="kpi-overview-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div className="kpi-card" role="button" tabIndex={0} aria-label="Abrir itens em fila" onClick={() => setActiveModal('fila')} onKeyDown={(event) => activateOnKeyboard(event, () => setActiveModal('fila'))} style={{ borderTop: '3px solid #fff' }}>
@@ -336,9 +435,9 @@ function CommandCenter() {
       <section className="attention-panel card" aria-labelledby="attention-title">
         <div className="attention-panel-header">
           <div>
-            <div className="attention-kicker"><ListChecks size={15} /> DAILY OPERATIONS</div>
-            <h2 id="attention-title">O QUE EXIGE ATENÇÃO HOJE?</h2>
-            <p>Fila priorizada de conteúdos, demandas e setups que precisam de decisão.</p>
+            <div className="attention-kicker"><ListChecks size={15} /> OPERATIONAL EVIDENCE</div>
+            <h2 id="attention-title">SINAIS OPERACIONAIS DE APOIO</h2>
+            <p>Evidências do Monday e do Vybe Painel para contextualizar riscos e decisões executivas.</p>
           </div>
           <span className="attention-total">{attentionSummary.total} itens</span>
         </div>
@@ -350,7 +449,7 @@ function CommandCenter() {
           <div className="attention-summary-card"><strong>{attentionSummary.setup}</strong><span>SETUPS</span></div>
         </div>
 
-        <div className="attention-filters" aria-label="Filtros da fila operacional">
+        <div className="attention-filters" aria-label="Filtros de evidência operacional">
           <label className="attention-search">
             <Search size={15} aria-hidden="true" />
             <input
@@ -780,6 +879,8 @@ function CommandCenter() {
           </div>
         </div>
       </div>
+        </div>
+      </details>
 
       {/* MODAL OVERLAY */}
       {activeModal && (

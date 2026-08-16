@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { auditProfile } from './scraper-module.js';
 import mondayIntegration from './integrations/monday.js';
 import { getFutureMeetings } from './integrations/calendar.js';
+import { buildExecutiveSnapshot } from './domain/executive.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -471,6 +472,12 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       mondayIntegration.getDelayedDemands()
     ]);
     const attention = buildAttentionQueue({ bottlenecks, posts, demands });
+    const executiveSnapshot = buildExecutiveSnapshot({
+      bottlenecks,
+      posts,
+      demands,
+      generatedAt: new Date().toISOString()
+    });
 
     res.json({
       success: true,
@@ -480,7 +487,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         demands,
         attentionQueue: attention.items,
         attentionSummary: attention.summary,
-        filters: attention.filters
+        filters: attention.filters,
+        executiveSnapshot
       },
       meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live' }
     });
