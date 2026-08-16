@@ -189,7 +189,7 @@ function ClientPostsRow({ row, sortMode }) {
   );
 }
 
-function ExecutiveCockpit({ snapshot }) {
+function ExecutiveCockpit({ snapshot, onOpenModal }) {
   const [lens, setLens] = useState('cmo');
   const safeSnapshot = snapshot || {};
   const summary = safeSnapshot.summary || {};
@@ -233,12 +233,12 @@ function ExecutiveCockpit({ snapshot }) {
           <strong>{stability.score ?? '—'}%</strong>
           <small>{stability.label || 'Aguardando dados'}</small>
         </div>
-        <div className="executive-summary-card">
+        <div className="executive-summary-card" style={{ cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => onOpenModal?.('riscos')} onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.borderColor = 'var(--cy-neon-cyan)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}>
           <span>RISCOS EXECUTIVOS</span>
           <strong>{summary.executiveRisks ?? 0}</strong>
           <small>agrupados por causa e cliente</small>
         </div>
-        <div className="executive-summary-card">
+        <div className="executive-summary-card" style={{ cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => onOpenModal?.('decisoes')} onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.borderColor = 'var(--cy-neon-purple)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}>
           <span>DECISÕES NECESSÁRIAS</span>
           <strong>{summary.decisionsNeeded ?? 0}</strong>
           <small>sem alterar status de produção</small>
@@ -679,6 +679,12 @@ function CommandCenter() {
         if (b.isSetup) return 1;
         return new Date(a.prazo || '2099-12-31') - new Date(b.prazo || '2099-12-31');
       });
+    } else if (activeModal === 'riscos') {
+      title = 'Riscos Executivos Detalhados';
+      items = (metrics.executiveSnapshot?.executiveRisks || []).map(r => ({ ...r, isExecutiveRisk: true }));
+    } else if (activeModal === 'decisoes') {
+      title = 'Decisões Necessárias Detalhadas';
+      items = (metrics.executiveSnapshot?.decisionsNeeded || []).map(d => ({ ...d, isExecutiveDecision: true }));
     }
 
     return { title, items };
@@ -749,7 +755,7 @@ function CommandCenter() {
         </div>
       </header>
 
-      <ExecutiveCockpit snapshot={metrics.executiveSnapshot} />
+      <ExecutiveCockpit snapshot={metrics.executiveSnapshot} onOpenModal={setActiveModal} />
       <DecisionRegistry />
       <ExecutiveHistory />
       <ImpactRegistry />
@@ -1252,27 +1258,52 @@ function CommandCenter() {
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {getModalContent().items.length > 0 ? getModalContent().items.map((item, idx) => (
                   <li key={idx} style={{ padding: '1rem', borderBottom: '1px solid #222', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ color: 'var(--cy-neon-cyan)', fontWeight: 'bold' }}>{item.clientName}</div>
-                    <div style={{ color: '#fff', fontSize: '0.9rem' }}>{item.name}</div>
-                    {item.isDemand ? (
-                      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)', alignItems: 'center' }}>
-                        <span>Status: <span style={{color:'var(--cy-neon-yellow)'}}>{item.status}</span></span>
-                        <span>Prazo: {formatDate(item.prazo)}</span>
-                        <a href={`https://gestaovybes-team.monday.com/boards/8385559107/pulses/${item.id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12}/> Abrir Demanda</a>
-                      </div>
-                    ) : item.isSetup ? (
-                      <div style={{ color: 'var(--cy-neon-magenta)', fontSize: '0.8rem' }}>Ação necessária no Monday</div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span style={{ color: item.isDelayedPrazo ? 'var(--cy-neon-yellow)' : 'inherit' }}>Prazo: {formatDate(item.prazo)}</span>
-                        <span style={{ color: item.isDelayedVeiculacao ? 'var(--cy-neon-magenta)' : 'inherit' }}>Veic.: {formatDate(item.veiculacao)}</span>
-                        {(item.responsavel || item.editorDesigner) && (
-                           <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--cy-neon-cyan)', border: '1px solid rgba(0,243,255,0.2)' }}>
-                             👤 {item.responsavel || item.editorDesigner}
-                           </span>
+                    {item.isExecutiveRisk ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--cy-neon-cyan)', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.client || 'Geral'}</span>
+                          <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', color: item.severity === 'critical' ? 'var(--cy-neon-magenta)' : 'var(--cy-neon-yellow)', border: '1px solid currentColor', letterSpacing: '1px' }}>{item.severityLabel}</span>
+                        </div>
+                        <div style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 'bold', marginTop: '0.2rem' }}>{item.title}</div>
+                        <div style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}><strong style={{color: '#fff'}}>Por que importa:</strong> {item.whyItMatters}</div>
+                        <div style={{ color: 'var(--cy-neon-green)', fontSize: '0.85rem', lineHeight: '1.4', background: 'rgba(0,255,0,0.05)', padding: '8px', borderRadius: '4px', borderLeft: '2px solid var(--cy-neon-green)' }}><strong>Decisão Recomendada:</strong> {item.recommendedDecision}</div>
+                        {item.evidence?.[0]?.url && (
+                          <a href={item.evidence[0].url} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', width: 'fit-content' }}><ExternalLink size={12}/> Abrir Evidência</a>
                         )}
-                        <a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12}/> Abrir Post</a>
-                      </div>
+                      </>
+                    ) : item.isExecutiveDecision ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--cy-neon-purple)', fontWeight: 'bold', letterSpacing: '1px' }}>AGENDA DE LIDERANÇA: {item.ownerRole}</span>
+                        </div>
+                        <div style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 'bold', marginTop: '0.2rem' }}>{item.title}</div>
+                        <div style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}><strong style={{color: '#fff'}}>Contexto:</strong> {item.context}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ color: 'var(--cy-neon-cyan)', fontWeight: 'bold' }}>{item.clientName}</div>
+                        <div style={{ color: '#fff', fontSize: '0.9rem' }}>{item.name}</div>
+                        {item.isDemand ? (
+                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)', alignItems: 'center' }}>
+                            <span>Status: <span style={{color:'var(--cy-neon-yellow)'}}>{item.status}</span></span>
+                            <span>Prazo: {formatDate(item.prazo)}</span>
+                            <a href={`https://gestaovybes-team.monday.com/boards/8385559107/pulses/${item.id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12}/> Abrir Demanda</a>
+                          </div>
+                        ) : item.isSetup ? (
+                          <div style={{ color: 'var(--cy-neon-magenta)', fontSize: '0.8rem' }}>Ação necessária no Monday</div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--cy-text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ color: item.isDelayedPrazo ? 'var(--cy-neon-yellow)' : 'inherit' }}>Prazo: {formatDate(item.prazo)}</span>
+                            <span style={{ color: item.isDelayedVeiculacao ? 'var(--cy-neon-magenta)' : 'inherit' }}>Veic.: {formatDate(item.veiculacao)}</span>
+                            {(item.responsavel || item.editorDesigner) && (
+                               <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--cy-neon-cyan)', border: '1px solid rgba(0,243,255,0.2)' }}>
+                                 👤 {item.responsavel || item.editorDesigner}
+                               </span>
+                            )}
+                            <a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12}/> Abrir Post</a>
+                          </div>
+                        )}
+                      </>
                     )}
                   </li>
                 )) : <div style={{color: 'var(--cy-text-secondary)', textAlign: 'center', padding: '2rem'}}>Nenhum item encontrado.</div>}
