@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { timingSafeEqual } from 'crypto';
 import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -13,8 +14,39 @@ import dotenv from 'dotenv';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = (process.env.NEXUS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+const adminTokenMatches = req => {
+  const expected = process.env.NEXUS_ADMIN_TOKEN || '';
+  const received = req.get('x-nexus-admin-token') || req.get('authorization')?.replace(/^Bearer\\s+/i, '') || '';
+  if (!expected || !received) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(received);
+  return expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer);
+};
+
+function requireAdminAccess(req, res, next) {
+  if (!isProduction && !process.env.NEXUS_ADMIN_TOKEN) return next();
+  if (!process.env.NEXUS_ADMIN_TOKEN) {
+    return res.status(503).json({ error: 'NEXUS_ADMIN_TOKEN não configurado para esta operação.' });
+  }
+  if (!adminTokenMatches(req)) {
+    return res.status(401).json({ error: 'Autorização administrativa necessária.' });
+  }
+  return next();
+}
+
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!isProduction || !origin) return callback(null, true);
+    return callback(null, allowedOrigins.includes(origin));
+  }
+}));
 app.use(express.json());
 
 const PORT = 3001;
@@ -143,7 +175,7 @@ Sempre retorne as chaves EXATAMENTE como pedidas.`;
   }
 }
 
-app.post('/api/audit/:id', async (req, res) => {
+app.post('/api/audit/:id', requireAdminAccess, async (req, res) => {
   const clientId = req.params.id;
   const handle = CLIENT_HANDLES[clientId];
 
@@ -227,7 +259,7 @@ app.post('/api/audit/:id', async (req, res) => {
 });
 
 // NOVO ENDPOINT: Gera apenas o prompt para o usuário colar no ChatGPT
-app.get('/api/prompt/:id', async (req, res) => {
+app.get('/api/prompt/:id', requireAdminAccess, async (req, res) => {
   const clientId = req.params.id;
   const handle = CLIENT_HANDLES[clientId];
 
@@ -274,7 +306,7 @@ Sempre retorne as chaves EXATAMENTE como pedidas.`;
 });
 
 // NOVO ENDPOINT: Salva o JSON colado pelo usuário
-app.post('/api/save/:id', express.json(), (req, res) => {
+app.post('/api/save/:id', requireAdminAccess, express.json(), (req, res) => {
   const clientId = req.params.id;
 
   try {
