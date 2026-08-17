@@ -12,6 +12,7 @@ import {
   transitionExecutiveAlert
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
+import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 
@@ -130,6 +131,46 @@ test('Aprendizado declara associação e lacunas de evidência', () => {
   assert.equal(result.counts.improved, 1);
   assert.equal(result.learnings.find(item => item.id === 'evidence-gaps').summary, '1 decisão(ões) ainda sem avaliação de impacto.');
   assert.match(result.note, /não conclusões causais/i);
+});
+
+test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: { missingPlanning: ['Cliente C'], missingDashboard: [] },
+    posts: {
+      ranking: [
+        { name: 'Cliente A', open: 10, delayedPrazo: 2, delayedVeiculacao: 0, details: [{ id: '1', isDelayedPrazo: true }] },
+        { name: 'Cliente B', open: 5, delayedPrazo: 0, delayedVeiculacao: 1, details: [{ id: '2', isDelayedVeiculacao: true }] }
+      ],
+      quantitative: {
+        totalItems: 20,
+        itemsWithClient: 20,
+        clientCoveragePct: 100,
+        activeItems: 15,
+        completedItems: 5,
+        activePct: 75,
+        itemsWithInternalDeadline: 18,
+        internalDeadlineCoveragePct: 90,
+        itemsWithPublicationDate: 20,
+        publicationDateCoveragePct: 100,
+        overdueInternal: 2,
+        overdueInternalPctOfActive: 13.3,
+        overduePublication: 1,
+        overduePublicationPctOfActive: 6.7,
+        priorityCoveragePct: 40,
+        statusCounts: { 'Finalizado': 5, 'Em andamento': 10, 'A Fazer': 5 }
+      }
+    },
+    demands: [],
+    generatedAt: '2026-08-17T00:00:00.000Z'
+  });
+
+  assert.equal(snapshot.quantitative.totalItems, 20);
+  assert.equal(snapshot.quantitative.activePct, 75);
+  assert.equal(snapshot.quantitative.internalDeadlineCoveragePct, 90);
+  assert.equal(snapshot.quantitative.overdueInternalPctOfActive, 13.3);
+  assert.equal(snapshot.clientRanking[0].client, 'Cliente A');
+  assert.equal(snapshot.clientRanking[0].riskPct, 20);
+  assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
 });
 
 test('Release usa SHA oficial da Vercel e gera URL verificável no GitHub', () => {

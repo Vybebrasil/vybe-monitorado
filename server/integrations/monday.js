@@ -6,6 +6,27 @@ import { clients as activeClients } from '../../src/data/clients.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const STATUS_COLORS = {
+  'Em andamento': '#fdab3d',
+  'Falta D.A': '#4eccc6',
+  'Alteração': '#df2f4a',
+  'Finalizado': '#9cd326',
+  'Aguardo': '#9d50dd',
+  'A Fazer': '#c4c4c4',
+  'Para agendar': '#037f4c',
+  'Para aprovação': '#579bfc',
+  'Cap. Agendada': '#ff007f',
+  'Pode Fazer': '#ffcb00',
+  'Ag. Aprovação Cliente': '#faa1f1',
+  'Ag. Info Cliente': '#bca58a',
+  'Falta Info': '#ff6d3b',
+  'Agendando Cap': '#ff5ac4',
+  'Falta OFF': '#784bd1',
+  'Segurar Post': '#7f5347',
+  'Aguardo Redação': '#e484bd',
+  'Agendado': '#a1e3f6'
+};
+
 const ALIAS_MAP = {
   'Antonov Center': 'Antonov',
   'Copirecê Puro Milho': 'Copirecê',
@@ -27,6 +48,31 @@ function normalizeClientName(name) {
   if (!name) return 'Sem Cliente';
   const trimmed = name.trim();
   return ALIAS_MAP[trimmed] || trimmed;
+}
+
+function percent(value, total) {
+  return total ? Number(((value / total) * 100).toFixed(1)) : null;
+}
+
+function parseDateValue(value) {
+  if (!value) return '';
+  try {
+    return JSON.parse(value)?.date || '';
+  } catch {
+    return '';
+  }
+}
+
+function isBeforeToday(dateString, today) {
+  return Boolean(dateString) && new Date(`${dateString}T23:59:59Z`) < today;
+}
+
+function isWithinNextDays(dateString, today, days = 7) {
+  if (!dateString) return false;
+  const date = new Date(`${dateString}T00:00:00Z`);
+  const end = new Date(today);
+  end.setUTCDate(end.getUTCDate() + days);
+  return date >= today && date <= end;
 }
 
 class MondayIntegration {
@@ -102,6 +148,9 @@ class MondayIntegration {
 
     const missingPlanning = [];
     const missingDashboard = [];
+    let eligibleClients = 0;
+    let clientsWithPlanning = 0;
+    let clientsWithDashboard = 0;
 
     items.forEach(item => {
       let status = '';
@@ -116,20 +165,37 @@ class MondayIntegration {
 
       // Se o cliente não estiver "Inativo" ou "Pausado" (ajuste conforme o status real de vocês)
       if (status && !status.toLowerCase().includes('inativo')) {
+        eligibleClients += 1;
         // Planejamento: se estiver vazio ou se tiver o texto padrão de "Fazer planejamento"
-        if (!planejamento || planejamento.toLowerCase().includes('fazer planejamento')) {
+        const planningMissing = !planejamento || planejamento.toLowerCase().includes('fazer planejamento');
+        if (planningMissing) {
           missingPlanning.push(item.name);
+        } else {
+          clientsWithPlanning += 1;
         }
 
-        // Dashboard status: "Atrasado", "Pendente", "Dasatualizado", "Desatualizado", ou vazio
+        // Dashboard status: "Atrasado", "Pendente", "Desatualizado", ou vazio
         const dbLower = dashboard.toLowerCase();
-        if (dbLower.includes('atrasado') || dbLower.includes('pendente') || dbLower.includes('desatualizado') || dbLower.includes('dasatualizado') || dbLower === '') {
-           missingDashboard.push(item.name);
+        const dashboardMissing = dbLower.includes('atrasado') || dbLower.includes('pendente') || dbLower.includes('desatualizado') || dbLower.includes('dasatualizado') || dbLower === '';
+        if (dashboardMissing) {
+          missingDashboard.push(item.name);
+        } else {
+          clientsWithDashboard += 1;
         }
       }
     });
 
-    return { missingPlanning, missingDashboard };
+    return {
+      missingPlanning,
+      missingDashboard,
+      quantitative: {
+        eligibleClients,
+        clientsWithPlanning,
+        planningCoveragePct: percent(clientsWithPlanning, eligibleClients),
+        clientsWithDashboard,
+        dashboardCoveragePct: percent(clientsWithDashboard, eligibleClients)
+      }
+    };
   }
 
   // 2. Posts Atrasados / Acumulados
@@ -159,6 +225,23 @@ class MondayIntegration {
 
     const postsByClient = {};
     let totalDelayed = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const statusCounts = {};
+    const clientCounts = {};
+    const groupCounts = {};
+    const priorityCounts = {};
+    const formatCounts = {};
+    let totalItems = 0;
+    let completedItems = 0;
+    let itemsWithClient = 0;
+    let itemsWithInternalDeadline = 0;
+    let itemsWithPublicationDate = 0;
+    let overdueInternal = 0;
+    let overduePublication = 0;
+    let dueWithin7Internal = 0;
+    let dueWithin7Publication = 0;
+    let classifiedPriority = 0;
 
     items.forEach(item => {
       let cliente = 'Sem Cliente';
@@ -191,8 +274,30 @@ class MondayIntegration {
         }
       });
 
+      const normalizedStatus = status.trim() || 'Sem status';
+      const normalizedClient = normalizeClientName(cliente);
+      const groupName = item.group ? item.group.title : 'Sem Quadro';
+      const priority = item.column_values.find(column => column.id === 'color_mm164yv8')?.text || '';
+      const format = item.column_values.find(column => column.id === 'lista_suspensa0__1')?.text || '';
+
+      if (status !== '') {
+        totalItems += 1;
+        statusCounts[normalizedStatus] = (statusCounts[normalizedStatus] || 0) + 1;
+        clientCounts[normalizedClient] = (clientCounts[normalizedClient] || 0) + 1;
+        if (normalizedClient !== 'Sem Cliente') itemsWithClient += 1;
+        groupCounts[groupName] = (groupCounts[groupName] || 0) + 1;
+        if (priority) {
+          classifiedPriority += 1;
+          priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+        }
+        if (format) formatCounts[format] = (formatCounts[format] || 0) + 1;
+        if (prazoStr) itemsWithInternalDeadline += 1;
+        if (veiculacaoStr) itemsWithPublicationDate += 1;
+      }
+
       // Ignora finalizados/cancelados
-      const isDone = status.toLowerCase().includes('finalizado') || status.toLowerCase().includes('publicado') || status.toLowerCase().includes('cancelado');
+      const isDone = status.toLowerCase().includes('finalizado') || status.toLowerCase().includes('publicado') || status.toLowerCase().includes('cancelado') || status.toLowerCase() === 'para agendar' || status.toLowerCase() === 'agendado';
+      if (isDone) completedItems += 1;
 
       if (!isDone && status !== '') {
         if (!postsByClient[cliente]) {
@@ -205,6 +310,20 @@ class MondayIntegration {
 
         const hoje = new Date();
         hoje.setHours(0,0,0,0);
+
+        // Status concluído/pronto não entra como atraso. O prazo ainda alimenta a cobertura do painel.
+        if (prazoStr && isBeforeToday(prazoStr, today)) {
+          overdueInternal += 1;
+        }
+        if (veiculacaoStr && isBeforeToday(veiculacaoStr, today)) {
+          overduePublication += 1;
+        }
+        if (prazoStr && isWithinNextDays(prazoStr, today)) {
+          dueWithin7Internal += 1;
+        }
+        if (veiculacaoStr && isWithinNextDays(veiculacaoStr, today)) {
+          dueWithin7Publication += 1;
+        }
 
         // REGRA: status "Agendado" ou "Para Agendar" = conteúdo pronto, NÃO é atraso
         const statusLower = status.toLowerCase();
@@ -294,7 +413,37 @@ class MondayIntegration {
     const responsavelRanking = Object.values(responsavelMap)
       .sort((a, b) => (b.delayedPrazo + b.delayedVeiculacao) - (a.delayedPrazo + a.delayedVeiculacao));
 
-    return { ranking, totalDelayed, responsavelRanking };
+    return {
+      ranking,
+      totalDelayed,
+      responsavelRanking,
+      quantitative: {
+        totalItems,
+        itemsWithClient,
+        clientCoveragePct: percent(itemsWithClient, totalItems),
+        activeItems: Math.max(totalItems - completedItems, 0),
+        completedItems,
+        activePct: percent(Math.max(totalItems - completedItems, 0), totalItems),
+        itemsWithInternalDeadline,
+        internalDeadlineCoveragePct: percent(itemsWithInternalDeadline, totalItems),
+        itemsWithPublicationDate,
+        publicationDateCoveragePct: percent(itemsWithPublicationDate, totalItems),
+        overdueInternal,
+        overdueInternalPctOfActive: percent(overdueInternal, Math.max(totalItems - completedItems, 0)),
+        overduePublication,
+        overduePublicationPctOfActive: percent(overduePublication, Math.max(totalItems - completedItems, 0)),
+        dueWithin7Internal,
+        dueWithin7Publication,
+        classifiedPriority,
+        priorityCoveragePct: percent(classifiedPriority, totalItems),
+        statusCounts,
+        statusColors: STATUS_COLORS,
+        clientCounts,
+        groupCounts,
+        priorityCounts,
+        formatCounts
+      }
+    };
   }
 
   // 3. Demandas Travadas / Atrasadas

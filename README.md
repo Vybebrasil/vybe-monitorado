@@ -8,6 +8,24 @@ O **VYBE NEXUS** é a camada de comando e decisão da Vybe. Ele transforma dados
 
 O Cockpit executivo funciona com leitura pública por link e é a única superfície principal do Nexus; não há painéis separados para CMO e COO. As telas operacionais de Auditoria/Dossiê foram retiradas da navegação pública para evitar duplicação com o Vybe Painel. Decisões, impactos, snapshots e Health Score usam arquivos JSON em desenvolvimento e um adaptador HTTP para Upstash Redis REST em produção, desde que as credenciais estejam configuradas. Sem o datastore de produção, as rotas persistentes retornam indisponibilidade controlada e o `/api/healthz` informa `ready: false`.
 
+## Métricas do cockpit executivo
+
+O cockpit lê o board `🟢Produção de Conteúdo` do Monday e transforma a operação em sinais agregados, sem reproduzir a fila do Vybe Painel. Os cartões quantitativos mostram o denominador e o recorte usados no cálculo.
+
+| Métrica | Definição | Fonte |
+|---|---|---|
+| Itens ativos | Itens com status não concluído no recorte lido | Status do Monday |
+| Atrasos internos | Itens ativos com o campo `Prazo` anterior ao dia atual | `data` + status |
+| Veiculação com data | Percentual de itens com `Veiculação` preenchida | `data__1` |
+| Prazo interno preenchido | Percentual de itens com `Prazo` preenchido | `data` |
+| Planejamento da carteira | Percentual de clientes elegíveis com planejamento identificado | Board Gestão de Clientes |
+| Dashboard atualizado | Percentual de clientes elegíveis sem dashboard vazio, pendente ou desatualizado | Board Gestão de Clientes |
+| Exposição por cliente | Atrasos, itens abertos e percentual de risco por cliente | Cliente + status + datas |
+
+Os percentuais de atraso usam itens ativos como denominador. Os percentuais de cobertura medem preenchimento e qualidade do dado; não são indicadores financeiros, de margem, satisfação ou performance de campanha. O Nexus também mostra a composição por status e a prioridade classificada para revelar quando o próprio dado operacional está incompleto.
+
+Enquanto o datastore não estiver configurado, os módulos de memória, histórico, cenários e aprendizado não são exibidos no cockpit público. Eles só devem voltar quando houver registros persistentes reais, para não apresentar áreas vazias como se fossem inteligência executiva disponível.
+
 | Camada | Tecnologia |
 |---|---|
 | Frontend | React 18, Vite e Lucide, com núcleo executivo único |

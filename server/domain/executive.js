@@ -1,6 +1,7 @@
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const sum = (rows, field) => (rows || []).reduce((total, row) => total + (Number(row?.[field]) || 0), 0);
+const percent = (value, total) => total ? Number(((value / total) * 100).toFixed(1)) : null;
 
 const severityLabel = severity => ({
   critical: 'CRÍTICO',
@@ -45,13 +46,29 @@ function buildClientRisks(ranking) {
 export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], generatedAt = new Date().toISOString() }) {
   const ranking = posts.ranking || [];
   const responsavelRanking = posts.responsavelRanking || [];
+  const quantitative = posts.quantitative || {};
   const delayedTeam = sum(ranking, 'delayedPrazo');
   const delayedClient = sum(ranking, 'delayedVeiculacao');
   const missingPlanning = bottlenecks.missingPlanning || [];
   const missingDashboard = bottlenecks.missingDashboard || [];
+  const readiness = bottlenecks.quantitative || {};
   const delayedDemands = demands.length;
   const clientRisks = buildClientRisks(ranking);
   const totalOpen = sum(ranking, 'open');
+  const clientRanking = ranking
+    .map(row => {
+      const delayedItems = (Number(row.delayedPrazo) || 0) + (Number(row.delayedVeiculacao) || 0);
+      return {
+        client: row.name,
+        openItems: Number(row.open) || 0,
+        delayedItems,
+        riskPct: percent(delayedItems, Number(row.open) || 0),
+        shareOfOpenPct: percent(Number(row.open) || 0, totalOpen),
+        internalDelays: Number(row.delayedPrazo) || 0,
+        publicationDelays: Number(row.delayedVeiculacao) || 0
+      };
+    })
+    .sort((a, b) => b.delayedItems - a.delayedItems || b.openItems - a.openItems);
   const stabilityScore = clamp(100 - delayedTeam * 2 - delayedClient * 5 - missingPlanning.length - delayedDemands * 2, 0, 100);
   const stabilityStatus = stabilityScore >= 75 ? 'stable' : stabilityScore >= 50 ? 'attention' : 'risk';
 
@@ -162,6 +179,44 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       executiveRisks: executiveRisks.length,
       decisionsNeeded: decisionsNeeded.length
     },
+    portfolioReadiness: {
+      eligibleClients: Number(readiness.eligibleClients) || 0,
+      planningCoveragePct: readiness.planningCoveragePct ?? null,
+      dashboardCoveragePct: readiness.dashboardCoveragePct ?? null,
+      missingPlanning: missingPlanning.length,
+      missingDashboard: missingDashboard.length
+    },
+    quantitative: {
+      totalItems: Number(quantitative.totalItems) || totalOpen,
+      itemsWithClient: Number(quantitative.itemsWithClient) || 0,
+      clientCoveragePct: quantitative.clientCoveragePct ?? null,
+      activeItems: Number(quantitative.activeItems) || totalOpen,
+      completedItems: Number(quantitative.completedItems) || 0,
+      activePct: quantitative.activePct ?? percent(totalOpen, Number(quantitative.totalItems) || totalOpen),
+      itemsWithInternalDeadline: Number(quantitative.itemsWithInternalDeadline) || 0,
+      internalDeadlineCoveragePct: quantitative.internalDeadlineCoveragePct ?? null,
+      itemsWithPublicationDate: Number(quantitative.itemsWithPublicationDate) || 0,
+      publicationDateCoveragePct: quantitative.publicationDateCoveragePct ?? null,
+      overdueInternal: Number(quantitative.overdueInternal) || delayedTeam,
+      overdueInternalPctOfActive: quantitative.overdueInternalPctOfActive ?? percent(delayedTeam, Number(quantitative.activeItems) || totalOpen),
+      overduePublication: Number(quantitative.overduePublication) || delayedClient,
+      overduePublicationPctOfActive: quantitative.overduePublicationPctOfActive ?? percent(delayedClient, Number(quantitative.activeItems) || totalOpen),
+      dueWithin7Internal: Number(quantitative.dueWithin7Internal) || 0,
+      dueWithin7Publication: Number(quantitative.dueWithin7Publication) || 0,
+      priorityCoveragePct: quantitative.priorityCoveragePct ?? null,
+      statusCounts: quantitative.statusCounts || {},
+      groupCounts: quantitative.groupCounts || {},
+      priorityCounts: quantitative.priorityCounts || {},
+      formatCounts: quantitative.formatCounts || {},
+      dataQuality: {
+        itemsSampled: Number(quantitative.totalItems) || totalOpen,
+        clientCoveragePct: quantitative.clientCoveragePct ?? null,
+        internalDeadlineCoveragePct: quantitative.internalDeadlineCoveragePct ?? null,
+        publicationDateCoveragePct: quantitative.publicationDateCoveragePct ?? null,
+        priorityCoveragePct: quantitative.priorityCoveragePct ?? null
+      }
+    },
+    clientRanking,
     executiveRisks,
     decisionsNeeded,
     capacitySignals,
@@ -169,6 +224,11 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       title: 'PAINEL EXECUTIVO',
       question: 'Qual decisão executiva precisa ser tomada agora?',
       focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
+    },
+    methodology: {
+      source: 'Monday.com · Produção de Conteúdo',
+      note: 'Percentuais de atraso usam itens ativos com prazo vencido. Cobertura mede preenchimento do campo no recorte lido; não equivale a desempenho financeiro ou satisfação do cliente.',
+      asOf: generatedAt
     }
   };
 }
