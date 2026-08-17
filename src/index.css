@@ -1,26 +1,25 @@
 :root {
   --cy-bg: #050505;
-  --cy-surface: #111111;
-  --cy-surface-light: #1a1a1a;
-  
-  --cy-text-primary: #f8fafc;
-  --cy-text-secondary: #94a3b8;
-  
-  --cy-border: #333333;
-  --cy-border-hover: #00f3ff;
-  
+  --cy-surface: #0a0a0a;
+  --cy-border: rgba(0, 243, 255, 0.1);
   --cy-neon-cyan: #00f3ff;
-  --cy-neon-magenta: #ff0055;
-  --cy-neon-yellow: #eab308;
+  --cy-neon-magenta: #ff003c;
+  --cy-neon-yellow: #fcee0a;
+  --cy-neon-purple: #9d00ff;
   --cy-neon-green: #00ff66;
-
-  --font-mono: 'Space Mono', 'Fira Code', Consolas, monospace;
+  --cy-neon-orange: #ff6600;
+  --cy-text-primary: #ffffff;
+  --cy-text-secondary: #8892b0;
+  --cy-glow-cyan: rgba(0, 243, 255, 0.15);
+  --cy-glow-magenta: rgba(255, 0, 60, 0.15);
+  --font-mono: 'Space Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--cy-bg);
   color: var(--cy-text-primary);
   line-height: 1.6;
@@ -373,6 +372,218 @@ h3 { font-size: 1.25rem; font-weight: 700; font-family: var(--font-mono); text-t
 .sync-progress { position: relative; width: min(420px, 90vw); height: 5px; margin-top: 1.8rem; overflow: hidden; background: rgba(255,255,255,0.08); border-radius: 4px; }
 .sync-progress span { position: absolute; inset: 0 auto 0 0; width: 35%; background: var(--cy-neon-purple); box-shadow: 0 0 12px var(--cy-neon-purple); animation: syncMove 1.35s ease-in-out infinite; }
 @keyframes syncMove { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* THEMES */
+.theme-jarvis {
+  --cy-neon-cyan: #ff6600;
+  --cy-neon-purple: #cc5200;
+  --cy-glow-cyan: rgba(255, 102, 0, 0.15);
+  --cy-border: rgba(255, 102, 0, 0.1);
+}
+
+/* SPLASH SCREEN */
+.splash-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--cy-bg);
+  padding: 2rem;
+  text-align: center;
+  gap: 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.splash-screen::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: 
+    linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.1) 50%),
+    radial-gradient(circle at center, transparent 0%, var(--cy-bg) 100%);
+  background-size: 100% 4px, 100% 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.splash-title {
+  z-index: 1;
+}
+
+.splash-title h1 {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  color: #fff;
+  letter-spacing: 4px;
+  margin: 0;
+  text-shadow: 0 0 20px rgba(255,255,255,0.2);
+}
+
+.splash-title p {
+  color: var(--cy-text-secondary);
+  font-size: 1rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 1rem;
+}
+
+.splash-cards-container {
+  display: flex;
+  gap: 2rem;
+  z-index: 1;
+  max-width: 1000px;
+  width: 100%;
+}
+
+.mode-card {
+  flex: 1;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-card:hover {
+  transform: translateY(-5px);
+}
+
+.mode-card.jarvis {
+  border-color: rgba(255, 102, 0, 0.3);
+}
+
+.mode-card.jarvis:hover {
+  box-shadow: 0 0 40px rgba(255, 102, 0, 0.15);
+  border-color: #ff6600;
+}
+
+.mode-card.analyst {
+  border-color: rgba(0, 243, 255, 0.3);
+}
+
+.mode-card.analyst:hover {
+  box-shadow: 0 0 40px rgba(0, 243, 255, 0.15);
+  border-color: #00f3ff;
+}
+
+.mode-icon {
+  font-size: 3rem;
+  margin-bottom: 1.5rem;
+}
+
+.mode-card.jarvis .mode-icon { color: #ff6600; }
+.mode-card.analyst .mode-icon { color: #00f3ff; }
+
+.mode-card h2 {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  margin: 0 0 1rem 0;
+  color: #fff;
+  letter-spacing: 2px;
+}
+
+.mode-card p {
+  color: var(--cy-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* JARVIS MODE UI */
+.jarvis-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+}
+
+.jarvis-greeting {
+  font-family: var(--font-mono);
+  font-size: 3.5rem;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 1rem;
+}
+
+.jarvis-status {
+  font-size: 1.2rem;
+  color: var(--cy-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 3rem;
+}
+
+.jarvis-status strong {
+  color: var(--cy-neon-cyan); /* Will be orange in jarvis theme */
+}
+
+.jarvis-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.jarvis-action-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--cy-border);
+  border-left: 4px solid var(--cy-neon-cyan);
+  padding: 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jarvis-action-card:hover {
+  background: rgba(255,255,255,0.04);
+  transform: translateX(10px);
+}
+
+.jarvis-action-card.critical {
+  border-left-color: var(--cy-neon-magenta);
+}
+
+.jarvis-action-info h3 {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  margin: 0 0 0.5rem 0;
+  color: #fff;
+}
+
+.jarvis-action-info p {
+  margin: 0;
+  color: var(--cy-text-secondary);
+  font-size: 0.95rem;
+}
+
+.jarvis-action-btn {
+  background: transparent;
+  color: var(--cy-neon-cyan);
+  border: 1px solid var(--cy-neon-cyan);
+  padding: 0.8rem 1.5rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: bold;
+}
+
+.jarvis-action-card:hover .jarvis-action-btn {
+  background: var(--cy-glow-cyan);
+}
+
 .error-state { max-width: 720px; margin: 5rem auto; padding: 2rem; display: flex; align-items: center; gap: 1rem; background: var(--cy-surface); border: 1px solid var(--cy-neon-magenta); box-shadow: 0 0 24px rgba(255,0,85,0.12); }
 .error-state h2 { color: #fff; font-family: var(--font-mono); font-size: 1rem; }
 .error-state p { margin-top: 0.35rem; color: var(--cy-text-secondary); }
