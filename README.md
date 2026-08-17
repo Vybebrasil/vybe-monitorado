@@ -175,3 +175,9 @@ O frontend ainda possui um arquivo principal, mas a poda reduziu o App.jsx para 
 ## Referências
 
 A integração usa o padrão oficial de autenticação Bearer e comandos JSON da [API REST do Upstash Redis](https://upstash.com/docs/redis/features/restapi). A configuração de integração com Vercel segue a [documentação oficial do Upstash para Vercel](https://upstash.com/docs/redis/howto/vercelintegration). A identidade do release usa as variáveis oficiais descritas pela [Vercel em System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables).
+
+## Produtividade executiva e evidência clicável
+
+A seção de **Produtividade Executiva** interpreta fluxo e capacidade da carteira, não produtividade individual. Ela apresenta o percentual concluído no recorte, itens prontos para saída, itens com atraso, carga ativa por etapa e concentração de atrasos por responsável. O Monday atual não fornece horas trabalhadas, metas individuais ou capacidade contratada suficiente para medir performance pessoal de forma confiável.
+
+Cartões, status, clientes em risco e sinais associados a clientes possuem explicações por hover e podem ser selecionados. O painel de evidência mostra o item do Monday, cliente, etapa, status, tipo de atraso, dias vencidos, prazo, responsável, criação e link direto para o registro operacional. Itens Finalizado, Publicado e Cancelado permanecem fora da base ativa; Agendado e Para agendar continuam incluídos.

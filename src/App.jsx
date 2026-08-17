@@ -3,10 +3,9 @@ import { Activity, ServerCrash, Target, RefreshCw, AlertTriangle, Clock, Externa
 
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 };
 
 
@@ -108,7 +107,17 @@ function ExecutiveCockpit({ snapshot }) {
   const statusRows = Object.entries(quantitative.statusCounts || {}).sort((a, b) => b[1] - a[1]);
   const displayPct = value => value === null || value === undefined ? '—' : `${value}%`;
   const [showAllClientRisks, setShowAllClientRisks] = useState(false);
+  const [detailPanel, setDetailPanel] = useState(null);
+  const delayDetails = safeSnapshot.delayDetails || [];
+  const productivity = safeSnapshot.productivity || {};
+  const internalDelayDetails = delayDetails.filter(item => item.delayType?.includes('prazo interno'));
+  const stageRows = productivity.byStage || [];
+  const topResponsibles = productivity.topResponsibles || [];
   const visibleClientRows = showAllClientRisks ? clientRows : clientRows.slice(0, 5);
+  const selectedDetails = detailPanel?.type === 'client'
+    ? delayDetails.filter(item => item.client === detailPanel.client)
+    : detailPanel?.type === 'delays' ? internalDelayDetails : [];
+  const closeDetailPanel = () => setDetailPanel(null);
 
   return (
     <section className="executive-cockpit card" aria-labelledby="executive-cockpit-title">
@@ -137,11 +146,11 @@ function ExecutiveCockpit({ snapshot }) {
           <strong>{quantitative.activeItems ?? summary.openItems ?? 0}</strong>
           <small>{quantitative.completedItems ?? 0} concluídos · {displayPct(quantitative.activePct)} do recorte</small>
         </div>
-        <div className="executive-summary-card">
-          <span>ATRASOS INTERNOS</span>
+        <button type="button" className="executive-summary-card executive-interactive-card" title="Clique para abrir os itens com prazo interno vencido" onClick={() => setDetailPanel({ type: 'delays', title: 'Atrasos internos', subtitle: 'Itens ativos com prazo interno vencido' })}>
+          <span>ATRASOS INTERNOS <Info size={11} /></span>
           <strong>{quantitative.overdueInternal ?? summary.delayedTeam ?? 0}</strong>
-          <small>{displayPct(quantitative.overdueInternalPctOfActive)} dos itens ativos com prazo vencido</small>
-        </div>
+          <small>{displayPct(quantitative.overdueInternalPctOfActive)} dos itens ativos com prazo vencido · abrir detalhes</small>
+        </button>
         <div className="executive-summary-card">
           <span>FONTE · {snapshotSourceStatus === 'live' ? 'LIVE' : 'STALE'}</span>
           <strong className="executive-source">{safeSnapshot.source || 'Monday.com'}</strong>
@@ -152,21 +161,40 @@ function ExecutiveCockpit({ snapshot }) {
       <div className="executive-metrics-panel" aria-label="Métricas quantitativas da carteira">
         <div className="executive-metrics-heading"><Activity size={15} /><span>MÉTRICAS DE CARTEIRA</span><small>{quantitative.totalItems || 0} itens no recorte lido</small></div>
         <div className="executive-metrics-grid">
-          <div className="executive-metric-card"><span>VEICULAÇÃO COM DATA</span><strong>{displayPct(quantitative.publicationDateCoveragePct)}</strong><small>{quantitative.itemsWithPublicationDate || 0} itens com data de publicação</small></div>
-          <div className="executive-metric-card"><span>PRAZO INTERNO PREENCHIDO</span><strong>{displayPct(quantitative.internalDeadlineCoveragePct)}</strong><small>{quantitative.itemsWithInternalDeadline || 0} itens com prazo interno</small></div>
-          <div className="executive-metric-card"><span>VENCIMENTO EM 7 DIAS</span><strong>{quantitative.dueWithin7Internal ?? 0}</strong><small>{quantitative.dueWithin7Publication ?? 0} com veiculação prevista</small></div>
-          <div className="executive-metric-card"><span>PRIORIDADE CLASSIFICADA</span><strong>{displayPct(quantitative.priorityCoveragePct)}</strong><small>qualidade do dado executivo</small></div>
-          <div className="executive-metric-card"><span>PLANEJAMENTO DA CARTEIRA</span><strong>{displayPct(readiness.planningCoveragePct)}</strong><small>{readiness.missingPlanning ?? 0} clientes sem planejamento · base de {readiness.eligibleClients ?? 0}</small></div>
-          <div className="executive-metric-card"><span>DASHBOARD ATUALIZADO</span><strong>{displayPct(readiness.dashboardCoveragePct)}</strong><small>{readiness.missingDashboard ?? 0} pendentes · base de {readiness.eligibleClients ?? 0}</small></div>
+          <div className="executive-metric-card" title="Percentual de itens ativos que possuem data de veiculação no recorte do Monday."><span>VEICULAÇÃO COM DATA <Info size={11} /></span><strong>{displayPct(quantitative.publicationDateCoveragePct)}</strong><small>{quantitative.itemsWithPublicationDate || 0} de {quantitative.totalItems || 0} itens</small></div>
+          <div className="executive-metric-card" title="Qualidade do planejamento interno: itens ativos com prazo preenchido."><span>PRAZO INTERNO PREENCHIDO <Info size={11} /></span><strong>{displayPct(quantitative.internalDeadlineCoveragePct)}</strong><small>{quantitative.itemsWithInternalDeadline || 0} de {quantitative.totalItems || 0} itens</small></div>
+          <div className="executive-metric-card" title="Itens com prazo interno ou data de veiculação nos próximos sete dias."><span>VENCIMENTO EM 7 DIAS <Info size={11} /></span><strong>{quantitative.dueWithin7Internal ?? 0}</strong><small>{quantitative.dueWithin7Publication ?? 0} com veiculação prevista</small></div>
+          <div className="executive-metric-card" title="Percentual de itens ativos com prioridade classificada no Monday. Mede qualidade do dado, não produtividade individual."><span>PRIORIDADE CLASSIFICADA <Info size={11} /></span><strong>{displayPct(quantitative.priorityCoveragePct)}</strong><small>qualidade do dado executivo</small></div>
+          <div className="executive-metric-card" title="Clientes ativos com planejamento estratégico identificado no board de Gestão de Clientes."><span>PLANEJAMENTO DA CARTEIRA <Info size={11} /></span><strong>{displayPct(readiness.planningCoveragePct)}</strong><small>{readiness.missingPlanning ?? 0} clientes sem planejamento · base de {readiness.eligibleClients ?? 0}</small></div>
+          <div className="executive-metric-card" title="Clientes ativos com dashboard considerado atualizado na fonte operacional."><span>DASHBOARD ATUALIZADO <Info size={11} /></span><strong>{displayPct(readiness.dashboardCoveragePct)}</strong><small>{readiness.missingDashboard ?? 0} pendentes · base de {readiness.eligibleClients ?? 0}</small></div>
+        </div>
+        <div className="executive-productivity-panel" aria-label="Produtividade executiva">
+          <div className="executive-mini-heading"><Activity size={13} /> PRODUTIVIDADE EXECUTIVA <Info size={12} title="Leitura de fluxo e capacidade da carteira. Não é ranking individual de pessoas." /></div>
+          <div className="executive-productivity-kpis">
+            <div title="Percentual do recorte que já foi concluído no Monday."><strong>{displayPct(productivity.completionPct)}</strong><span>CONCLUÍDO NO RECORTE</span><small>{productivity.completedItems ?? 0} itens finalizados</small></div>
+            <div title="Itens ativos prontos para agendamento ou já agendados."><strong>{productivity.readyToSchedule ?? 0}</strong><span>PRONTOS PARA SAÍDA</span><small>{displayPct(productivity.readyToSchedulePct)} dos ativos</small></div>
+            <div title="Itens ativos com atraso interno ou de veiculação."><strong>{productivity.delayedItems ?? quantitative.overdueInternal ?? 0}</strong><span>COM ATRASO</span><small>{displayPct(productivity.delayedPctOfActive ?? quantitative.overdueInternalPctOfActive)} dos ativos</small></div>
+          </div>
+          <div className="executive-productivity-columns">
+            <div>
+              <div className="executive-productivity-subheading">CARGA ATIVA POR ETAPA <Info size={11} title="Distribuição dos itens ativos por grupo do Monday." /></div>
+              <div className="executive-stage-list">{stageRows.slice(0, 5).map(row => <div className="executive-stage-row" key={row.stage} title={`${row.stage}: ${row.count} itens ativos (${displayPct(row.pctOfActive)})`}><span>{row.stage}</span><b>{row.count}</b><i><em style={{ width: `${Math.min(100, row.pctOfActive || 0)}%` }} /></i><small>{displayPct(row.pctOfActive)}</small></div>)}</div>
+            </div>
+            <div>
+              <div className="executive-productivity-subheading">CONCENTRAÇÃO DE ATRASOS <Info size={11} title="Responsáveis que aparecem nos itens atrasados. Não mede performance individual sem horas ou metas confiáveis." /></div>
+              <div className="executive-responsible-list">{topResponsibles.slice(0, 4).map(row => <div className="executive-responsible-row" key={row.name} title={`${row.name}: ${row.delayedTotal} atraso(s) associado(s)`}><strong>{row.name}</strong><span>{row.delayedTotal} atraso(s)</span></div>)}</div>
+            </div>
+          </div>
+          <small className="executive-productivity-note"><Info size={12} /> Produtividade aqui significa fluxo, prontidão e concentração de carga. O Monday não fornece horas trabalhadas, metas individuais ou capacidade contratada suficiente para medir produtividade pessoal.</small>
         </div>
         <div className="executive-metrics-columns">
           <div>
             <div className="executive-mini-heading"><Clock size={13} /> COMPOSIÇÃO DO RECORTE</div>
-            <div className="executive-status-list">{statusRows.slice(0, 5).map(([label, count]) => <div className="executive-status-row" key={label}><span>{label}</span><b>{count}</b><i><em style={{ width: `${Math.min(100, ((count / (quantitative.totalItems || 1)) * 100))}%`, background: quantitative.statusColors?.[label] || 'var(--cy-neon-cyan)' }} /></i><small>{displayPct(Number(((count / (quantitative.totalItems || 1)) * 100).toFixed(1)))}</small></div>)}</div>
+            <div className="executive-status-list">{statusRows.slice(0, 5).map(([label, count]) => <button type="button" className="executive-status-row executive-interactive-row" key={label} title={`${label}: ${count} itens ativos no recorte`} onClick={() => setDetailPanel({ type: 'status', title: label, subtitle: 'Composição do recorte ativo' })}><span>{label}</span><b>{count}</b><i><em style={{ width: `${Math.min(100, ((count / (quantitative.totalItems || 1)) * 100))}%`, background: quantitative.statusColors?.[label] || 'var(--cy-neon-cyan)' }} /></i><small>{displayPct(Number(((count / (quantitative.totalItems || 1)) * 100).toFixed(1)))}</small></button>)}</div>
           </div>
           <div>
             <div className="executive-mini-heading"><AlertTriangle size={13} /> CLIENTES COM MAIOR EXPOSIÇÃO</div>
-            <div className="executive-client-risk-list">{visibleClientRows.map(row => <div className="executive-client-risk-row" key={row.client}><div><strong>{row.client}</strong><small>{row.openItems} abertos · {row.internalDelays} internos · {row.publicationDelays} veiculação</small></div><b>{row.delayedItems} <small>{displayPct(row.riskPct)}</small></b></div>)}</div>
+            <div className="executive-client-risk-list">{visibleClientRows.map(row => <button type="button" className="executive-client-risk-row executive-interactive-row" key={row.client} title={`Abrir detalhes dos atrasos de ${row.client}`} onClick={() => setDetailPanel({ type: 'client', client: row.client, title: row.client, subtitle: 'Itens atrasados associados a este cliente' })}><div><strong>{row.client}</strong><small>{row.openItems} abertos · {row.internalDelays} internos · {row.publicationDelays} veiculação</small></div><b>{row.delayedItems} <small>{displayPct(row.riskPct)}</small></b></button>)}</div>
             {clientRows.length > 5 && <button type="button" className="decision-see-more" onClick={() => setShowAllClientRisks(current => !current)}>{showAllClientRisks ? 'MOSTRAR MENOS' : `VER MAIS (${clientRows.length - 5})`}</button>}
           </div>
         </div>
@@ -177,7 +205,7 @@ function ExecutiveCockpit({ snapshot }) {
         <div className="executive-block">
           <div className="executive-block-heading"><AlertTriangle size={15} /><span>SINAIS QUE MERECEM DECISÃO</span></div>
           {risks.length > 0 ? risks.map(risk => (
-            <article className={`executive-risk ${risk.severity || 'medium'}`} key={risk.id}>
+            <article className={`executive-risk ${risk.severity || 'medium'} ${risk.client ? 'executive-interactive-risk' : ''}`} key={risk.id} role={risk.client ? 'button' : undefined} tabIndex={risk.client ? 0 : undefined} title={risk.client ? `Clique para abrir os atrasos de ${risk.client}` : undefined} onClick={() => risk.client && setDetailPanel({ type: 'client', client: risk.client, title: risk.client, subtitle: 'Itens atrasados associados a este cliente' })} onKeyDown={event => risk.client && activateOnKeyboard(event, () => setDetailPanel({ type: 'client', client: risk.client, title: risk.client, subtitle: 'Itens atrasados associados a este cliente' }))}>
               <div className="executive-risk-top"><span className="executive-risk-severity">{risk.severityLabel || risk.severity}</span><span>{risk.ownerRole}</span></div>
               <strong>{risk.title}</strong>
               <p>{risk.whyItMatters}</p>
@@ -199,6 +227,16 @@ function ExecutiveCockpit({ snapshot }) {
           )) : <div className="executive-empty">Nenhuma decisão pendente nesta lente.</div>}
         </div>
       </div>
+
+      {detailPanel && (
+        <section className="executive-detail-panel" aria-label="Detalhes executivos selecionados">
+          <div className="executive-detail-header">
+            <div><div className="executive-mini-heading"><Info size={13} /> EVIDÊNCIA SELECIONADA</div><h3>{detailPanel.title}</h3><p>{detailPanel.subtitle} · {selectedDetails.length} item(ns)</p></div>
+            <button type="button" className="executive-detail-close" onClick={closeDetailPanel} aria-label="Fechar detalhes">FECHAR</button>
+          </div>
+          {selectedDetails.length > 0 ? <div className="executive-detail-list">{selectedDetails.map(item => <article className="executive-detail-item" key={`${item.id}-${item.delayType}`}><div><strong>{item.name}</strong><span>{item.client} · {item.stage} · {item.status}</span></div><div className="executive-detail-meta"><span>{item.delayType}</span><span>{item.daysOverdue} dia(s) de atraso</span><span>Prazo: {formatDate(item.prazo)}</span>{item.responsavel && <span>Responsável: {item.responsavel}</span>}{item.editorDesigner && <span>Criação: {item.editorDesigner}</span>}</div><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="executive-evidence-link"><ExternalLink size={12} /> Abrir item no Monday</a></article>)}</div> : <div className="executive-empty">Nenhum detalhe de atraso disponível para esta seleção; o indicador continua agregado pela fonte.</div>}
+        </section>
+      )}
 
       <p className="executive-disclaimer"><Info size={13} /> {stability.explanation || 'Os sinais são uma camada interpretativa sobre fontes operacionais e devem ser validados pela liderança.'}</p>
     </section>

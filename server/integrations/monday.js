@@ -75,6 +75,14 @@ function isWithinNextDays(dateString, today, days = 7) {
   return date >= today && date <= end;
 }
 
+function daysOverdue(dateString, today = new Date()) {
+  if (!dateString) return 0;
+  const due = new Date(`${dateString}T00:00:00Z`);
+  const base = new Date(today);
+  base.setUTCHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((base.getTime() - due.getTime()) / 86400000));
+}
+
 class MondayIntegration {
   constructor() {
     this.apiUrl = 'https://api.monday.com/v2';
@@ -413,9 +421,52 @@ class MondayIntegration {
     const responsavelRanking = Object.values(responsavelMap)
       .sort((a, b) => (b.delayedPrazo + b.delayedVeiculacao) - (a.delayedPrazo + a.delayedVeiculacao));
 
+    const delayDetails = ranking
+      .flatMap(row => row.details
+        .filter(post => post.isDelayedPrazo || post.isDelayedVeiculacao)
+        .map(post => ({
+          id: post.id,
+          client: row.name,
+          name: post.name,
+          stage: post.quadro,
+          status: post.status,
+          prazo: post.prazo,
+          veiculacao: post.veiculacao,
+          responsavel: post.responsavel,
+          editorDesigner: post.editorDesigner,
+          delayType: [post.isDelayedPrazo ? 'prazo interno' : '', post.isDelayedVeiculacao ? 'veiculação' : ''].filter(Boolean).join(' + '),
+          daysOverdue: Math.max(daysOverdue(post.prazo, today), daysOverdue(post.veiculacao, today))
+        })))
+      .sort((a, b) => b.daysOverdue - a.daysOverdue || new Date(a.prazo || a.veiculacao || 0) - new Date(b.prazo || b.veiculacao || 0));
+
+    const totalScope = totalItems + completedItems;
+    const readyToSchedule = ['Para agendar', 'Agendado'].reduce((sum, label) => sum + (statusCounts[label] || 0), 0);
+    const productivity = {
+      activeItems: totalItems,
+      completedItems,
+      activePct: percent(totalItems, totalScope),
+      completionPct: percent(completedItems, totalScope),
+      readyToSchedule,
+      readyToSchedulePct: percent(readyToSchedule, totalItems),
+      delayedItems: delayDetails.length,
+      delayedPctOfActive: percent(delayDetails.length, totalItems),
+      byStage: Object.entries(groupCounts)
+        .map(([stage, count]) => ({ stage, count, pctOfActive: percent(count, totalItems) }))
+        .sort((a, b) => b.count - a.count),
+      topResponsibles: responsavelRanking.slice(0, 5).map(row => ({
+        name: row.name,
+        delayedPrazo: row.delayedPrazo,
+        delayedVeiculacao: row.delayedVeiculacao,
+        delayedTotal: row.delayedPrazo + row.delayedVeiculacao,
+        posts: row.posts
+      }))
+    };
+
     return {
       ranking,
       totalDelayed,
+      delayDetails,
+      productivity,
       responsavelRanking,
       quantitative: {
         totalItems,

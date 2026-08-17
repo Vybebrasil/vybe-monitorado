@@ -141,6 +141,8 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
         { name: 'Cliente A', open: 10, delayedPrazo: 2, delayedVeiculacao: 0, details: [{ id: '1', isDelayedPrazo: true }] },
         { name: 'Cliente B', open: 5, delayedPrazo: 0, delayedVeiculacao: 1, details: [{ id: '2', isDelayedVeiculacao: true }] }
       ],
+      delayDetails: [{ id: '1', client: 'Cliente A', name: 'Post atrasado', delayType: 'prazo interno', daysOverdue: 2 }],
+      productivity: { completionPct: 25, readyToSchedule: 4, delayedItems: 2, byStage: [{ stage: 'Design', count: 8, pctOfActive: 53.3 }] },
       quantitative: {
         totalItems: 20,
         itemsWithClient: 20,
@@ -170,6 +172,9 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.quantitative.overdueInternalPctOfActive, 13.3);
   assert.equal(snapshot.clientRanking[0].client, 'Cliente A');
   assert.equal(snapshot.clientRanking[0].riskPct, 20);
+  assert.equal(snapshot.delayDetails[0].delayType, 'prazo interno');
+  assert.equal(snapshot.productivity.readyToSchedule, 4);
+  assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
 });
 

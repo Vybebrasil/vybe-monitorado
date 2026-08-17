@@ -848,3 +848,49 @@ button:focus-visible, a:focus-visible, input:focus-visible, [role="button"]:focu
 .scenario-comparison { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.1); color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.35; }
 .scenario-comparison > b { color: var(--cy-neon-cyan); font: 700 0.56rem var(--font-mono); }
 .scenario-comparison strong { color: #fff; }
+
+/* Drill-down executivo e produtividade baseada em fluxo */
+.executive-summary-card > span,
+.executive-metric-card > span { display: inline-flex; align-items: center; gap: 0.28rem; }
+.executive-interactive-card { width: 100%; color: inherit; cursor: pointer; text-align: left; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+.executive-interactive-card:hover, .executive-interactive-card:focus-visible { border-color: var(--cy-neon-cyan); background: rgba(0,229,255,0.07); outline: none; transform: translateY(-1px); }
+.executive-interactive-card:focus-visible, .executive-interactive-row:focus-visible, .executive-detail-close:focus-visible { box-shadow: 0 0 0 2px rgba(0,229,255,0.4); }
+.executive-interactive-row { width: 100%; margin: 0; border: 0; border-bottom: 1px solid rgba(255,255,255,0.07); background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; transition: background 160ms ease, padding 160ms ease; }
+.executive-interactive-row:hover, .executive-interactive-row:focus-visible { background: rgba(0,229,255,0.06); outline: none; }
+.executive-status-row { padding: 0.12rem 0.25rem; }
+.executive-client-risk-row { padding-left: 0.35rem; padding-right: 0.35rem; }
+.executive-interactive-risk { cursor: pointer; transition: background 160ms ease, border-color 160ms ease; }
+.executive-interactive-risk:hover, .executive-interactive-risk:focus-visible { border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.045); outline: none; }
+.executive-productivity-panel { margin-top: 1rem; padding: 0.8rem; border: 1px solid rgba(157,0,255,0.22); background: rgba(157,0,255,0.025); }
+.executive-productivity-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.55rem; margin-top: 0.65rem; }
+.executive-productivity-kpis > div { display: flex; min-height: 76px; flex-direction: column; justify-content: space-between; padding: 0.65rem; border: 1px solid var(--cy-border); background: rgba(0,0,0,0.18); }
+.executive-productivity-kpis strong { color: var(--cy-neon-cyan); font: 700 1.25rem var(--font-mono); }
+.executive-productivity-kpis span, .executive-productivity-subheading { color: var(--cy-text-secondary); font: 700 0.56rem var(--font-mono); letter-spacing: 0.05em; }
+.executive-productivity-kpis small { color: var(--cy-text-secondary); font-size: 0.62rem; }
+.executive-productivity-columns { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1rem; margin-top: 0.9rem; }
+.executive-productivity-subheading { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.45rem; }
+.executive-stage-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 32px minmax(70px, 1.6fr) 40px; align-items: center; gap: 0.45rem; min-height: 27px; color: var(--cy-text-secondary); font-size: 0.63rem; }
+.executive-stage-row b, .executive-stage-row small { color: #fff; font: 700 0.6rem var(--font-mono); }
+.executive-stage-row small { color: var(--cy-text-secondary); text-align: right; }
+.executive-stage-row i { display: block; height: 5px; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.08); }
+.executive-stage-row i em { display: block; height: 100%; border-radius: inherit; background: var(--cy-neon-purple); }
+.executive-responsible-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.executive-responsible-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0.55rem; border-left: 2px solid var(--cy-neon-yellow); background: rgba(234,179,8,0.04); }
+.executive-responsible-row strong { color: #fff; font: 700 0.65rem var(--font-mono); }
+.executive-responsible-row span { color: var(--cy-neon-yellow); font: 700 0.6rem var(--font-mono); }
+.executive-productivity-note { display: flex; align-items: flex-start; gap: 0.35rem; margin-top: 0.8rem; color: var(--cy-text-secondary); font-size: 0.62rem; line-height: 1.4; }
+.executive-detail-panel { margin-top: 1rem; padding: 0.9rem; border: 1px solid var(--cy-neon-cyan); background: rgba(0,229,255,0.035); box-shadow: 0 0 18px rgba(0,229,255,0.06); }
+.executive-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.executive-detail-header h3 { margin-top: 0.3rem; color: #fff; font: 700 0.9rem var(--font-mono); }
+.executive-detail-header p { margin-top: 0.25rem; color: var(--cy-text-secondary); font-size: 0.66rem; }
+.executive-detail-close { padding: 0.38rem 0.55rem; border: 1px solid var(--cy-border); background: transparent; color: var(--cy-text-secondary); cursor: pointer; font: 700 0.58rem var(--font-mono); }
+.executive-detail-close:hover { border-color: var(--cy-neon-cyan); color: #fff; }
+.executive-detail-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.55rem; margin-top: 0.75rem; }
+.executive-detail-item { padding: 0.65rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.18); }
+.executive-detail-item strong { display: block; color: #fff; font: 700 0.68rem var(--font-mono); line-height: 1.35; }
+.executive-detail-item > div:first-child span { display: block; margin-top: 0.25rem; color: var(--cy-text-secondary); font-size: 0.62rem; }
+.executive-detail-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; margin-top: 0.55rem; color: var(--cy-text-secondary); font: 0.58rem var(--font-mono); line-height: 1.35; }
+.executive-detail-meta span:first-child { color: var(--cy-neon-yellow); }
+@media (max-width: 700px) {
+  .executive-productivity-kpis, .executive-productivity-columns, .executive-detail-list { grid-template-columns: 1fr; }
+}

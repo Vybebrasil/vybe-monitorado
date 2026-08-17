@@ -36,7 +36,7 @@ function buildClientRisks(ranking) {
           ? 'Definir intervenção executiva e plano de recuperação para este cliente.'
           : 'Acompanhar a tendência e confirmar se o gargalo é pontual ou recorrente.',
         evidence: [evidence('monday', `${row.open || 0} itens abertos; ${delayedTotal} atrasos agregados.`, firstEvidence?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${firstEvidence.id}` : null)],
-        ownerRole: delayedClient > delayedTeam ? 'CMO' : 'COO'
+        ownerRole: 'Liderança executiva'
       };
     })
     .filter(Boolean)
@@ -46,6 +46,8 @@ function buildClientRisks(ranking) {
 export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], generatedAt = new Date().toISOString() }) {
   const ranking = posts.ranking || [];
   const responsavelRanking = posts.responsavelRanking || [];
+  const delayDetails = posts.delayDetails || [];
+  const productivity = posts.productivity || {};
   const quantitative = posts.quantitative || {};
   const delayedTeam = sum(ranking, 'delayedPrazo');
   const delayedClient = sum(ranking, 'delayedVeiculacao');
@@ -169,6 +171,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       label: stabilityStatus === 'stable' ? 'ESTÁVEL' : stabilityStatus === 'attention' ? 'SOB OBSERVAÇÃO' : 'RISCO EXECUTIVO',
       explanation: 'Proxy operacional baseado em atrasos agregados, prontidão de planejamento e demandas vencidas. Não substitui indicadores financeiros ou de satisfação.'
     },
+    delayDetails,
+    productivity,
     summary: {
       openItems: totalOpen,
       delayedTeam,
