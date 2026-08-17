@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const ROOTS = ['api', 'scripts', 'tests'];
+const ROOTS = ['api', 'server', 'scripts', 'tests'];
 const EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 const IGNORED = new Set(['node_modules', 'dist', '.git', '.data']);
 
