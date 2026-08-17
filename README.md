@@ -1,16 +1,16 @@
 # VYBE NEXUS
 
-O **VYBE NEXUS** é a camada de comando e decisão da Vybe. Ele transforma dados do Monday.com, Google Calendar e Auditoria IA em sinais executivos para CMO e COO. O Nexus não substitui o Monday nem o Vybe Painel: a produção permanece nas ferramentas operacionais e aparece no Nexus apenas como evidência contextual.
+O **VYBE NEXUS** é a camada de comando e decisão da Vybe. Ele transforma dados do Monday.com, Google Calendar e Auditoria IA em sinais executivos para a liderança responsável pela agência. O Nexus não substitui o Monday nem o Vybe Painel: a produção permanece nas ferramentas operacionais e aparece no Nexus apenas como evidência contextual.
 
 > **Contrato de produto:** Monday registra a operação; Vybe Painel organiza a execução; Nexus interpreta riscos, decisões e impactos; VybeHUB concentra o relacionamento com o cliente.
 
 ## Estado atual
 
-O Cockpit, a Auditoria IA e o Dossiê funcionam com leitura pública por link. Decisões, impactos, snapshots e Health Score usam arquivos JSON em desenvolvimento e um adaptador HTTP para Upstash Redis REST em produção, desde que as credenciais estejam configuradas. Sem o datastore de produção, as rotas persistentes retornam indisponibilidade controlada e o `/api/healthz` informa `ready: false`.
+O Cockpit executivo funciona com leitura pública por link e é a única superfície principal do Nexus; não há painéis separados para CMO e COO. As telas operacionais de Auditoria/Dossiê foram retiradas da navegação pública para evitar duplicação com o Vybe Painel. Decisões, impactos, snapshots e Health Score usam arquivos JSON em desenvolvimento e um adaptador HTTP para Upstash Redis REST em produção, desde que as credenciais estejam configuradas. Sem o datastore de produção, as rotas persistentes retornam indisponibilidade controlada e o `/api/healthz` informa `ready: false`.
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | React 18, Vite e Recharts |
+| Frontend | React 18, Vite e Lucide, com núcleo executivo único |
 | API | Express 5 em ESM |
 | Integrações | Monday.com, Google Calendar, Instagram e Gemini |
 | Deploy | Vercel |
@@ -95,14 +95,16 @@ npm run check
 
 ```text
 src/
-  App.jsx                 Interface atual do Nexus
-  data/clients.js         Cadastro e auditorias legadas
+  App.jsx                 Interface executiva pública
+  data/clients.js         Cadastro e auditorias legadas em transição
 api/
-  index.js                API e rotas atuais
-  domain/                 Domínios executivos puros e stores locais
+  index.js                Único handler Serverless público
+server/
+  domain/                 Domínios executivos e stores
   integrations/           Monday e Google Calendar
   persistence/            Adaptador local/Upstash Redis REST
   release.js              Metadados verificáveis do deploy
+  scraper-module.js       Scraper do Instagram
 scripts/
   check-secrets.mjs       Scanner de segredos rastreados
   check-syntax.mjs        Verificador de sintaxe
@@ -150,7 +152,7 @@ O adaptador de produção foi implementado para Upstash Redis REST, mas ainda de
 
 O adaptador usa hashes Redis separados por domínio e serializa cada registro como JSON. As escritas de decisão e impacto são idempotentes por `id`; a deduplicação de Health Score mantém a regra existente por cliente e minuto de captura. O token padrão do Redis nunca deve ser enviado ao navegador.
 
-O frontend e a API também permanecem concentrados em `src/App.jsx` e `api/index.js`. A próxima refatoração deve separar módulos, rotas, serviços e repositories sem alterar o contrato entre Nexus, Monday e Vybe Painel.
+O frontend ainda possui um arquivo principal, mas a poda reduziu o App.jsx para o núcleo executivo e removeu filas, tabelas, filtros, modais de produção, Auditoria pública e Dossiê operacional do fluxo principal. A API pública agora é o único arquivo dentro de `api/`; domínios, integrações, persistência e release ficam em `server/`, reduzindo a descoberta de funções da Vercel. A próxima etapa pode modularizar o frontend sem alterar o contrato entre Nexus, Monday e Vybe Painel.
 
 ## Referências
 

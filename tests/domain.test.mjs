@@ -1,19 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildClientHealthScore } from '../api/domain/health-score.js';
-import { createDecisionRecord } from '../api/domain/executive-records.js';
+import { buildClientHealthScore } from '../server/domain/health-score.js';
+import { createDecisionRecord } from '../server/domain/executive-records.js';
 import {
   summarizeDecisionEffectiveness,
   detectPersistentRisks
-} from '../api/domain/decision-analytics.js';
+} from '../server/domain/decision-analytics.js';
 import {
   buildExecutiveAlerts,
   transitionExecutiveAlert
-} from '../api/domain/executive-alerts.js';
-import { buildOutcomeLearning } from '../api/domain/outcome-learning.js';
-import { buildReleaseMetadata } from '../api/release.js';
-import { createRecordStore, describeRecordStore } from '../api/persistence/record-store.js';
+} from '../server/domain/executive-alerts.js';
+import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
+import { buildReleaseMetadata } from '../server/release.js';
+import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
@@ -60,7 +60,7 @@ test('Registro de Decisão cria histórico sem alterar o Monday', () => {
     clientId: 'cliente-a',
     title: 'Revisar estratégia de relacionamento',
     context: 'O Health Score caiu por dois ciclos.',
-    ownerRole: 'CMO',
+    ownerRole: 'Liderança executiva',
     priority: 'high',
     checkpointAt: '2026-09-01',
     evidence: [{ source: 'Nexus', detail: 'Dois snapshots em queda.' }]

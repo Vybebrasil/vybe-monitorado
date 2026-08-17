@@ -4,23 +4,23 @@ import { timingSafeEqual } from 'crypto';
 import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { auditProfile } from './scraper-module.js';
-import mondayIntegration from './integrations/monday.js';
-import { getFutureMeetings } from './integrations/calendar.js';
-import { buildExecutiveSnapshot } from './domain/executive.js';
-import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from './domain/executive-records.js';
-import { createVersionedAuditRecord } from './domain/audit-records.js';
-import { buildClientHealthScore } from './domain/health-score.js';
-import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend } from './domain/executive-snapshots.js';
-import { listImpactRecords, saveImpactRecord, updateImpactRecord } from './domain/impact-records.js';
-import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from './domain/health-snapshots.js';
-import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from './domain/decision-analytics.js';
-import { buildExecutiveBriefingDocument } from './domain/executive-briefing.js';
-import { buildExecutiveAlerts } from './domain/executive-alerts.js';
-import { buildDecisionMemory, buildExecutiveScenarios } from './domain/executive-planning.js';
-import { buildOutcomeLearning } from './domain/outcome-learning.js';
-import { describeRecordStore, getPersistenceHealth } from './persistence/record-store.js';
-import { buildReleaseMetadata } from './release.js';
+import { auditProfile } from '../server/scraper-module.js';
+import mondayIntegration from '../server/integrations/monday.js';
+import { getFutureMeetings } from '../server/integrations/calendar.js';
+import { buildExecutiveSnapshot } from '../server/domain/executive.js';
+import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
+import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
+import { buildClientHealthScore } from '../server/domain/health-score.js';
+import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend } from '../server/domain/executive-snapshots.js';
+import { listImpactRecords, saveImpactRecord, updateImpactRecord } from '../server/domain/impact-records.js';
+import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from '../server/domain/health-snapshots.js';
+import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
+import { buildExecutiveBriefingDocument } from '../server/domain/executive-briefing.js';
+import { buildExecutiveAlerts } from '../server/domain/executive-alerts.js';
+import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/executive-planning.js';
+import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
+import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
+import { buildReleaseMetadata } from '../server/release.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -100,7 +100,7 @@ app.get('/api/healthz', async (req, res) => {
   });
 });
 
-const PORT = 3001;
+const PORT = Number(process.env.PORT || 3001);
 
 // Mapeamento dos IDs do clients.js para os Handles corretos do Scraper
 const CLIENT_HANDLES = {
@@ -442,109 +442,6 @@ app.post('/api/save/:id', requireAdminAccess, blockLegacyFilePersistence, expres
 });
 
 
-function daysLate(dateStr) {
-  if (!dateStr) return 0;
-  const due = new Date(dateStr);
-  if (Number.isNaN(due.getTime())) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.ceil((today - due) / (1000 * 60 * 60 * 24)));
-}
-
-function buildAttentionQueue({ bottlenecks, posts, demands }) {
-  const items = [];
-  const addItem = item => items.push({ ...item, score: item.score ?? 0 });
-
-  (posts?.ranking || []).forEach(row => {
-    (row.details || []).forEach(post => {
-      if (!post.isDelayedPrazo && !post.isDelayedVeiculacao) return;
-      const dueDate = post.isDelayedVeiculacao ? post.veiculacao : post.prazo;
-      const lateDays = Math.max(daysLate(post.prazo), daysLate(post.veiculacao));
-      const reasons = [
-        post.isDelayedPrazo ? 'Prazo interno vencido' : null,
-        post.isDelayedVeiculacao ? 'Veiculação vencida' : null
-      ].filter(Boolean);
-      addItem({
-        key: `post-${post.id}`,
-        type: 'content',
-        priority: post.isDelayedPrazo && post.isDelayedVeiculacao || lateDays >= 14 ? 'critical' : 'warning',
-        title: post.name,
-        client: row.name,
-        owner: post.responsavel || post.editorDesigner || 'Sem responsável',
-        dueDate,
-        status: post.status || 'Sem status',
-        reason: reasons.join(' + '),
-        lateDays,
-        url: `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${post.id}`,
-        score: 100 + lateDays + (post.isDelayedPrazo && post.isDelayedVeiculacao ? 25 : 0)
-      });
-    });
-  });
-
-  (demands || []).forEach(demand => {
-    const lateDays = daysLate(demand.prazo);
-    addItem({
-      key: `demand-${demand.id}`,
-      type: 'demand',
-      priority: lateDays >= 14 ? 'critical' : 'warning',
-      title: demand.name,
-      client: demand.cliente || 'Sem cliente',
-      owner: 'Operação',
-      dueDate: demand.prazo,
-      status: demand.status || 'Sem status',
-      reason: 'Demanda vencida',
-      lateDays,
-      url: `https://gestaovybes-team.monday.com/boards/8385559107/pulses/${demand.id}`,
-      score: 80 + lateDays
-    });
-  });
-
-  const planning = new Set(bottlenecks?.missingPlanning || []);
-  planning.forEach(client => addItem({
-    key: `planning-${client}`,
-    type: 'setup',
-    priority: 'critical',
-    title: 'Planejamento estratégico ausente',
-    client,
-    owner: 'Operação',
-    dueDate: null,
-    status: 'Sem planejamento',
-    reason: 'Setup necessário',
-    lateDays: null,
-    score: 70
-  }));
-
-  const dashboard = new Set(bottlenecks?.missingDashboard || []);
-  dashboard.forEach(client => addItem({
-    key: `dashboard-${client}`,
-    type: 'setup',
-    priority: 'warning',
-    title: 'Dashboard pendente ou desatualizado',
-    client,
-    owner: 'Operação',
-    dueDate: null,
-    status: 'Dashboard pendente',
-    reason: 'Setup necessário',
-    lateDays: null,
-    score: 60
-  }));
-
-  items.sort((a, b) => b.score - a.score);
-  const clients = [...new Set(items.map(item => item.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  const responsaveis = [...new Set(items.map(item => item.owner).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-
-  return {
-    items,
-    summary: {
-      total: items.length,
-      critical: items.filter(item => item.priority === 'critical').length,
-      content: items.filter(item => item.type === 'content').length,
-      demands: items.filter(item => item.type === 'demand').length,
-      setup: items.filter(item => item.type === 'setup').length
-    },
-    filters: { clients, responsaveis }
-  };
-}
 
 // NOVO ENDPOINT: Command Center / Métricas Executivas do Monday
 app.get('/api/dashboard/metrics', async (req, res) => {
@@ -554,7 +451,6 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       mondayIntegration.getOpenPosts(),
       mondayIntegration.getDelayedDemands()
     ]);
-    const attention = buildAttentionQueue({ bottlenecks, posts, demands });
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
       posts,
@@ -574,12 +470,6 @@ app.get('/api/dashboard/metrics', async (req, res) => {
     res.json({
       success: true,
       metrics: {
-        bottlenecks,
-        posts,
-        demands,
-        attentionQueue: attention.items,
-        attentionSummary: attention.summary,
-        filters: attention.filters,
         executiveSnapshot
       },
       meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live', snapshotSaved }

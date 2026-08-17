@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { clients } from '../src/data/clients.js';
-import { createVersionedAuditRecord } from '../api/domain/audit-records.js';
+import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 
 const outputPath = process.env.NEXUS_MIGRATION_OUTPUT || join(process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data'), 'legacy-audits.json');
 const dryRun = process.argv.includes('--dry-run');

@@ -67,7 +67,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedTeam} atrasos de prazo interno estão concentrados na carteira${topOwner ? `; ${topOwner.name} aparece com ${topOwner.delayedPrazo + topOwner.delayedVeiculacao} sinais` : ''}.`,
       recommendedDecision: 'Revisar distribuição de capacidade e identificar o gargalo de processo antes de adicionar mais produção.',
       evidence: [evidence('monday', `${delayedTeam} atrasos internos agregados.`, topOwner?.posts?.[0]?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${topOwner.posts[0].id}` : null)],
-      ownerRole: 'COO'
+      ownerRole: 'Liderança executiva'
     });
   }
 
@@ -81,7 +81,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedClient} itens ultrapassaram a data de veiculação prevista.`,
       recommendedDecision: 'Avaliar comunicação executiva com os clientes expostos e definir prioridade de recuperação.',
       evidence: [evidence('monday', `${delayedClient} atrasos de veiculação agregados.`)],
-      ownerRole: 'CMO'
+      ownerRole: 'Liderança executiva'
     });
   }
 
@@ -97,7 +97,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingPlanning.length} clientes não apresentam planejamento estratégico identificado na fonte operacional.`,
       recommendedDecision: 'Definir prioridade de regularização do planejamento por impacto de carteira, sem transformar o Nexus em fila de execução.',
       evidence: [evidence('monday', `${missingPlanning.length} clientes sem planejamento identificado.`)],
-      ownerRole: 'CMO'
+      ownerRole: 'Liderança executiva'
     }] : []),
     ...(missingDashboard.length > 0 ? [{
       id: 'portfolio-data-freshness-risk',
@@ -108,7 +108,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingDashboard.length} clientes têm dashboard pendente ou desatualizado na fonte operacional.`,
       recommendedDecision: 'Definir a ordem de atualização da base antes de tomar decisões comparativas sobre a carteira.',
       evidence: [evidence('monday', `${missingDashboard.length} clientes com dashboard pendente ou desatualizado.`)],
-      ownerRole: 'COO'
+      ownerRole: 'Liderança executiva'
     }] : [])
   ];
 
@@ -118,7 +118,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-client-intervention',
       title: 'Escolher clientes que exigem intervenção executiva',
       context: `${clientRisks.length} clientes apresentam sinais agregados de risco de previsibilidade.`,
-      ownerRole: 'CMO/COO',
+      ownerRole: 'Liderança executiva',
       priority: clientRisks[0].severity
     });
   }
@@ -127,7 +127,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-portfolio-readiness',
       title: 'Definir a ordem de recuperação da prontidão da carteira',
       context: `${missingPlanning.length} clientes sem planejamento e ${missingDashboard.length} com dashboard pendente ou desatualizado.`,
-      ownerRole: 'CMO/COO',
+      ownerRole: 'Liderança executiva',
       priority: missingPlanning.length >= 5 ? 'high' : 'medium'
     });
   }
@@ -136,7 +136,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-capacity',
       title: 'Decidir resposta para a pressão de capacidade',
       context: `${delayedTeam} atrasos internos agregados na leitura atual.`,
-      ownerRole: 'COO',
+      ownerRole: 'Liderança executiva',
       priority: delayedTeam >= 10 ? 'high' : 'medium'
     });
   }
@@ -165,17 +165,10 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     executiveRisks,
     decisionsNeeded,
     capacitySignals,
-    lenses: {
-      cmo: {
-        title: 'LENTE CMO',
-        question: 'Quais clientes e sinais podem afetar valor, posicionamento e relacionamento?',
-        focus: ['Risco de entrega percebida', 'Prontidão estratégica da carteira', 'Clientes que exigem intervenção']
-      },
-      coo: {
-        title: 'LENTE COO',
-        question: 'Qual padrão de capacidade ou processo está afetando a previsibilidade?',
-        focus: ['Pressão de capacidade', 'Recorrência de gargalos', 'Qualidade da passagem operacional']
-      }
+    executiveLens: {
+      title: 'PAINEL EXECUTIVO',
+      question: 'Qual decisão executiva precisa ser tomada agora?',
+      focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
     }
   };
 }
