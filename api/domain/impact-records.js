@@ -1,19 +1,15 @@
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
-import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { createRecordStore } from '../persistence/record-store.js';
 
 export const IMPACT_RESULTS = ['improved', 'stable', 'worsened', 'inconclusive'];
-const isProduction = () => process.env.NODE_ENV === 'production';
-const dataDirectory = () => process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
-const impactsPath = () => join(dataDirectory(), 'executive-impacts.json');
+const impactStore = createRecordStore({
+  storeName: 'impacts',
+  localFileName: 'executive-impacts.json',
+  unavailableCode: 'IMPACT_PERSISTENCE_NOT_CONFIGURED',
+  unavailableMessage: 'O Registro de Impacto precisa de um datastore em produção.'
+});
 
 const text = (value, maxLength = 2000) => typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
-
-function persistenceUnavailable() {
-  const error = new Error('[IMPACT_PERSISTENCE_NOT_CONFIGURED] O Registro de Impacto precisa de um datastore em produção.');
-  error.code = 'IMPACT_PERSISTENCE_NOT_CONFIGURED';
-  return error;
-}
 
 export function validateImpactPayload(payload = {}) {
   const record = {
@@ -53,49 +49,24 @@ export function createImpactRecord(payload) {
   };
 }
 
-async function readLocal() {
-  if (isProduction()) throw persistenceUnavailable();
-  try {
-    const content = await readFile(impactsPath(), 'utf8');
-    const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  }
-}
-
-async function writeLocal(records) {
-  if (isProduction()) throw persistenceUnavailable();
-  await mkdir(dataDirectory(), { recursive: true });
-  const path = impactsPath();
-  const temporaryPath = `${path}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(records, null, 2), 'utf8');
-  await rename(temporaryPath, path);
-}
-
 export async function listImpactRecords() {
-  const records = await readLocal();
+  const records = await impactStore.list();
   return records.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 }
 
 export async function saveImpactRecord(payload) {
   const record = createImpactRecord(payload);
-  const records = await readLocal();
-  records.push(record);
-  await writeLocal(records);
+  await impactStore.set(record);
   return record;
 }
 
 export async function updateImpactRecord(id, payload = {}) {
-  const records = await readLocal();
-  const index = records.findIndex(record => record.id === id);
-  if (index === -1) {
+  const current = await impactStore.get(id);
+  if (!current) {
     const error = new Error('[IMPACT_NOT_FOUND] Registro de impacto não encontrado.');
     error.code = 'IMPACT_NOT_FOUND';
     throw error;
   }
-  const current = records[index];
   const updated = validateImpactPayload({ ...current, ...payload });
   const now = new Date().toISOString();
   const history = [...(Array.isArray(current.history) ? current.history : [])];
@@ -103,7 +74,6 @@ export async function updateImpactRecord(id, payload = {}) {
     history.push({ result: updated.result, at: now, note: text(payload.note, 800) || `Resultado alterado de ${current.result} para ${updated.result}.` });
   }
   const next = { ...current, ...updated, id: current.id, createdAt: current.createdAt, updatedAt: now, history };
-  records[index] = next;
-  await writeLocal(records);
+  await impactStore.set(next);
   return next;
 }

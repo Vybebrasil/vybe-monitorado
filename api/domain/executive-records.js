@@ -1,6 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
-import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { createRecordStore } from '../persistence/record-store.js';
 
 export const DECISION_STATUSES = [
   'decision_needed',
@@ -12,18 +11,15 @@ export const DECISION_STATUSES = [
 
 export const DECISION_PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
-const isProduction = () => process.env.NODE_ENV === 'production';
-const dataDirectory = () => process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
-const decisionsPath = () => join(dataDirectory(), 'executive-decisions.json');
+const decisionStore = createRecordStore({
+  storeName: 'decisions',
+  localFileName: 'executive-decisions.json',
+  unavailableCode: 'PERSISTENCE_NOT_CONFIGURED',
+  unavailableMessage: 'O Registro de Decisões precisa de um datastore em produção.'
+});
 
 function text(value, maxLength = 2000) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
-}
-
-function decisionStoreUnavailable() {
-  const error = new Error('[PERSISTENCE_NOT_CONFIGURED] O Registro de Decisões está disponível apenas localmente até a conexão com um datastore versionado.');
-  error.code = 'PERSISTENCE_NOT_CONFIGURED';
-  return error;
 }
 
 export function validateDecisionPayload(payload = {}) {
@@ -74,49 +70,25 @@ export function createDecisionRecord(payload) {
   };
 }
 
-async function readLocalRecords() {
-  if (isProduction()) throw decisionStoreUnavailable();
-  try {
-    const content = await readFile(decisionsPath(), 'utf8');
-    const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  }
-}
-
-async function writeLocalRecords(records) {
-  if (isProduction()) throw decisionStoreUnavailable();
-  await mkdir(dataDirectory(), { recursive: true });
-  const temporaryPath = `${decisionsPath()}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(records, null, 2), 'utf8');
-  await rename(temporaryPath, decisionsPath());
-}
-
 export async function listDecisionRecords() {
-  const records = await readLocalRecords();
+  const records = await decisionStore.list();
   return records.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 }
 
 export async function saveDecisionRecord(payload) {
   const record = createDecisionRecord(payload);
-  const records = await readLocalRecords();
-  records.push(record);
-  await writeLocalRecords(records);
+  await decisionStore.set(record);
   return record;
 }
 
 export async function updateDecisionRecord(id, payload = {}) {
-  const records = await readLocalRecords();
-  const index = records.findIndex(record => record.id === id);
-  if (index === -1) {
+  const current = await decisionStore.get(id);
+  if (!current) {
     const error = new Error('[DECISION_NOT_FOUND] Decisão executiva não encontrada.');
     error.code = 'DECISION_NOT_FOUND';
     throw error;
   }
 
-  const current = records[index];
   const updated = validateDecisionPayload({ ...current, ...payload });
   const now = new Date().toISOString();
   const statusChanged = updated.status !== current.status;
@@ -138,7 +110,6 @@ export async function updateDecisionRecord(id, payload = {}) {
     updatedAt: now,
     history
   };
-  records[index] = next;
-  await writeLocalRecords(records);
+  await decisionStore.set(next);
   return next;
 }

@@ -1,16 +1,12 @@
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
-import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { createRecordStore } from '../persistence/record-store.js';
 
-const isProduction = () => process.env.NODE_ENV === 'production';
-const dataDirectory = () => process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
-const snapshotsPath = () => join(dataDirectory(), 'executive-snapshots.json');
-
-function unavailable() {
-  const error = new Error('[SNAPSHOT_STORE_NOT_CONFIGURED] O histórico executivo precisa de um datastore em produção.');
-  error.code = 'SNAPSHOT_STORE_NOT_CONFIGURED';
-  return error;
-}
+const snapshotStore = createRecordStore({
+  storeName: 'snapshots',
+  localFileName: 'executive-snapshots.json',
+  unavailableCode: 'SNAPSHOT_STORE_NOT_CONFIGURED',
+  unavailableMessage: 'O histórico executivo precisa de um datastore em produção.'
+});
 
 function cleanSnapshot(snapshot = {}) {
   return {
@@ -24,28 +20,8 @@ function cleanSnapshot(snapshot = {}) {
   };
 }
 
-async function readLocal() {
-  if (isProduction()) throw unavailable();
-  try {
-    const content = await readFile(snapshotsPath(), 'utf8');
-    const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  }
-}
-
-async function writeLocal(records) {
-  if (isProduction()) throw unavailable();
-  await mkdir(dataDirectory(), { recursive: true });
-  const temporaryPath = `${snapshotsPath()}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(records, null, 2), 'utf8');
-  await rename(temporaryPath, snapshotsPath());
-}
-
 export async function listExecutiveSnapshots({ limit = 90 } = {}) {
-  const records = await readLocal();
+  const records = await snapshotStore.list();
   return records.sort((a, b) => new Date(b.capturedAt) - new Date(a.capturedAt)).slice(0, Math.min(180, Math.max(1, limit)));
 }
 
@@ -54,9 +30,7 @@ export async function saveExecutiveSnapshot(snapshot) {
     id: `snapshot-${randomUUID()}`,
     ...cleanSnapshot(snapshot)
   };
-  const records = await readLocal();
-  records.push(record);
-  await writeLocal(records);
+  await snapshotStore.set(record);
   return record;
 }
 
