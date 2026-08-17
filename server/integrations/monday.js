@@ -313,12 +313,14 @@ class MondayIntegration {
         const hoje = new Date();
         hoje.setHours(0,0,0,0);
 
-        // Status concluído/pronto não entra como atraso. O prazo ainda alimenta a cobertura do painel.
-        if (prazoStr && isBeforeToday(prazoStr, today)) {
-          overdueInternal += 1;
-        }
-        if (veiculacaoStr && isBeforeToday(veiculacaoStr, today)) {
-          overduePublication += 1;
+        // Agendado/Para agendar continua no recorte, mas não é atraso operacional.
+        if (!isReady) {
+          if (prazoStr && isBeforeToday(prazoStr, today)) {
+            overdueInternal += 1;
+          }
+          if (veiculacaoStr && isBeforeToday(veiculacaoStr, today)) {
+            overduePublication += 1;
+          }
         }
         if (prazoStr && isWithinNextDays(prazoStr, today)) {
           dueWithin7Internal += 1;
@@ -327,7 +329,6 @@ class MondayIntegration {
           dueWithin7Publication += 1;
         }
 
-        // Agendado/Para agendar é conteúdo pronto e não gera atraso.
         if (!isReady) {
           if (prazoStr) {
             const prazoDate = new Date(prazoStr);
@@ -420,17 +421,17 @@ class MondayIntegration {
         totalItems,
         itemsWithClient,
         clientCoveragePct: percent(itemsWithClient, totalItems),
-        activeItems: Math.max(totalItems - completedItems, 0),
+        activeItems: totalItems,
         completedItems,
-        activePct: percent(Math.max(totalItems - completedItems, 0), totalItems),
+        activePct: percent(totalItems, totalItems + completedItems),
         itemsWithInternalDeadline,
         internalDeadlineCoveragePct: percent(itemsWithInternalDeadline, totalItems),
         itemsWithPublicationDate,
         publicationDateCoveragePct: percent(itemsWithPublicationDate, totalItems),
         overdueInternal,
-        overdueInternalPctOfActive: percent(overdueInternal, Math.max(totalItems - completedItems, 0)),
+        overdueInternalPctOfActive: percent(overdueInternal, totalItems),
         overduePublication,
-        overduePublicationPctOfActive: percent(overduePublication, Math.max(totalItems - completedItems, 0)),
+        overduePublicationPctOfActive: percent(overduePublication, totalItems),
         dueWithin7Internal,
         dueWithin7Publication,
         classifiedPriority,
