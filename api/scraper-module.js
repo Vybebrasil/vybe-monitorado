@@ -8,6 +8,27 @@ function buildCookieHeader(cookiesArray) {
   return cookiesArray.map(c => `${c.name}=${c.value}`).join('; ');
 }
 
+function loadInstagramCookies() {
+  const inlineCookies = process.env.INSTAGRAM_COOKIES_JSON?.trim();
+  if (inlineCookies) {
+    const parsed = JSON.parse(inlineCookies);
+    if (!Array.isArray(parsed)) throw new Error('INSTAGRAM_COOKIES_JSON precisa conter um array JSON.');
+    return parsed;
+  }
+
+  const cookiesPath = process.env.INSTAGRAM_COOKIES_PATH
+    ? process.env.INSTAGRAM_COOKIES_PATH
+    : join(__dirname, '..', 'scraper', 'cookies.json');
+
+  if (!existsSync(cookiesPath)) {
+    throw new Error('Cookies do Instagram não configurados. Use INSTAGRAM_COOKIES_JSON ou INSTAGRAM_COOKIES_PATH.');
+  }
+
+  const parsed = JSON.parse(readFileSync(cookiesPath, 'utf-8'));
+  if (!Array.isArray(parsed)) throw new Error('O arquivo de cookies do Instagram precisa conter um array JSON.');
+  return parsed;
+}
+
 function buildHeaders(cookieHeader, csrfToken, handle) {
   return {
     'accept': '*/*',
@@ -81,12 +102,7 @@ async function fetchUserPosts(userId, handle, cookieHeader, csrfToken, maxPosts 
 
 export async function auditProfile(handle) {
   try {
-    const cookiesPath = join(__dirname, '..', 'scraper', 'cookies.json');
-    if (!existsSync(cookiesPath)) {
-      return { error: 'cookies.json não encontrado' };
-    }
-
-    const rawCookies = JSON.parse(readFileSync(cookiesPath, 'utf-8'));
+    const rawCookies = loadInstagramCookies();
     const cookieHeader = buildCookieHeader(rawCookies);
     const csrfToken = rawCookies.find(c => c.name === 'csrftoken')?.value || '';
 

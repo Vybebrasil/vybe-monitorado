@@ -19,6 +19,8 @@ import { buildExecutiveBriefingDocument } from './domain/executive-briefing.js';
 import { buildExecutiveAlerts } from './domain/executive-alerts.js';
 import { buildDecisionMemory, buildExecutiveScenarios } from './domain/executive-planning.js';
 import { buildOutcomeLearning } from './domain/outcome-learning.js';
+import { describeRecordStore, getPersistenceHealth } from './persistence/record-store.js';
+import { buildReleaseMetadata } from './release.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -30,6 +32,11 @@ const allowedOrigins = (process.env.NEXUS_ALLOWED_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+
+const storageMode = (...storeNames) => {
+  const modes = [...new Set(storeNames.map(storeName => describeRecordStore(storeName).mode))];
+  return modes.length === 1 ? modes[0] : 'mixed';
+};
 
 const adminTokenMatches = req => {
   const expected = process.env.NEXUS_ADMIN_TOKEN || '';
@@ -67,25 +74,28 @@ app.use(cors({
 }));
 app.use(express.json());
 
-app.get('/api/healthz', (req, res) => {
+app.get('/api/healthz', async (req, res) => {
   const production = process.env.NODE_ENV === 'production';
+  const release = buildReleaseMetadata();
+  const persistence = await getPersistenceHealth({ probe: req.query.probe !== 'false' });
+  const storesReady = Object.values(persistence).every(store => store.ready);
+  const ready = (!production || release.trackable) && storesReady;
+
   res.json({
     ok: true,
+    ready,
     service: 'vybe-nexus-api',
     mode: production ? 'production' : 'development',
-    commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'local',
+    commit: release.commit,
+    release,
     access: 'public-link-read',
     integrations: {
       monday: Boolean(process.env.MONDAY_API_TOKEN),
       calendar: Boolean(process.env.GOOGLE_CALENDAR_ICAL_URL),
-      gemini: Boolean(process.env.GEMINI_API_KEY)
+      gemini: Boolean(process.env.GEMINI_API_KEY),
+      instagram: Boolean(process.env.INSTAGRAM_COOKIES_JSON || process.env.INSTAGRAM_COOKIES_PATH)
     },
-    persistence: {
-      decisions: production ? Boolean(process.env.NEXUS_DECISION_STORE_URL) : 'local-development',
-      snapshots: production ? Boolean(process.env.NEXUS_SNAPSHOT_STORE_URL) : 'local-development',
-      impacts: production ? Boolean(process.env.NEXUS_IMPACT_STORE_URL) : 'local-development',
-      health: production ? Boolean(process.env.NEXUS_HEALTH_STORE_URL) : 'local-development'
-    },
+    persistence,
     generatedAt: new Date().toISOString()
   });
 });
@@ -591,7 +601,7 @@ app.get('/api/executive/decisions', async (req, res) => {
       success: true,
       decisions,
       riskSummary: { total: decisions.length, active: active.length, atRisk: atRisk.length, overdueCheckpoint: atRisk.filter(decision => decision.checkpointAt).length, missingCheckpoint: atRisk.filter(decision => !decision.checkpointAt).length },
-      meta: { source: 'Nexus Decision Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' }
+      meta: { source: 'Nexus Decision Registry', storage: storageMode('decisions') }
     });
   } catch (error) {
     const status = error.code === 'PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
@@ -623,7 +633,7 @@ app.patch('/api/executive/decisions/:id', requireAdminAccess, async (req, res) =
 app.get('/api/executive/snapshots', async (req, res) => {
   try {
     const snapshots = await listExecutiveSnapshots({ limit: Number(req.query.limit) || 90 });
-    res.json({ success: true, snapshots, trend: summarizeSnapshotTrend(snapshots), meta: { source: 'Nexus Snapshot Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, snapshots, trend: summarizeSnapshotTrend(snapshots), meta: { source: 'Nexus Snapshot Registry', storage: storageMode('snapshots') } });
   } catch (error) {
     const status = error.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -644,7 +654,7 @@ app.post('/api/executive/snapshots', requireAdminAccess, async (req, res) => {
 app.get('/api/executive/impacts', async (req, res) => {
   try {
     const impacts = await listImpactRecords();
-    res.json({ success: true, impacts, meta: { source: 'Nexus Impact Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, impacts, meta: { source: 'Nexus Impact Registry', storage: storageMode('impacts') } });
   } catch (error) {
     const status = error.code === 'IMPACT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -674,7 +684,7 @@ app.patch('/api/executive/impacts/:id', requireAdminAccess, async (req, res) => 
 app.get('/api/executive/health/:clientId', async (req, res) => {
   try {
     const snapshots = await listHealthSnapshots(req.params.clientId);
-    res.json({ success: true, snapshots, trend: summarizeHealthTrend(snapshots), meta: { source: 'Nexus Health Registry', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, snapshots, trend: summarizeHealthTrend(snapshots), meta: { source: 'Nexus Health Registry', storage: storageMode('health') } });
   } catch (error) {
     const status = error.code === 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED' ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -684,7 +694,7 @@ app.get('/api/executive/health/:clientId', async (req, res) => {
 app.get('/api/executive/memory', async (req, res) => {
   try {
     const [decisions, impacts] = await Promise.all([listDecisionRecords(), listImpactRecords()]);
-    res.json({ success: true, memory: buildDecisionMemory({ decisions, impacts, query: req.query.q }), meta: { source: 'Nexus Executive Memory', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, memory: buildDecisionMemory({ decisions, impacts, query: req.query.q }), meta: { source: 'Nexus Executive Memory', storage: storageMode('decisions', 'impacts') } });
   } catch (error) {
     const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -695,7 +705,7 @@ app.get('/api/executive/scenarios', async (req, res) => {
   try {
     const [decisions, impacts, healthSnapshots] = await Promise.all([listDecisionRecords(), listImpactRecords(), listHealthSnapshots()]);
     const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
-    res.json({ success: true, scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }), meta: { source: 'Nexus Executive Scenarios', mode: 'simulation', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }), meta: { source: 'Nexus Executive Scenarios', mode: 'simulation', storage: storageMode('decisions', 'impacts', 'health') } });
   } catch (error) {
     const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -727,7 +737,7 @@ app.get('/api/executive/analytics', async (req, res) => {
     const briefingDocument = buildExecutiveBriefingDocument({ analytics: { effectiveness, persistentRisks, patterns, briefing } });
     const alerts = buildExecutiveAlerts({ risks: persistentRisks, effectiveness, freshness: 'live' });
     const learning = buildOutcomeLearning({ decisions, impacts, persistentRisks });
-    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing, briefingDocument, alerts, learning }, meta: { source: 'Nexus Executive Analytics', storage: process.env.NODE_ENV === 'production' ? 'external-required' : 'local-development' } });
+    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing, briefingDocument, alerts, learning }, meta: { source: 'Nexus Executive Analytics', storage: storageMode('decisions', 'impacts', 'health') } });
   } catch (error) {
     const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
