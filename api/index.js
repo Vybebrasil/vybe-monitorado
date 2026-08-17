@@ -100,7 +100,7 @@ app.get('/api/healthz', async (req, res) => {
   });
 });
 
-const PORT = Number(process.env.PORT || 3001);
+const PORT = Number(process.env.PORT || 3005);
 
 // Mapeamento dos IDs do clients.js para os Handles corretos do Scraper
 const CLIENT_HANDLES = {
@@ -445,12 +445,15 @@ app.post('/api/save/:id', requireAdminAccess, blockLegacyFilePersistence, expres
 
 // NOVO ENDPOINT: Command Center / Métricas Executivas do Monday
 app.get('/api/dashboard/metrics', async (req, res) => {
+  console.log('[API] /api/dashboard/metrics called');
   try {
+    console.log('[API] Fetching from Monday...');
     const [bottlenecks, posts, demands] = await Promise.all([
       mondayIntegration.getClientBottlenecks(),
       mondayIntegration.getOpenPosts(),
       mondayIntegration.getDelayedDemands()
     ]);
+    console.log('[API] Fetched from Monday successfully');
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
       posts,
@@ -721,6 +724,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`🚀 Servidor AI rodando na porta ${PORT}`);
     console.log(`Esperando chamadas de auditoria do frontend...`);
   });
+  setInterval(() => {}, 1000 * 60 * 60);
 }
 
 export default app;

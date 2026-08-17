@@ -120,7 +120,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingPlanning.length} clientes não apresentam planejamento estratégico identificado na fonte operacional.`,
       recommendedDecision: 'Definir prioridade de regularização do planejamento por impacto de carteira, sem transformar o Nexus em fila de execução.',
       evidence: [evidence('monday', `${missingPlanning.length} clientes sem planejamento identificado.`)],
-      ownerRole: 'Liderança executiva'
+      ownerRole: 'Liderança executiva',
+      affectedItems: missingPlanning
     }] : []),
     ...(missingDashboard.length > 0 ? [{
       id: 'portfolio-data-freshness-risk',
@@ -131,7 +132,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingDashboard.length} clientes têm dashboard pendente ou desatualizado na fonte operacional.`,
       recommendedDecision: 'Definir a ordem de atualização da base antes de tomar decisões comparativas sobre a carteira.',
       evidence: [evidence('monday', `${missingDashboard.length} clientes com dashboard pendente ou desatualizado.`)],
-      ownerRole: 'Liderança executiva'
+      ownerRole: 'Liderança executiva',
+      affectedItems: missingDashboard
     }] : [])
   ];
 
