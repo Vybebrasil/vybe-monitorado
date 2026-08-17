@@ -279,8 +279,11 @@ class MondayIntegration {
       const groupName = item.group ? item.group.title : 'Sem Quadro';
       const priority = item.column_values.find(column => column.id === 'color_mm164yv8')?.text || '';
       const format = item.column_values.find(column => column.id === 'lista_suspensa0__1')?.text || '';
+      const statusLower = status.toLowerCase();
+      const isDone = statusLower.includes('finalizado') || statusLower.includes('publicado') || statusLower.includes('cancelado');
+      const isReady = statusLower.includes('agendado') || statusLower.includes('para agendar');
 
-      if (status !== '') {
+      if (status !== '' && !isDone) {
         totalItems += 1;
         statusCounts[normalizedStatus] = (statusCounts[normalizedStatus] || 0) + 1;
         clientCounts[normalizedClient] = (clientCounts[normalizedClient] || 0) + 1;
@@ -295,8 +298,7 @@ class MondayIntegration {
         if (veiculacaoStr) itemsWithPublicationDate += 1;
       }
 
-      // Ignora finalizados/cancelados
-      const isDone = status.toLowerCase().includes('finalizado') || status.toLowerCase().includes('publicado') || status.toLowerCase().includes('cancelado') || status.toLowerCase() === 'para agendar' || status.toLowerCase() === 'agendado';
+      // Finalizado/Publicado/Cancelado sai dos KPIs; Agendado e Para agendar permanecem no recorte ativo.
       if (isDone) completedItems += 1;
 
       if (!isDone && status !== '') {
@@ -325,10 +327,7 @@ class MondayIntegration {
           dueWithin7Publication += 1;
         }
 
-        // REGRA: status "Agendado" ou "Para Agendar" = conteúdo pronto, NÃO é atraso
-        const statusLower = status.toLowerCase();
-        const isReady = statusLower.includes('agendado') || statusLower.includes('para agendar');
-
+        // Agendado/Para agendar é conteúdo pronto e não gera atraso.
         if (!isReady) {
           if (prazoStr) {
             const prazoDate = new Date(prazoStr);
