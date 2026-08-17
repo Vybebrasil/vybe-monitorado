@@ -259,6 +259,16 @@ function ExecutiveCockpit({ snapshot, onOpenModal }) {
               <strong>{risk.title}</strong>
               <p>{risk.whyItMatters}</p>
               <div className="executive-risk-action"><b>DECISÃO:</b> {risk.recommendedDecision}</div>
+              {risk.affectedItems && risk.affectedItems.length > 0 && (
+                <details style={{ marginTop: '0.8rem', fontSize: '0.85rem' }}>
+                  <summary style={{ cursor: 'pointer', color: 'var(--cy-text-secondary)', fontWeight: 'bold' }}>Ver os {risk.affectedItems.length} sinais detalhados</summary>
+                  <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem', color: '#fff' }}>
+                    {risk.affectedItems.map((affected, i) => (
+                      <li key={i} style={{ marginBottom: '0.3rem' }}>{affected}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {risk.evidence?.[0]?.url && <a href={risk.evidence[0].url} target="_blank" rel="noreferrer" className="executive-evidence-link"><ExternalLink size={12} /> Ver evidência operacional</a>}
             </article>
           )) : <div className="executive-empty">Nenhum sinal executivo nesta lente.</div>}
@@ -1267,6 +1277,16 @@ function CommandCenter() {
                         <div style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 'bold', marginTop: '0.2rem' }}>{item.title}</div>
                         <div style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}><strong style={{color: '#fff'}}>Por que importa:</strong> {item.whyItMatters}</div>
                         <div style={{ color: 'var(--cy-neon-green)', fontSize: '0.85rem', lineHeight: '1.4', background: 'rgba(0,255,0,0.05)', padding: '8px', borderRadius: '4px', borderLeft: '2px solid var(--cy-neon-green)' }}><strong>Decisão Recomendada:</strong> {item.recommendedDecision}</div>
+                        {item.affectedItems && item.affectedItems.length > 0 && (
+                          <details style={{ marginTop: '0.8rem', fontSize: '0.85rem' }}>
+                            <summary style={{ cursor: 'pointer', color: 'var(--cy-text-secondary)', fontWeight: 'bold' }}>Ver os {item.affectedItems.length} sinais detalhados</summary>
+                            <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem', color: '#fff' }}>
+                              {item.affectedItems.map((affected, i) => (
+                                <li key={i} style={{ marginBottom: '0.3rem' }}>{affected}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
                         {item.evidence?.[0]?.url && (
                           <a href={item.evidence[0].url} target="_blank" rel="noreferrer" style={{ color: 'var(--cy-neon-cyan)', textDecoration: 'none', fontWeight: 'bold', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', width: 'fit-content' }}><ExternalLink size={12}/> Abrir Evidência</a>
                         )}
@@ -1278,6 +1298,13 @@ function CommandCenter() {
                         </div>
                         <div style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 'bold', marginTop: '0.2rem' }}>{item.title}</div>
                         <div style={{ color: 'var(--cy-text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}><strong style={{color: '#fff'}}>Contexto:</strong> {item.context}</div>
+                        {item.affectedItems && item.affectedItems.length > 0 && (
+                          <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {item.affectedItems.map((affected, i) => (
+                              <span key={i} style={{ background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}>{affected}</span>
+                            ))}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>

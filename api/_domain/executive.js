@@ -22,7 +22,8 @@ function buildClientRisks(ranking) {
       if (!delayedTotal) return null;
 
       const severity = delayedTotal >= 10 ? 'critical' : delayedTotal >= 4 ? 'high' : 'medium';
-      const firstEvidence = row.details?.find(post => post.isDelayedPrazo || post.isDelayedVeiculacao);
+      const delayedPosts = row.details?.filter(p => p.isDelayedPrazo || p.isDelayedVeiculacao) || [];
+      const firstEvidence = delayedPosts[0];
       return {
         id: `client-risk-${String(row.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
         type: 'client_predictability_risk',
@@ -35,7 +36,8 @@ function buildClientRisks(ranking) {
           ? 'Definir intervenção executiva e plano de recuperação para este cliente.'
           : 'Acompanhar a tendência e confirmar se o gargalo é pontual ou recorrente.',
         evidence: [evidence('monday', `${row.open || 0} itens abertos; ${delayedTotal} atrasos agregados.`, firstEvidence?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${firstEvidence.id}` : null)],
-        ownerRole: delayedClient > delayedTeam ? 'CMO' : 'COO'
+        ownerRole: delayedClient > delayedTeam ? 'CMO' : 'COO',
+        affectedItems: delayedPosts.map(p => `${p.name} (Prazo: ${p.prazo || 'N/A'}${p.responsavel ? ' | 👤 ' + p.responsavel : ''})`)
       };
     })
     .filter(Boolean)
@@ -67,7 +69,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedTeam} atrasos de prazo interno estão concentrados na carteira${topOwner ? `; ${topOwner.name} aparece com ${topOwner.delayedPrazo + topOwner.delayedVeiculacao} sinais` : ''}.`,
       recommendedDecision: 'Revisar distribuição de capacidade e identificar o gargalo de processo antes de adicionar mais produção.',
       evidence: [evidence('monday', `${delayedTeam} atrasos internos agregados.`, topOwner?.posts?.[0]?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${topOwner.posts[0].id}` : null)],
-      ownerRole: 'COO'
+      ownerRole: 'COO',
+      affectedItems: responsavelRanking.filter(r => r.delayedPrazo > 0).map(r => `${r.name} (${r.delayedPrazo} atrasos)`)
     });
   }
 
@@ -81,7 +84,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedClient} itens ultrapassaram a data de veiculação prevista.`,
       recommendedDecision: 'Avaliar comunicação executiva com os clientes expostos e definir prioridade de recuperação.',
       evidence: [evidence('monday', `${delayedClient} atrasos de veiculação agregados.`)],
-      ownerRole: 'CMO'
+      ownerRole: 'CMO',
+      affectedItems: ranking.filter(c => c.delayedVeiculacao > 0).map(c => `${c.name} (${c.delayedVeiculacao} atrasos)`)
     });
   }
 
@@ -119,7 +123,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       title: 'Escolher clientes que exigem intervenção executiva',
       context: `${clientRisks.length} clientes apresentam sinais agregados de risco de previsibilidade.`,
       ownerRole: 'CMO/COO',
-      priority: clientRisks[0].severity
+      priority: clientRisks[0].severity,
+      affectedItems: clientRisks.map(r => r.client)
     });
   }
   if (missingPlanning.length > 0 || missingDashboard.length > 0) {
@@ -128,7 +133,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       title: 'Definir a ordem de recuperação da prontidão da carteira',
       context: `${missingPlanning.length} clientes sem planejamento e ${missingDashboard.length} com dashboard pendente ou desatualizado.`,
       ownerRole: 'CMO/COO',
-      priority: missingPlanning.length >= 5 ? 'high' : 'medium'
+      priority: missingPlanning.length >= 5 ? 'high' : 'medium',
+      affectedItems: [...new Set([...missingPlanning, ...missingDashboard])]
     });
   }
   if (delayedTeam > 0) {
@@ -137,7 +143,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       title: 'Decidir resposta para a pressão de capacidade',
       context: `${delayedTeam} atrasos internos agregados na leitura atual.`,
       ownerRole: 'COO',
-      priority: delayedTeam >= 10 ? 'high' : 'medium'
+      priority: delayedTeam >= 10 ? 'high' : 'medium',
+      affectedItems: responsavelRanking.filter(r => r.delayedPrazo > 0).map(r => `${r.name} (${r.delayedPrazo} atrasos)`)
     });
   }
 
