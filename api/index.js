@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getFutureMeetings, getCalendarSnapshot } from '../server/integrations/calendar.js';
-import { describeVybePanelSource, getVybePanelProductionSnapshot } from '../server/integrations/vybe-panel.js';
+import { describeVybePanelSource, getVybePanelExecutiveSnapshot, getVybePanelPage } from '../server/integrations/vybe-panel.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -105,13 +105,16 @@ app.get('/api/healthz', async (req, res) => {
 // sem permitir alterações no board ou nos status operacionais.
 app.get('/api/executive/vybe-panel', async (req, res) => {
   try {
-    const snapshot = await getVybePanelProductionSnapshot({
-      limit: Math.min(Number(req.query.limit) || 200, 500)
+    const snapshot = await getVybePanelExecutiveSnapshot({
+      limit: Math.min(Number(req.query.limit) || 200, 200),
+      maxPages: Math.min(Number(req.query.maxPages) || 10, 10),
+      budgetMs: Math.min(Number(req.query.budgetMs) || 12000, 15000)
     });
     res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
     res.json({
       success: true,
       ...snapshot,
+      mode: 'executive-summary',
       meta: {
         source: describeVybePanelSource(),
         access: 'public-link-read',
@@ -120,12 +123,27 @@ app.get('/api/executive/vybe-panel', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[API] Erro ao ler o Vybe Painel:', error);
+    console.error('[API] Erro ao ler o resumo do Vybe Painel:', error);
     res.set('Cache-Control', 'no-store');
     res.status(502).json({
       error: 'VYBE_PANEL_UNAVAILABLE',
-      message: error.message
+      message: 'O contexto do Vybe Painel está temporariamente indisponível; as evidências do Monday continuam disponíveis.'
     });
+  }
+});
+
+app.get('/api/executive/vybe-panel/page', async (req, res) => {
+  try {
+    const page = await getVybePanelPage({
+      cursor: typeof req.query.cursor === 'string' ? req.query.cursor : null,
+      limit: Math.min(Number(req.query.limit) || 50, 100)
+    });
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=120');
+    res.json({ success: true, ...page, mode: 'read-only-drilldown', meta: { source: describeVybePanelSource(), access: 'public-link-read', readOnly: true } });
+  } catch (error) {
+    console.error('[API] Erro no drill-down do Vybe Painel:', error);
+    res.set('Cache-Control', 'no-store');
+    res.status(502).json({ error: 'VYBE_PANEL_PAGE_UNAVAILABLE', message: 'A página solicitada do Vybe Painel está temporariamente indisponível.' });
   }
 });
 

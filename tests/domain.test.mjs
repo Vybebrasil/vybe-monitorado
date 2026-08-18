@@ -18,7 +18,7 @@ import { buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
-import { getVybePanelProductionSnapshot } from '../server/integrations/vybe-panel.js';
+import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
@@ -423,7 +423,11 @@ test('Vybe Painel retorna snapshot read-only completo por cursor', async () => {
   try {
     const result = await getVybePanelProductionSnapshot({ limit: 200 });
     assert.deepEqual(result.items.map(item => item.id), ['panel-1', 'panel-2']);
-    assert.deepEqual(result.pagination, { pages: 2, count: 2, complete: true });
+    assert.equal(result.pagination.pages, 2);
+    assert.equal(result.pagination.count, 2);
+    assert.equal(result.pagination.complete, true);
+    assert.equal(result.pagination.truncated, false);
+    assert.ok(result.pagination.elapsedMs >= 0);
     assert.equal(result.source, 'Vybe Painel');
     assert.deepEqual(requests[0].payload.variables, {});
     assert.deepEqual(requests[1].payload.variables, { cursor: 'panel-cursor-1' });
@@ -477,4 +481,33 @@ test('Score executivo preserva a dedução de prontidão no resumo e na composi�
   assert.equal(snapshot.summary.stalledClients, 1);
   assert.deepEqual(snapshot.portfolioStability.scoreDeductions.filter(item => item.points > 0).map(item => item.id), ['execution-gap', 'planning-source-gap', 'dashboard-source-gap']);
   assert.equal(snapshot.portfolioStability.recoveryPointsAvailable, 15);
+});
+
+
+test('Vybe Painel oferece resumo executivo cacheável com seleção enxuta', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, payload: JSON.parse(options.body) });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({
+        data: { boards: [{ items_page: { cursor: 'summary-cursor-1', items: [{ id: 'summary-1', name: 'Resumo 1', group: { title: 'Grupo A' } }] } }] }
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      data: { next_items_page: { cursor: null, items: [{ id: 'summary-2', name: 'Resumo 2', group: { title: 'Grupo B' } }] } }
+    }), { status: 200 });
+  };
+
+  try {
+    const result = await getVybePanelExecutiveSnapshot({ limit: 200, maxPages: 10, budgetMs: 5000 });
+    assert.deepEqual(result.items.map(item => item.id), ['summary-1', 'summary-2']);
+    assert.equal(result.pagination.complete, true);
+    assert.equal(result.warning, null);
+    assert.equal(result.items[0].updates, undefined);
+    assert.match(requests[0].payload.query, /column_values/);
+    assert.doesNotMatch(requests[0].payload.query, /updates\(limit/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -24,6 +24,8 @@ export default function AnalystStation({ snapshot, onExit }) {
   const delayDetails = snapshot.delayDetails || [];
   const [panelSnapshot, setPanelSnapshot] = useState(null);
   const [panelError, setPanelError] = useState('');
+  const [panelPageError, setPanelPageError] = useState('');
+  const [panelLoadingMore, setPanelLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +39,38 @@ export default function AnalystStation({ snapshot, onExit }) {
       });
     return () => { cancelled = true; };
   }, []);
+
+  const loadMorePanel = async () => {
+    const cursor = panelSnapshot?.pagination?.nextCursor;
+    if (!cursor || panelLoadingMore) return;
+    setPanelLoadingMore(true);
+    setPanelPageError('');
+    try {
+      const response = await fetch(`/api/executive/vybe-panel/page?cursor=${encodeURIComponent(cursor)}&limit=100`);
+      const payload = response.ok ? await response.json() : await response.json().then(body => Promise.reject(new Error(body.message || 'Página do Vybe Painel indisponível.')));
+      setPanelSnapshot(previous => {
+        if (!previous) return payload;
+        const items = [...(previous.items || []), ...(payload.items || [])];
+        return {
+          ...previous,
+          items,
+          pagination: {
+            ...previous.pagination,
+            pages: (previous.pagination?.pages || 0) + 1,
+            count: items.length,
+            complete: payload.pagination?.complete === true,
+            truncated: payload.pagination?.complete !== true,
+            nextCursor: payload.pagination?.nextCursor || null
+          },
+          warning: payload.pagination?.complete ? null : previous.warning
+        };
+      });
+    } catch (error) {
+      setPanelPageError(error.message);
+    } finally {
+      setPanelLoadingMore(false);
+    }
+  };
 
   // Transform statusCounts object to array for Recharts pipeline
   const pipelineData = Object.entries(statusCounts)
@@ -73,7 +107,10 @@ export default function AnalystStation({ snapshot, onExit }) {
           <>
             <div className="analyst-source-summary">
               <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
+              {panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
             </div>
+            {panelSnapshot.warning ? <div className="analyst-source-warning">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
+            {panelPageError ? <div className="analyst-source-warning">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
             <div className="analyst-source-groups">
               {Object.entries((panelSnapshot.items || []).reduce((acc, item) => {
                 const group = item.group?.title || 'Sem grupo';
@@ -83,6 +120,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                 <span key={group} className="analyst-source-chip">{group}: <b>{count}</b></span>
               ))}
             </div>
+            {panelSnapshot.pagination?.nextCursor ? <button type="button" className="list-expand" onClick={loadMorePanel} disabled={panelLoadingMore}>{panelLoadingMore ? 'CARREGANDO…' : `CARREGAR MAIS ITENS DO PAINEL (${panelSnapshot.pagination.count || 0})`}</button> : null}
             {panelAffectedItems.length > 0 && (
               <div className="analyst-panel-affected">
                 <span>Itens afetados encontrados também no Painel: <b>{panelAffectedItems.length}</b></span>
@@ -109,7 +147,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                 <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,243,255,0.05)' }} />
                 <Bar dataKey="value" radius={[2, 2, 0, 0]}>
                   {pipelineData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === 0 ? 'var(--vybe-cyan)' : 'rgba(0,243,255,0.4)'} />
+                    <Cell key={`cell-${index}`} fill={statusColorFor(entry.name, snapshot.quantitative?.statusColors)} />
                   ))}
                 </Bar>
               </BarChart>
