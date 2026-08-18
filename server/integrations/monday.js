@@ -263,6 +263,24 @@ class MondayIntegration {
         clientsWithDashboard,
         dashboardCoveragePct: percent(clientsWithDashboard, eligibleClients)
       },
+      readinessQuality: {
+        planning: {
+          columnId: 'link_mkzdvjjs',
+          eligibleClients,
+          populatedClients: clientsWithPlanning,
+          missingClients: missingPlanning.length,
+          coveragePct: percent(clientsWithPlanning, eligibleClients),
+          classification: eligibleClients > 0 && clientsWithPlanning === 0 ? 'source-empty-or-unmapped' : clientsWithPlanning < eligibleClients ? 'partial-coverage' : 'complete-coverage'
+        },
+        dashboard: {
+          columnId: 'color_mkzkgn5c',
+          eligibleClients,
+          populatedClients: clientsWithDashboard,
+          missingClients: missingDashboard.length,
+          coveragePct: percent(clientsWithDashboard, eligibleClients),
+          classification: eligibleClients > 0 && clientsWithDashboard === 0 ? 'source-empty-or-unmapped' : clientsWithDashboard < eligibleClients ? 'partial-coverage' : 'complete-coverage'
+        }
+      },
       pagination
     };
   }

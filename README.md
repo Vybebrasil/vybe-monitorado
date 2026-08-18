@@ -23,6 +23,8 @@ O cockpit lê o board `🟢Produção de Conteúdo` do Monday e transforma a ope
 | Planejamento da carteira | Percentual de clientes elegíveis com planejamento identificado | Board Gestão de Clientes |
 | Dashboard atualizado | Percentual de clientes elegíveis sem dashboard vazio, pendente ou desatualizado | Board Gestão de Clientes |
 | Exposição por cliente | Atrasos, itens abertos e percentual de risco por cliente | Cliente + status + datas |
+| Qualidade da leitura | Horário de captura, registros, páginas e completude por board | Snapshot executivo |
+| Agenda executiva | Reuniões nos próximos 7 dias e clientes em risco sem reunião futura | Google Calendar via iCal |
 
 Os percentuais de atraso usam itens ativos como denominador. Os percentuais de cobertura medem preenchimento e qualidade do dado; não são indicadores financeiros, de margem, satisfação ou performance de campanha. O Nexus também mostra a composição por status e a prioridade classificada para revelar quando o próprio dado operacional está incompleto.
 
@@ -175,6 +177,8 @@ O adaptador usa hashes Redis separados por domínio e serializa cada registro co
 O frontend concentra a seleção de estação e a estação Jarvis em `src/App.jsx`; a estação Analista fica em `src/stations/AnalystStation.jsx` e é carregada sob demanda, porque é a única consumidora do Recharts e ele responde pela maior parte do bundle. A API pública é o único arquivo dentro de `api/`; domínios, integrações, persistência e release ficam em `server/`, reduzindo a descoberta de funções da Vercel.
 
 ## Referências
+
+O Google Calendar agora participa do snapshot executivo com eventos dos próximos sete dias e clientes em risco sem reunião futura. A correspondência é baseada no nome do cliente no título do evento e é marcada como evidência de baixa confiança quando aproximada; o Nexus não infere que uma reunião é de um cliente sem esse vínculo textual.
 
 A integração usa o padrão oficial de autenticação Bearer e comandos JSON da [API REST do Upstash Redis](https://upstash.com/docs/redis/features/restapi). A configuração de integração com Vercel segue a [documentação oficial do Upstash para Vercel](https://upstash.com/docs/redis/howto/vercelintegration). A identidade do release usa as variáveis oficiais descritas pela [Vercel em System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables).
 

@@ -61,6 +61,49 @@ function buildExecutionGap({ activePortfolio, clientsWithContent, clientsWithOpe
   };
 }
 
+function normalizeMatchLabel(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+export function buildCalendarSignals({ events = [], quality = null, activeClients = [], ranking = [], generatedAt = new Date().toISOString() }) {
+  const capturedAt = new Date(generatedAt);
+  const capturedMs = capturedAt.getTime();
+  const horizonMs = capturedMs + 7 * 86400000;
+  const clients = activeClients.map(client => typeof client === 'string' ? client : client?.name).filter(Boolean);
+  const normalizedClients = clients.map(client => ({ name: client, normalized: normalizeMatchLabel(client) })).filter(client => client.normalized);
+  const meetings = (events || []).map(event => {
+    const titleNormalized = normalizeMatchLabel(event.title);
+    const matched = normalizedClients.find(client => titleNormalized.includes(client.normalized) || client.normalized.includes(titleNormalized));
+    return { ...event, client: matched?.name || null, matchType: matched ? 'title' : 'unmatched' };
+  });
+  const next7Meetings = meetings.filter(event => {
+    const dateMs = new Date(event.date).getTime();
+    return Number.isFinite(dateMs) && dateMs >= capturedMs && dateMs <= horizonMs;
+  });
+  const clientsWithMeeting = new Set(meetings.filter(event => event.client).map(event => event.client));
+  const riskClientsWithoutMeeting = (ranking || [])
+    .filter(row => (Number(row.delayedPrazo) || 0) + (Number(row.delayedVeiculacao) || 0) > 0)
+    .map(row => row.name)
+    .filter(Boolean)
+    .filter(name => !clientsWithMeeting.has(name));
+
+  return {
+    quality: quality || { source: 'Google Calendar · iCal', configured: false, complete: false, status: 'not-configured', fetchedAt: null, eventCount: 0 },
+    horizonDays: 7,
+    next7Count: next7Meetings.length,
+    next7Meetings: next7Meetings.slice(0, 20).map(event => ({ title: event.title, date: event.date, client: event.client, matchType: event.matchType })),
+    riskClientsWithoutMeeting,
+    matchedClientCount: clientsWithMeeting.size,
+    unmatchedNext7Count: next7Meetings.filter(event => !event.client).length,
+    note: 'A correspondência entre reunião e cliente usa o nome do cliente no título; correspondências aproximadas devem ser tratadas como evidência de baixa confiança.'
+  };
+}
+
 function buildClientRisks(ranking) {
   return (ranking || [])
     .map(row => {
@@ -92,7 +135,7 @@ function buildClientRisks(ranking) {
     .sort((a, b) => ({ critical: 3, high: 2, medium: 1 }[b.severity] - ({ critical: 3, high: 2, medium: 1 }[a.severity])));
 }
 
-export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], generatedAt = new Date().toISOString() }) {
+export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], calendar = null, generatedAt = new Date().toISOString() }) {
   const ranking = posts.ranking || [];
   const boardPagination = {
     production: posts.pagination || null,
@@ -101,10 +144,37 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
   };
   const paginationStates = Object.values(boardPagination).filter(Boolean);
   const sourcesComplete = paginationStates.length === 3 && paginationStates.every(state => state.complete === true);
+  const quantitative = posts.quantitative || {};
+  const sourceBoardQuality = {
+    production: {
+      ...(boardPagination.production || {}),
+      count: boardPagination.production?.count ?? quantitative.activeItems ?? quantitative.totalItems ?? null,
+      pages: boardPagination.production?.pages ?? null,
+      complete: boardPagination.production?.complete === true,
+      derived: !boardPagination.production
+    },
+    clients: {
+      ...(boardPagination.clients || {}),
+      count: boardPagination.clients?.count ?? bottlenecks.quantitative?.eligibleClients ?? null,
+      pages: boardPagination.clients?.pages ?? null,
+      complete: boardPagination.clients?.complete === true,
+      derived: !boardPagination.clients
+    },
+    demands: {
+      ...(boardPagination.demands || {}),
+      count: boardPagination.demands?.count ?? (Array.isArray(demands) ? demands.length : null),
+      pages: boardPagination.demands?.pages ?? null,
+      complete: boardPagination.demands?.complete === true,
+      derived: !boardPagination.demands
+    }
+  };
+  const knownRecords = Object.values(sourceBoardQuality).map(board => board.count).filter(value => Number.isFinite(Number(value)));
+  const knownPages = Object.values(sourceBoardQuality).map(board => board.pages).filter(value => Number.isFinite(Number(value)));
+  const sourceRecords = knownRecords.reduce((total, value) => total + Number(value), 0);
+  const sourcePages = knownPages.length === 3 ? knownPages.reduce((total, value) => total + Number(value), 0) : null;
   const responsavelRanking = posts.responsavelRanking || [];
   const delayDetails = posts.delayDetails || [];
   const productivity = posts.productivity || {};
-  const quantitative = posts.quantitative || {};
   const delayedTeam = sum(ranking, 'delayedPrazo');
   const delayedClient = sum(ranking, 'delayedVeiculacao');
   const missingPlanning = bottlenecks.missingPlanning || [];
@@ -115,6 +185,13 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     activePortfolio: bottlenecks.activePortfolio || [],
     clientsWithContent: ranking.map(row => row.name),
     clientsWithOpenDemand: demands.clientsWithOpenDemand || [],
+    generatedAt
+  });
+  const calendarSignals = buildCalendarSignals({
+    events: calendar?.events || [],
+    quality: calendar?.quality || null,
+    activeClients: bottlenecks.activePortfolio || [],
+    ranking,
     generatedAt
   });
   const stalledClients = new Set(executionGap.stalled.map(client => client.client));
@@ -290,7 +367,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       recoveryPointsAvailable: scoreDeductions.reduce((total, deduction) => total + deduction.points, 0)
     },
     portfolioExecution: executionGap,
-    delayDetails,
+    calendarSignals,
+    delayDetails: delayDetails,
     productivity,
     summary: {
       openItems: totalOpen,
@@ -313,6 +391,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       planningSystemicGap,
       dashboardSystemicGap,
       scoreDeductions: readinessDeductions,
+      quality: bottlenecks.readinessQuality || null,
       note: 'Lacunas sistêmicas de cobertura geram uma missão de fonte única; lacunas parciais geram pontos por cliente. Clientes sem execução e onboarding não recebem penalização de prontidão duplicada.'
     },
     quantitative: {
@@ -356,13 +435,19 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
     },
     sourceQuality: {
+      capturedAt: generatedAt,
+      freshness: 'live',
+      complete: sourcesComplete,
+      records: sourceRecords || null,
+      pages: sourcePages,
       monday: {
         complete: sourcesComplete,
-        boards: boardPagination,
+        boards: sourceBoardQuality,
         note: sourcesComplete
           ? 'Todos os boards consultados foram percorridos por cursor.'
           : 'A completude da leitura ainda não foi confirmada para todos os boards.'
-      }
+      },
+      calendar: calendarSignals.quality
     },
     methodology: {
       source: 'Monday.com · Produção de Conteúdo',

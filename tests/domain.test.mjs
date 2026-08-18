@@ -12,7 +12,7 @@ import {
   transitionExecutiveAlert
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
-import { buildExecutiveSnapshot } from '../server/domain/executive.js';
+import { buildCalendarSignals, buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
@@ -180,6 +180,35 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.quantitative.statusColors['Em andamento'], '#fdab3d');
   assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
+});
+
+test('Snapshot expõe frescor da fonte e clientes em risco sem reunião futura', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      activePortfolio: [{ name: 'Cliente A', since: '2025-01-01T00:00:00Z' }, { name: 'Cliente B', since: '2025-01-01T00:00:00Z' }],
+      pagination: { pages: 1, count: 2, complete: true },
+      quantitative: { eligibleClients: 2, planningCoveragePct: 100, dashboardCoveragePct: 100 }
+    },
+    posts: {
+      pagination: { pages: 1, count: 2, complete: true },
+      ranking: [
+        { name: 'Cliente A', open: 4, delayedPrazo: 1, delayedVeiculacao: 0, details: [] },
+        { name: 'Cliente B', open: 3, delayedPrazo: 1, delayedVeiculacao: 0, details: [] }
+      ]
+    },
+    demands: Object.assign([], { pagination: { pages: 1, count: 0, complete: true }, clientsWithOpenDemand: [] }),
+    calendar: {
+      events: [{ title: 'Cliente A · reunião executiva', date: '2026-08-20T12:00:00.000Z' }],
+      quality: { source: 'Google Calendar · iCal', configured: true, complete: true, status: 'ok', fetchedAt: '2026-08-18T00:00:00.000Z', eventCount: 1 }
+    },
+    generatedAt: '2026-08-18T00:00:00.000Z'
+  });
+
+  assert.equal(snapshot.sourceQuality.capturedAt, '2026-08-18T00:00:00.000Z');
+  assert.equal(snapshot.sourceQuality.complete, true);
+  assert.equal(snapshot.sourceQuality.records, 4);
+  assert.equal(snapshot.calendarSignals.next7Count, 1);
+  assert.deepEqual(snapshot.calendarSignals.riskClientsWithoutMeeting, ['Cliente B']);
 });
 
 test('Prontidão sistêmica gera missões de fonte sem duplicar execução ou onboarding', () => {

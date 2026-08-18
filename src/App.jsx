@@ -166,7 +166,99 @@ function Meter({ value, min = 0, max = 100, tone = 'cyan', label, showValue = tr
   );
 }
 
-function ExecutiveKpiBand({ snapshot, riskClients, onSelect }) {
+function SourceFreshness({ snapshot }) {
+  const quality = snapshot?.sourceQuality || {};
+  const boards = quality.monday?.boards || {};
+  const complete = quality.complete ?? quality.monday?.complete;
+  const capturedAt = quality.capturedAt || snapshot?.generatedAt;
+  const capturedLabel = capturedAt
+    ? new Date(capturedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+    : 'horário indisponível';
+  const boardLabels = [
+    ['production', 'Produção'],
+    ['clients', 'Clientes'],
+    ['demands', 'Demandas']
+  ];
+  const calendarSignals = snapshot?.calendarSignals;
+  const calendarAvailable = calendarSignals?.quality?.status === 'ok';
+  const derivedRecordCount = quality.records ?? snapshot?.quantitative?.activeItems ?? snapshot?.summary?.openItems ?? null;
+  const recordLabel = quality.records === null || quality.records === undefined ? 'itens no recorte' : 'registros lidos';
+  const displaySourceCount = value => Number.isFinite(Number(value)) && Number(value) > 0 ? formatNumber(value) : 'N/D';
+  const displayBoard = (board, label) => {
+    if (!board) return null;
+    const status = board.complete ? 'OK' : board.derived ? 'metadado parcial' : 'incompleta';
+    const pages = board.pages === null || board.pages === undefined ? 'páginas N/D' : `${formatNumber(board.pages)} pág.`;
+    return <span key={label} className={board.complete ? 'source-board-ok' : 'source-board-warning'}><b>{label}</b> {displaySourceCount(board.count)} reg. · {pages} · {status}</span>;
+  };
+
+  return (
+    <div className={`source-freshness-strip ${complete ? 'complete' : 'partial'}`} aria-label="Qualidade e frescor das fontes">
+      <div className="source-freshness-main">
+        <span className="source-freshness-dot" />
+        <strong>{complete ? 'LEITURA COMPLETA' : 'LEITURA PARCIAL'}</strong>
+        <span>Monday · capturado {capturedLabel}</span>
+      </div>
+      <div className="source-freshness-stats">
+        <span><b>{displaySourceCount(derivedRecordCount)}</b> {recordLabel}</span>
+        <span><b>{quality.pages === null || quality.pages === undefined ? 'N/D' : formatNumber(quality.pages)}</b> páginas confirmadas</span>
+        {boardLabels.map(([key, label]) => displayBoard(boards[key], label))}
+        {calendarSignals ? <span className={calendarAvailable ? 'source-board-ok' : 'source-board-warning'}><b>Agenda</b> {calendarAvailable ? `${formatNumber(calendarSignals.next7Count)} em 7d · ${formatNumber(calendarSignals.riskClientsWithoutMeeting?.length)} riscos sem reunião` : 'indisponível'}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function SnapshotDeltaBand({ history }) {
+  const available = history?.available === true;
+  const formatSigned = value => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric === 0) return '0';
+    return `${numeric > 0 ? '+' : ''}${formatNumber(numeric)}`;
+  };
+  const directionLabel = direction => direction === 'improving' ? 'melhorou' : direction === 'worsening' ? 'piorou' : 'estável';
+  const directionClass = direction => direction === 'improving' ? 'improving' : direction === 'worsening' ? 'worsening' : 'stable';
+
+  if (!available) {
+    const firstRead = history?.status === 'no_baseline';
+    return (
+      <section className="snapshot-delta-band unavailable" aria-label="Evolução do placar">
+        <div>
+          <span className="snapshot-delta-kicker">O QUE MUDOU DESDE A ÚLTIMA LEITURA</span>
+          <h3>{firstRead ? 'Primeira leitura persistida' : 'Sem comparação histórica'}</h3>
+          <p>{history?.message || 'Configure o histórico executivo para acompanhar recuperação, piora e novos sinais.'}</p>
+        </div>
+        <span className="snapshot-delta-state">HISTÓRICO NÃO DISPONÍVEL</span>
+      </section>
+    );
+  }
+
+  const score = history.score || {};
+  const changes = history.changes || [];
+  return (
+    <section className="snapshot-delta-band" aria-label="O que mudou desde a última leitura">
+      <div className="snapshot-delta-lead">
+        <span className="snapshot-delta-kicker">O QUE MUDOU DESDE A ÚLTIMA LEITURA</span>
+        <h3>{score.delta > 0 ? 'A operação recuperou pressão' : score.delta < 0 ? 'A operação acumulou pressão' : 'A operação permaneceu estável'}</h3>
+        <p>Comparação real entre snapshots persistidos; sem tendência artificial.</p>
+      </div>
+      <div className={`snapshot-delta-score ${directionClass(score.direction)}`}>
+        <strong>{formatSigned(score.delta)} pts</strong>
+        <span>{score.current ?? 'N/D'} pts atuais · {directionLabel(score.direction)}</span>
+      </div>
+      <div className="snapshot-delta-changes">
+        {changes.slice(0, 6).map(change => (
+          <div key={change.key} className={`snapshot-delta-item ${directionClass(change.direction)}`}>
+            <strong>{change.label}</strong>
+            <span>{change.previous} → {change.current}</span>
+            <small>{formatSigned(change.delta)} · {directionLabel(change.direction)}</small>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history }) {
   const quantitative = snapshot?.quantitative || {};
   const execution = snapshot?.portfolioExecution || {};
   const activeItems = Number(quantitative.activeItems) || 0;
@@ -184,19 +276,21 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect }) {
   const stabilityTone = healthScore < 0 ? 'catastrophic' : healthScore < 25 ? 'critical' : healthScore < 60 ? 'warning' : 'stable';
   const cards = [
     { id: 'health', label: 'SAÚDE EXECUTIVA', value: formatPoints(healthScore), detail: `${healthScore < 0 ? 'ABAIXO DA LINHA DE RECUPERAÇÃO' : snapshot?.portfolioStability?.label || 'sem leitura'} · score bruto`, progress: healthScore, min: -100, max: 100, tone: stabilityTone, title: 'Score bruto de pressão operacional. Pode ficar negativo; não é percentual de itens saudáveis nem indicador financeiro.', explanation: `Fórmula: 100 − (${delayedInternal}×2) − (${delayedPublication}×5) − (${stalledCount}×5) − (${delayedDemands}×2) = ${healthScore}. Cada fator retira pontos; cada missão recuperada devolve pontos.`, action: 'Abrir composição do score' },
-    { id: 'active', label: 'ITENS ATIVOS', value: formatNumber(activeItems), detail: `${formatPct(quantitative.activePct)} da base histórica`, progress: quantitative.activePct, tone: 'cyan', title: 'Itens ativos no recorte atual do board Produção de Conteúdo.', explanation: `${formatNumber(activeItems)} ativos de ${formatNumber(activeBase)} itens lidos, excluindo Finalizado, Publicado e Cancelado do recorte ativo.`, action: 'Abrir composição da carteira' },
+    { id: 'active', priority: 'supporting', label: 'ITENS ATIVOS', value: formatNumber(activeItems), detail: `${formatPct(quantitative.activePct)} da base histórica`, progress: quantitative.activePct, tone: 'cyan', title: 'Itens ativos no recorte atual do board Produção de Conteúdo.', explanation: `${formatNumber(activeItems)} ativos de ${formatNumber(activeBase)} itens lidos, excluindo Finalizado, Publicado e Cancelado do recorte ativo.`, action: 'Abrir composição da carteira' },
     { id: 'delays', label: 'ATRASOS INTERNOS', value: formatNumber(delayedInternal), detail: `${formatPct(quantitative.overdueInternalPctOfActive)} dos ativos · -${formatNumber(delayedInternal * 2)} pts`, progress: quantitative.overdueInternalPctOfActive, tone: 'critical', title: 'Itens ativos com prazo interno vencido.', explanation: `${formatNumber(delayedInternal)} evidências no Monday, distribuídas por cliente, responsável, etapa, status e dias de atraso. Cada uma retira 2 pontos do score.`, action: 'Abrir os itens atrasados' },
     { id: 'exposure', label: 'CLIENTES EXPOSTOS', value: formatNumber(riskClients), detail: eligibleClients ? `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} ativos` : 'denominador indisponível', progress: exposedPct, tone: 'warning', title: 'Clientes com pelo menos um atraso agregado no recorte.', explanation: `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} clientes ativos têm pelo menos um atraso interno ou de veiculação.`, action: 'Abrir clientes expostos' },
-    { id: 'execution', label: 'SEM EXECUÇÃO', value: formatNumber(stalledCount), detail: `${formatPct(stalledPct)} da carteira ativa · -${formatNumber(stalledCount * 5)} pts`, progress: stalledPct, tone: 'critical', title: 'Clientes ativos sem conteúdo em produção e sem demanda aberta.', explanation: `${formatNumber(stalledCount)} clientes estão fora do fluxo de execução; onboarding é tratado separadamente. Cada um retira 5 pontos do score.`, action: 'Abrir clientes sem execução' },
+    { id: 'execution', priority: 'supporting', label: 'SEM EXECUÇÃO', value: formatNumber(stalledCount), detail: `${formatPct(stalledPct)} da carteira ativa · -${formatNumber(stalledCount * 5)} pts`, progress: stalledPct, tone: 'critical', title: 'Clientes ativos sem conteúdo em produção e sem demanda aberta.', explanation: `${formatNumber(stalledCount)} clientes estão fora do fluxo de execução; onboarding é tratado separadamente. Cada um retira 5 pontos do score.`, action: 'Abrir clientes sem execução' },
     { id: 'publication', label: 'VEICULAÇÕES EM RISCO', value: formatNumber(delayedPublication), detail: `${formatPct(quantitative.overduePublicationPctOfActive)} dos ativos · -${formatNumber(delayedPublication * 5)} pts`, progress: quantitative.overduePublicationPctOfActive, tone: 'warning', title: 'Itens que ultrapassaram a data prevista de veiculação.', explanation: `${formatNumber(delayedPublication)} itens têm a veiculação vencida; cada item será mostrado com cliente, responsável, prazo e motivo. Cada um retira 5 pontos.`, action: 'Abrir veiculações em risco' }
   ];
 
   return (
     <section className="executive-kpi-band" aria-label="KPIs executivos da carteira">
       <div className="executive-kpi-header"><div><span className="executive-section-kicker">LEITURA EXECUTIVA</span><h2>O estado da carteira em números</h2></div><span className={`data-live-badge ${snapshot?.sourceQuality?.monday?.complete === true ? 'complete' : ''}`}>MONDAY · {snapshot?.sourceQuality?.monday?.complete === true ? 'LEITURA COMPLETA' : 'DADOS AO VIVO'}</span></div>
+      <SourceFreshness snapshot={snapshot} />
+      <SnapshotDeltaBand history={history} />
       <div className="executive-kpi-grid">
         {cards.map(card => (
-          <article className={`executive-kpi-card ${card.tone}`} key={card.label} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
+          <article className={`executive-kpi-card ${card.tone} ${card.priority || 'primary'}`} key={card.label} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
             <span className="executive-kpi-label">{card.label}</span>
             <strong className="executive-kpi-value">{card.value}</strong>
             <span className="executive-kpi-detail">{card.detail}</span>
@@ -224,18 +318,24 @@ function MissionBoard({ snapshot, onSelect }) {
     const id = isReadiness ? 'readiness' : deduction.id === 'overdue-demands' ? 'health' : deduction.id === 'execution-gap' ? 'execution' : deduction.id === 'publication-risk' ? 'publication' : 'delays';
     onSelect(id, isReadiness ? deduction.id : undefined);
   };
-  const renderDeduction = deduction => (
-    <button type="button" className="score-ledger-row" key={deduction.id} onClick={() => openDeduction(deduction)}>
-      <span><strong>{deduction.label}</strong><small>{deduction.count} × {deduction.pointsPerItem} pts <i>·</i> {deduction.source}</small></span>
-      <b>-{formatNumber(deduction.points)} pts</b>
-    </button>
-  );
+  const renderDeduction = deduction => {
+    const isSystemic = deduction.mode === 'source_gap';
+    return (
+      <button type="button" className={`score-ledger-row ${isSystemic ? 'systemic' : ''}`} key={deduction.id} onClick={() => openDeduction(deduction)}>
+        <span className="score-ledger-row-copy">
+          <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts</b></span>
+          <small><strong>{formatNumber(deduction.count)} {isSystemic ? 'clientes afetados' : 'itens afetados'}</strong> <i>·</i> {isSystemic ? 'penalização única da fonte' : `${formatNumber(deduction.pointsPerItem)} pts por item`} <i>·</i> {deduction.source}</small>
+        </span>
+        <span className="score-ledger-row-action">ABRIR CAUSA ↗</span>
+      </button>
+    );
+  };
 
   return (
     <section className="mission-board data-panel" aria-label="Missões da carteira e placar executivo">
       <div className="mission-board-header">
         <div className="mission-board-copy"><span className="executive-section-kicker">VYBE OS · MISSÕES DA CARTEIRA</span><h2>Recupere o placar da operação</h2><p>Cada missão nasce de um sinal real do Monday. Não é competição entre pessoas: é recuperação do sistema.</p><div className="mission-objective"><span>OBJETIVO DA LEITURA</span><strong>Resolver sinais comprovados e devolver pontos ao placar.</strong></div></div>
-        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>PLACAR BRUTO</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} disponíveis</small><em>Meta de recuperação: 100 pts</em></div>
+        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>PLACAR BRUTO ATUAL</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>Meta de recuperação: 100 pts</em></div>
       </div>
       <div className="mission-layout">
         <div className="mission-list">
@@ -243,7 +343,7 @@ function MissionBoard({ snapshot, onSelect }) {
             <button type="button" className={`mission-card ${mission.accent}`} key={mission.id} onClick={() => onSelect(mission.kpiId, mission.readinessId)} aria-label={`Abrir missão: ${mission.title}`}>
               <div className="mission-card-top"><span>MISSÃO {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
               <strong>{mission.title}</strong>
-              <div className="mission-card-meta"><span>{mission.current} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)}</b></div>
+              <div className="mission-card-meta"><span>{formatNumber(mission.current)} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)} recuperáveis</b></div>
               <div className="mission-progress" aria-label="Progresso da missão"><i style={{ width: `${mission.progressPct}%` }} /></div>
               <small>{mission.description}</small>
               <em>ABRIR EVIDÊNCIAS ↗</em>
@@ -310,23 +410,64 @@ function StatusComposition({ snapshot }) {
   );
 }
 
-function OwnerBars({ owners, totalDelays, onSelect }) {
-  const visible = owners.slice(0, 5);
-  const max = Math.max(...owners.map(item => item.count), 1);
+function ownerUrgency(daysOverdue) {
+  const days = Number(daysOverdue) || 0;
+  if (days >= 14) return { key: 'critical-max', label: 'CRÍTICO MÁXIMO', short: `${days}D` };
+  if (days >= 7) return { key: 'critical', label: 'CRÍTICO', short: `${days}D` };
+  if (days >= 3) return { key: 'high', label: 'ALTO', short: `${days}D` };
+  if (days >= 1) return { key: 'attention', label: 'ATENÇÃO', short: `${days}D` };
+  return { key: 'clear', label: 'SEM ATRASO', short: '0D' };
+}
+
+function OwnerBars({ owners, totalDelays, statusColors, selectedOwnerId, onSelect, onOpen }) {
+  const rankedOwners = owners.map(owner => {
+    const maxDays = Math.max(...(owner.details || []).map(item => Number(item.daysOverdue) || 0), 0);
+    return { ...owner, maxDays, urgency: ownerUrgency(maxDays) };
+  }).sort((a, b) => b.maxDays - a.maxDays || Number(b.publication || 0) - Number(a.publication || 0) || b.count - a.count);
+  const visible = rankedOwners.slice(0, 5);
+  const max = Math.max(...rankedOwners.map(item => item.count), 1);
+  const [hoveredOwnerId, setHoveredOwnerId] = useState(null);
+  const activeOwnerId = hoveredOwnerId || selectedOwnerId;
+  const visibleOwner = rankedOwners.find(owner => owner.id === activeOwnerId);
+  const hoverDetails = visibleOwner?.details?.slice().sort((a, b) => (Number(b.daysOverdue) || 0) - (Number(a.daysOverdue) || 0)).slice(0, 5) || [];
+
   return (
     <section className="data-panel visual-panel owner-bars" aria-label="Concentração de atrasos por responsável">
       <div className="data-panel-title"><span>CONCENTRAÇÃO · RESPONSÁVEIS</span><span className="panel-subtitle">{formatNumber(totalDelays)} INTERNOS</span></div>
       <div className="visual-question">Onde os atrasos internos se concentram?</div>
       <div className="owner-bar-list">
-        {visible.map(owner => (
-          <div className="owner-bar-row" key={owner.id} {...clickable(() => onSelect(owner), `Investigar ${owner.name}`)}>
-            <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><span>{formatNumber(owner.count)} · {formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
-            <div className="owner-bar-track"><span style={{ width: `${(owner.count / max) * 100}%` }} /></div>
-            <small>{owner.publication ? `${owner.publication} de veiculação` : 'somente prazo interno'} · investigar causa</small>
-          </div>
-        ))}
+        {visible.map(owner => {
+          const isSelected = selectedOwnerId === owner.id;
+          const isHovered = hoveredOwnerId === owner.id;
+          const showOwnerPreview = hoveredOwnerId ? hoveredOwnerId === owner.id : isSelected;
+          const selectOwner = () => {
+            setHoveredOwnerId(owner.id);
+            onSelect(owner);
+          };
+          return (
+            <div
+              className={`owner-bar-row ${owner.urgency.key} ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
+              key={owner.id}
+              {...clickable(selectOwner, `${isSelected ? 'Pessoa selecionada' : 'Selecionar'} ${owner.name}`)}
+              onMouseEnter={() => setHoveredOwnerId(owner.id)}
+              onMouseLeave={() => setHoveredOwnerId(null)}
+              onFocus={() => setHoveredOwnerId(owner.id)}
+              onBlur={() => setHoveredOwnerId(null)}
+              aria-expanded={showOwnerPreview}
+            >
+              <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><div className="owner-bar-person-summary"><span className="owner-bar-person-name">{owner.name}</span><strong>{formatNumber(owner.count)} atrasos</strong><span>{owner.publication ? `${owner.publication} veiculação` : 'sem veiculação'}</span><em className={`owner-urgency-chip ${owner.urgency.key}`}>{owner.urgency.short} · {owner.urgency.label}</em></div><span className="owner-bar-share">{formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
+              <div className={`owner-bar-track ${owner.urgency.key}`}><span style={{ width: `${(owner.count / max) * 100}%` }} /></div>
+              <small className="owner-bar-instruction"><strong>Maior atraso: {owner.maxDays} dia(s)</strong> · {isSelected ? 'selecionado · abrir abaixo' : 'selecione para fixar'}</small>
+              <button type="button" className="owner-bar-open" onClick={event => { event.stopPropagation(); onOpen(owner); }} aria-label={`Abrir todas as entregas de ${owner.name}`}>ABRIR {formatNumber(owner.count)} ENTREGAS ↗</button>
+              {showOwnerPreview ? <div className="owner-bar-hover" role="tooltip">
+                <div className="owner-bar-hover-title">{hoverDetails.length < 5 ? `${hoverDetails.length} DEMANDAS EM RISCO` : '5 DEMANDAS MAIS URGENTES'} · {owner.name}</div>
+                {hoverDetails.length ? hoverDetails.map((item, index) => { const urgency = ownerUrgency(item.daysOverdue); return <a className={`owner-bar-hover-item ${urgency.key}`} key={item.id || `${item.name}-${index}`} href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer" title="Abrir evidência no Monday"><strong>{item.name}</strong><span>{item.client || 'Sem cliente'} · {item.stage || 'Etapa não informada'}</span><small><b>{urgency.short} · {urgency.label}</b>{item.status ? ` · ${item.status}` : ''} <em>ABRIR NO MONDAY ↗</em></small></a>; }) : <span className="owner-bar-hover-empty">Nenhuma demanda detalhada disponível.</span>}
+              </div> : null}
+            </div>
+          );
+        })}
       </div>
-      <p className="visual-footnote">Concentração de sinais, não medição de produtividade individual. O denominador é o total de atrasos internos encontrados.</p>
+      <p className="visual-footnote">Concentração de sinais, não medição de produtividade individual. O denominador é o total de atrasos internos encontrados. Clique no card para selecionar; use o botão para abrir todas as entregas.</p>
     </section>
   );
 }
@@ -538,6 +679,14 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
   const delayedDemands = Number(summary.delayedDemands) || 0;
   const readiness = snapshot?.portfolioReadiness || {};
   const readinessDeduction = (readiness.scoreDeductions || []).find(deduction => deduction.id === panel.readinessId) || readiness.scoreDeductions?.[0];
+  const readinessQuality = readinessDeduction?.kind === 'planning' ? readiness.quality?.planning : readiness.quality?.dashboard;
+  const readinessQualityLabel = readinessQuality?.classification === 'source-empty-or-unmapped'
+    ? 'FONTE VAZIA OU POSSIVELMENTE NÃO MAPEADA'
+    : readinessQuality?.classification === 'partial-coverage'
+      ? 'COBERTURA PARCIAL'
+      : readinessQuality?.classification === 'complete-coverage'
+        ? 'COBERTURA COMPLETA'
+        : 'QUALIDADE NÃO INFORMADA';
   const readinessClients = readinessDeduction?.affectedClients || [];
   const visibleReadinessClients = showAll ? readinessClients : readinessClients.slice(0, 5);
   const readinessPoints = (readiness.scoreDeductions || []).reduce((total, deduction) => total + (Number(deduction.points) || 0), 0);
@@ -585,8 +734,9 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         <section className="investigation-hero"><span className="investigation-eyebrow">{configs.eyebrow}</span><h4>{configs.title}</h4><p>{configs.subtitle}</p></section>
 
         {panel.id === 'readiness' ? <>
-          <div className="kpi-score-explanation"><div><span>CLIENTES SINALIZADOS</span><strong>{formatNumber(readinessDeduction?.count || readinessClients.length)}</strong></div><div><span>DESCONTO NO PLACAR</span><strong>-{formatNumber(readinessDeduction?.points || 0)} pts</strong></div></div>
-          <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural.' : 'A lacuna é parcial. O Nexus aplica pontos por cliente afetado, excluindo clientes sem execução e onboarding para evitar dupla penalização.'}</p></div>
+           <div className="kpi-score-explanation"><div><span>CLIENTES SINALIZADOS</span><strong>{formatNumber(readinessDeduction?.count || readinessClients.length)}</strong></div><div><span>DESCONTO NO PLACAR</span><strong>-{formatNumber(readinessDeduction?.points || 0)} pts</strong></div></div>
+           <div className="readiness-quality-callout"><div><span>QUALIDADE DA FONTE</span><strong>{readinessQualityLabel}</strong></div><div><span>CAMPO MONDAY</span><strong>{readinessQuality?.columnId || 'não informado'}</strong></div><div><span>COBERTURA OBSERVADA</span><strong>{formatPct(readinessQuality?.coveragePct)} · {formatNumber(readinessQuality?.populatedClients)} preenchidos de {formatNumber(readinessQuality?.eligibleClients)}</strong></div></div>
+           <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural. Antes de tratar o desconto como falha operacional, valide se o campo está correto e se a fonte realmente deveria estar preenchida.' : 'A lacuna é parcial. O Nexus aplica pontos por cliente afetado, excluindo clientes sem execução e onboarding para evitar dupla penalização.'}</p></div>
           <div className="kpi-investigation-section-title">CLIENTES AFETADOS · {readinessClients.length}</div>
           <div className="kpi-client-grid">{visibleReadinessClients.map(client => <div className="kpi-client-card" key={client}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span></div></div>)}</div>
           {readinessClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessClients.length - 5})`}</button> : null}
@@ -640,10 +790,11 @@ function JarvisCopilot({ message, nextCommand }) {
   );
 }
 
-function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
+function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
+  const [selectedOwnerId, setSelectedOwnerId] = useState(null);
   const [jarvisMessage, setJarvisMessage] = useState({
     text: 'Estou com você. A leitura está organizada e vou conduzir o próximo ponto que merece decisão.',
     hint: 'Selecione qualquer evidência; eu explico por que ela importa.'
@@ -658,16 +809,20 @@ function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
   internalDelays.forEach(d => {
     // `responsavel` vem do Monday como lista separada por vírgula.
     splitOwners(d.responsavel).forEach(name => {
-      blameMap[name] ||= { count: 0, publication: 0, people: [] };
+      blameMap[name] ||= { count: 0, publication: 0, people: [], details: [] };
       const person = (d.responsavelPeople || []).find(candidate => candidate.name === name);
       if (person && !blameMap[name].people.some(candidate => candidate.id === person.id)) blameMap[name].people.push(person);
       blameMap[name].count += 1;
+      blameMap[name].details.push(d);
       if (d.delayType?.includes('veiculação')) blameMap[name].publication += 1;
     });
   });
   const topBlame = Object.entries(blameMap)
-    .map(([name, values]) => ({ id: name, name, people: values.people, ...values }))
-    .sort((a, b) => b.count - a.count);
+    .map(([name, values]) => {
+      const maxDays = Math.max(...values.details.map(item => Number(item.daysOverdue) || 0), 0);
+      return { id: name, name, people: values.people, ...values, maxDays, urgency: ownerUrgency(maxDays) };
+    })
+    .sort((a, b) => b.maxDays - a.maxDays || Number(b.publication || 0) - Number(a.publication || 0) || b.count - a.count);
 
   // Logic 2: Piores Clientes (maior % de itens atrasados sobre itens abertos)
   const clientRanking = snapshot.clientRanking || [];
@@ -679,20 +834,26 @@ function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
   const execution = snapshot.portfolioExecution || {};
   const stalledClients = execution.stalled || [];
   const onboardingClients = execution.onboarding || [];
+  const calendarSignals = snapshot.calendarSignals || {};
+  const calendarRiskCount = calendarSignals.riskClientsWithoutMeeting?.length || 0;
   const nextCommand = stalledClients.length > 0
     ? 'Começar pelos clientes ativos sem execução.'
     : internalDelays.length > 0
       ? 'Investigar a concentração de atrasos antes de assumir mais produção.'
-      : worstClients.length > 0
-        ? 'Abrir as evidências dos clientes com maior exposição.'
-        : 'A carteira não apresenta um comando crítico nesta leitura.';
+      : calendarRiskCount > 0
+        ? 'Verificar clientes em risco sem reunião futura.'
+        : worstClients.length > 0
+          ? 'Abrir as evidências dos clientes com maior exposição.'
+          : 'A carteira não apresenta um comando crítico nesta leitura.';
   const initialJarvisMessage = stalledClients.length > 0
     ? { text: `Encontrei ${stalledClients.length} cliente(s) ativo(s) sem conteúdo em produção ou demanda aberta. Esse é o primeiro ponto que eu investigaria com você.`, hint: 'O risco aqui é de previsibilidade: vamos confirmar o contexto antes de concluir qualquer coisa.' }
     : internalDelays.length > 0
-      ? { text: `A carteira tem ${internalDelays.length} atraso(s) interno(s) concentrado(s) em ${topBlame.length || 1} responsável(is). Vou separar causa de volume para orientar a decisão.`, hint: 'Selecione um responsável ou cliente e eu abro a leitura completa.' }
-      : worstClients.length > 0
-        ? { text: `${worstClients[0].client} aparece com ${worstClients[0].riskPct}% de exposição no recorte. Vou começar pela evidência antes de recomendar qualquer intervenção.`, hint: 'A decisão vem depois da causa; primeiro vamos entender o sinal.' }
-        : { text: 'A leitura está organizada. Não encontrei um risco dominante, então vou acompanhar os sinais que podem mudar a decisão.', hint: 'Selecione uma evidência para investigar qualquer variação com contexto.' };
+      ? { text: `A carteira tem ${internalDelays.length} atraso(s) interno(s) concentrado(s) em ${topBlame.length || 1} responsável(is). Vou separar causa de volume para orientar a decisão.`, hint: calendarRiskCount > 0 ? `Também há ${calendarRiskCount} cliente(s) em risco sem reunião futura.` : 'Selecione um responsável ou cliente e eu abro a leitura completa.' }
+      : calendarRiskCount > 0
+        ? { text: `Encontrei ${calendarRiskCount} cliente(s) com risco operacional e nenhuma reunião futura identificada na agenda.`, hint: 'A reunião certa pode transformar um risco silencioso em decisão de recuperação.' }
+        : worstClients.length > 0
+          ? { text: `${worstClients[0].client} aparece com ${worstClients[0].riskPct}% de exposição no recorte. Vou começar pela evidência antes de recomendar qualquer intervenção.`, hint: 'A decisão vem depois da causa; primeiro vamos entender o sinal.' }
+          : { text: 'A leitura está organizada. Não encontrei um risco dominante, então vou acompanhar os sinais que podem mudar a decisão.', hint: 'Selecione uma evidência para investigar qualquer variação com contexto.' };
   const activeJarvisMessage = jarvisMessage || initialJarvisMessage;
 
   return (
@@ -709,7 +870,7 @@ function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
 
       <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
-      <ExecutiveKpiBand snapshot={snapshot} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
+      <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
       <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
 
       <div className="executive-visual-grid">
@@ -718,9 +879,15 @@ function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
         <OwnerBars
           owners={topBlame}
           totalDelays={internalDelays.length}
+          statusColors={snapshot?.quantitative?.statusColors}
+          selectedOwnerId={selectedOwnerId}
           onSelect={(person) => {
+            setSelectedOwnerId(person.id);
+            setJarvisMessage({ text: `${person.name} está selecionado com ${person.count} atraso(s) associado(s). O hover mostra as cinco demandas prioritárias; abra todas apenas pelo botão explícito.`, hint: 'Seleção fixada. A abertura completa fica no botão ABRIR ENTREGAS.' });
+          }}
+          onOpen={(person) => {
             setDetailPanel({ type: 'owner', id: person.id, title: `Gargalos: ${person.name}` });
-            setJarvisMessage({ text: `Estou investigando ${person.count} atraso(s) associado(s) a ${person.name}. A evidência ajuda a separar causa de percepção.`, hint: 'Próximo: abrir os itens e entender onde o prazo se perdeu.' });
+            setJarvisMessage({ text: `Abrindo todas as ${person.count} entregas de ${person.name}. A investigação vai separar causa, cliente, etapa e urgência.`, hint: 'O painel central reúne a lista completa e os links para o Monday.' });
           }}
         />
         <RiskBars
@@ -867,14 +1034,17 @@ function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
   const overdue = snapshot?.quantitative?.overdueInternal ?? 0;
   const stalled = snapshot?.portfolioExecution?.stalled?.length ?? 0;
   const clientRisks = snapshot?.clientRanking?.filter(item => (item.delayedItems || 0) > 0).length ?? 0;
+  const calendarRiskCount = snapshot?.calendarSignals?.riskClientsWithoutMeeting?.length ?? 0;
   const decisions = snapshot?.summary?.decisionsNeeded ?? 0;
   const firstPriority = stalled > 0
     ? `${stalled} cliente(s) ativo(s) estão sem conteúdo em produção ou demanda aberta.`
     : overdue > 0
       ? `${overdue} atraso(s) interno(s) pedem investigação antes de adicionar mais pressão à produção.`
-      : clientRisks > 0
-        ? `${clientRisks} cliente(s) apresentam sinais de previsibilidade que merecem acompanhamento.`
-        : 'A carteira não apresenta um sinal crítico dominante nesta leitura.';
+      : calendarRiskCount > 0
+        ? `${calendarRiskCount} cliente(s) em risco não têm reunião futura identificada na agenda.`
+        : clientRisks > 0
+          ? `${clientRisks} cliente(s) apresentam sinais de previsibilidade que merecem acompanhamento.`
+          : 'A carteira não apresenta um sinal crítico dominante nesta leitura.';
   const priorityClass = stability === null ? 'attention' : stability < 50 ? 'critical' : stability < 75 ? 'attention' : 'stable';
 
   return (
@@ -968,7 +1138,7 @@ function App() {
         throw new Error(`Command Center: ${metricsData.error || 'não foi possível carregar as métricas.'}`);
       }
 
-      setMetrics({ executiveSnapshot: metricsData.metrics.executiveSnapshot });
+      setMetrics({ executiveSnapshot: metricsData.metrics.executiveSnapshot, history: metricsData.meta?.history || null });
     } catch (err) {
       setError(err.message || 'Falha catastrófica de comunicação com o Monday.com.');
     } finally {
@@ -1023,7 +1193,7 @@ function App() {
 
       {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">

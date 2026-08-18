@@ -15,6 +15,12 @@ function cleanSnapshot(snapshot = {}) {
     model: typeof snapshot.model === 'string' ? snapshot.model.slice(0, 80) : 'executive-signal-v1',
     portfolioStability: snapshot.portfolioStability || null,
     summary: snapshot.summary || {},
+    quantitative: snapshot.quantitative || {},
+    clientRanking: Array.isArray(snapshot.clientRanking) ? snapshot.clientRanking.slice(0, 100) : [],
+    portfolioReadiness: snapshot.portfolioReadiness || null,
+    sourceQuality: snapshot.sourceQuality || null,
+    calendarSignals: snapshot.calendarSignals || null,
+    productivity: snapshot.productivity || null,
     executiveRisks: Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks.slice(0, 30) : [],
     decisionsNeeded: Array.isArray(snapshot.decisionsNeeded) ? snapshot.decisionsNeeded.slice(0, 20) : []
   };
@@ -32,6 +38,57 @@ export async function saveExecutiveSnapshot(snapshot) {
   };
   await snapshotStore.set(record);
   return record;
+}
+
+export function summarizeExecutiveDelta(currentSnapshot = null, previousSnapshot = null) {
+  if (!currentSnapshot || !previousSnapshot) {
+    return { status: 'no_baseline', available: false, message: 'Ainda não existe uma leitura anterior persistida para comparação.' };
+  }
+
+  const currentSummary = currentSnapshot.summary || {};
+  const previousSummary = previousSnapshot.summary || {};
+  const currentScore = Number(currentSnapshot.portfolioStability?.score);
+  const previousScore = Number(previousSnapshot.portfolioStability?.score);
+  const value = (key, source = currentSummary) => Number(source?.[key]) || 0;
+  const fields = [
+    ['delayedTeam', 'Atrasos internos'],
+    ['delayedClient', 'Veiculações vencidas'],
+    ['delayedDemands', 'Demandas vencidas'],
+    ['missingPlanning', 'Clientes sem planejamento'],
+    ['missingDashboard', 'Clientes sem dashboard/calendário']
+  ];
+  const changes = fields.map(([key, label]) => ({
+    key,
+    label,
+    current: value(key, currentSummary),
+    previous: value(key, previousSummary),
+    delta: value(key, currentSummary) - value(key, previousSummary),
+    direction: value(key, currentSummary) - value(key, previousSummary) < 0 ? 'improving' : value(key, currentSummary) - value(key, previousSummary) > 0 ? 'worsening' : 'stable'
+  }));
+  const currentStalled = value('stalledClients', currentSummary);
+  const previousStalled = value('stalledClients', previousSummary);
+  changes.splice(2, 0, {
+    key: 'stalledClients',
+    label: 'Clientes sem execução',
+    current: currentStalled,
+    previous: previousStalled,
+    delta: currentStalled - previousStalled,
+    direction: currentStalled - previousStalled < 0 ? 'improving' : currentStalled - previousStalled > 0 ? 'worsening' : 'stable'
+  });
+
+  return {
+    status: 'available',
+    available: true,
+    capturedAt: currentSnapshot.capturedAt || null,
+    previousCapturedAt: previousSnapshot.capturedAt || null,
+    score: {
+      current: Number.isFinite(currentScore) ? currentScore : null,
+      previous: Number.isFinite(previousScore) ? previousScore : null,
+      delta: Number.isFinite(currentScore) && Number.isFinite(previousScore) ? currentScore - previousScore : null,
+      direction: Number.isFinite(currentScore) && Number.isFinite(previousScore) ? (currentScore > previousScore ? 'improving' : currentScore < previousScore ? 'worsening' : 'stable') : 'not_available'
+    },
+    changes
+  };
 }
 
 export function summarizeSnapshotTrend(snapshots = [], now = new Date()) {

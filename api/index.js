@@ -6,13 +6,13 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
-import { getFutureMeetings } from '../server/integrations/calendar.js';
+import { getFutureMeetings, getCalendarSnapshot } from '../server/integrations/calendar.js';
 import { describeVybePanelSource, getVybePanelProductionSnapshot } from '../server/integrations/vybe-panel.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildClientHealthScore } from '../server/domain/health-score.js';
-import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend } from '../server/domain/executive-snapshots.js';
+import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend, summarizeExecutiveDelta } from '../server/domain/executive-snapshots.js';
 import { listImpactRecords, saveImpactRecord, updateImpactRecord } from '../server/domain/impact-records.js';
 import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from '../server/domain/health-snapshots.js';
 import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
@@ -477,16 +477,18 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   console.log('[API] /api/dashboard/metrics called');
   try {
     console.log('[API] Fetching from Monday...');
-    const [bottlenecks, posts, demands] = await Promise.all([
+    const [bottlenecks, posts, demands, calendar] = await Promise.all([
       mondayIntegration.getClientBottlenecks(),
       mondayIntegration.getOpenPosts(),
-      mondayIntegration.getDelayedDemands()
+      mondayIntegration.getDelayedDemands(),
+      getCalendarSnapshot()
     ]);
     console.log('[API] Fetched from Monday successfully');
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
       posts,
       demands,
+      calendar,
       generatedAt: new Date().toISOString()
     });
     let snapshotSaved = false;
@@ -497,6 +499,20 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       } catch (snapshotError) {
         console.warn('[API] Snapshot executivo não persistido:', snapshotError.message);
       }
+    }
+
+    let history = { status: 'unavailable', available: false, message: 'Histórico executivo indisponível nesta implantação.' };
+    try {
+      const storedSnapshots = await listExecutiveSnapshots({ limit: 3 });
+      const baseline = snapshotSaved ? storedSnapshots[1] : storedSnapshots[0];
+      history = summarizeExecutiveDelta(executiveSnapshot, baseline);
+      history.snapshotsAvailable = storedSnapshots.length;
+    } catch (historyError) {
+      history = {
+        status: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'not_configured' : 'unavailable',
+        available: false,
+        message: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'Configure o datastore de snapshots para acompanhar mudanças entre leituras.' : 'Não foi possível carregar o histórico executivo.'
+      };
     }
 
     // A leitura custa três consultas ao Monday e alguns segundos. Sem cache, cada
@@ -512,7 +528,14 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       metrics: {
         executiveSnapshot
       },
-      meta: { source: 'Monday.com', generatedAt: new Date().toISOString(), freshness: 'live', snapshotSaved }
+      meta: {
+        source: 'Monday.com',
+        generatedAt: executiveSnapshot.generatedAt,
+        freshness: 'live',
+        snapshotSaved,
+        history,
+        sourceQuality: executiveSnapshot.sourceQuality
+      }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar métricas do Monday:", error);
