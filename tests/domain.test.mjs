@@ -13,6 +13,8 @@ import {
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildCalendarSignals, buildExecutiveSnapshot } from '../server/domain/executive.js';
+import { summarizeExecutiveDelta } from '../server/domain/executive-snapshots.js';
+import { buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
@@ -425,4 +427,51 @@ test('Vybe Painel retorna snapshot read-only completo por cursor', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test('Delta executivo compara clientes sem execução usando o resumo persistido', () => {
+  const delta = summarizeExecutiveDelta(
+    { capturedAt: '2026-08-18T10:00:00.000Z', portfolioStability: { score: 4 }, summary: { stalledClients: 1, delayedTeam: 4 } },
+    { capturedAt: '2026-08-17T10:00:00.000Z', portfolioStability: { score: -1 }, summary: { stalledClients: 2, delayedTeam: 6 } }
+  );
+  const stalled = delta.changes.find(change => change.key === 'stalledClients');
+  assert.deepEqual(stalled, {
+    key: 'stalledClients',
+    label: 'Clientes sem execução',
+    current: 1,
+    previous: 2,
+    delta: -1,
+    direction: 'improving'
+  });
+  assert.equal(delta.score.delta, 5);
+});
+
+test('Briefing executivo apresenta score bruto em pontos, não como percentual', () => {
+  const briefing = buildExecutiveBriefing({
+    snapshot: { portfolioStability: { score: -26 }, summary: { executiveRisks: 4 } },
+    effectiveness: { negativeCount: 0 },
+    risks: [],
+    patterns: { patterns: [] }
+  });
+  assert.match(briefing.opening, /-26 pts/);
+  assert.doesNotMatch(briefing.opening, /-26%/);
+  assert.match(briefing.opening, /não é percentual/i);
+});
+
+test('Score executivo preserva a dedução de prontidão no resumo e na composição', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      missingPlanning: ['Cliente A'],
+      missingDashboard: ['Cliente A'],
+      quantitative: { eligibleClients: 1, planningCoveragePct: 0, dashboardCoveragePct: 0 },
+      activePortfolio: [{ name: 'Cliente A', since: '2025-01-01T00:00:00Z' }]
+    },
+    posts: { ranking: [], quantitative: { activeItems: 0, completedItems: 0 } },
+    demands: Object.assign([], { clientsWithOpenDemand: [] }),
+    generatedAt: '2026-08-18T00:00:00.000Z'
+  });
+  assert.equal(snapshot.summary.stalledClients, 1);
+  assert.deepEqual(snapshot.portfolioStability.scoreDeductions.filter(item => item.points > 0).map(item => item.id), ['execution-gap', 'planning-source-gap', 'dashboard-source-gap']);
+  assert.equal(snapshot.portfolioStability.recoveryPointsAvailable, 15);
 });

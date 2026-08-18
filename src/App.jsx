@@ -98,6 +98,17 @@ const formatPoints = (value) => {
   return `${numeric > 0 ? '+' : ''}${formatNumber(numeric)} pts`;
 };
 
+const scoreComposition = (snapshot) => {
+  const rawScore = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
+  const deductions = Array.isArray(snapshot?.portfolioStability?.scoreDeductions) ? snapshot.portfolioStability.scoreDeductions : [];
+  if (!Number.isFinite(rawScore)) return 'Composição do score indisponível nesta leitura.';
+  const terms = deductions
+    .filter(deduction => Number(deduction?.points) > 0)
+    .map(deduction => `(${formatNumber(deduction.count)} ${String(deduction.label || 'sinal').toLowerCase()} × ${formatNumber(deduction.pointsPerItem)} pts)`);
+  const formula = terms.length ? `100 − ${terms.join(' − ')}` : '100';
+  return `${formula} = ${formatPoints(rawScore)}. O score é bruto, pode ficar negativo e não representa percentual financeiro ou satisfação.`;
+};
+
 const delayUrgency = (days) => {
   const value = Number(days) || 0;
   if (value >= 15) return { tone: 'catastrophic', label: 'CRÍTICO', description: 'Atraso crítico: exige intervenção executiva imediata.' };
@@ -271,11 +282,11 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history }) {
   const delayedPublication = Number(quantitative.overduePublication) || 0;
   const stalledCount = Number(execution.stalled?.length || 0);
   const delayedDemands = Number(snapshot?.summary?.delayedDemands) || 0;
-  const healthRaw = 100 - delayedInternal * 2 - delayedPublication * 5 - stalledCount * 5 - delayedDemands * 2;
-  const healthScore = Number.isFinite(Number(stability)) ? Number(stability) : healthRaw;
+  const healthScore = Number.isFinite(Number(stability)) ? Number(stability) : 0;
+  const healthExplanation = scoreComposition(snapshot);
   const stabilityTone = healthScore < 0 ? 'catastrophic' : healthScore < 25 ? 'critical' : healthScore < 60 ? 'warning' : 'stable';
   const cards = [
-    { id: 'health', label: 'SAÚDE EXECUTIVA', value: formatPoints(healthScore), detail: `${healthScore < 0 ? 'ABAIXO DA LINHA DE RECUPERAÇÃO' : snapshot?.portfolioStability?.label || 'sem leitura'} · score bruto`, progress: healthScore, min: -100, max: 100, tone: stabilityTone, title: 'Score bruto de pressão operacional. Pode ficar negativo; não é percentual de itens saudáveis nem indicador financeiro.', explanation: `Fórmula: 100 − (${delayedInternal}×2) − (${delayedPublication}×5) − (${stalledCount}×5) − (${delayedDemands}×2) = ${healthScore}. Cada fator retira pontos; cada missão recuperada devolve pontos.`, action: 'Abrir composição do score' },
+    { id: 'health', label: 'SAÚDE EXECUTIVA', value: formatPoints(healthScore), detail: `${healthScore < 0 ? 'ABAIXO DA LINHA DE RECUPERAÇÃO' : snapshot?.portfolioStability?.label || 'sem leitura'} · score bruto`, progress: healthScore, min: -100, max: 100, tone: stabilityTone, title: 'Score bruto de pressão operacional. Pode ficar negativo; não é percentual de itens saudáveis nem indicador financeiro.', explanation: healthExplanation, action: 'Abrir composição do score' },
     { id: 'active', priority: 'supporting', label: 'ITENS ATIVOS', value: formatNumber(activeItems), detail: `${formatPct(quantitative.activePct)} da base histórica`, progress: quantitative.activePct, tone: 'cyan', title: 'Itens ativos no recorte atual do board Produção de Conteúdo.', explanation: `${formatNumber(activeItems)} ativos de ${formatNumber(activeBase)} itens lidos, excluindo Finalizado, Publicado e Cancelado do recorte ativo.`, action: 'Abrir composição da carteira' },
     { id: 'delays', label: 'ATRASOS INTERNOS', value: formatNumber(delayedInternal), detail: `${formatPct(quantitative.overdueInternalPctOfActive)} dos ativos · -${formatNumber(delayedInternal * 2)} pts`, progress: quantitative.overdueInternalPctOfActive, tone: 'critical', title: 'Itens ativos com prazo interno vencido.', explanation: `${formatNumber(delayedInternal)} evidências no Monday, distribuídas por cliente, responsável, etapa, status e dias de atraso. Cada uma retira 2 pontos do score.`, action: 'Abrir os itens atrasados' },
     { id: 'exposure', label: 'CLIENTES EXPOSTOS', value: formatNumber(riskClients), detail: eligibleClients ? `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} ativos` : 'denominador indisponível', progress: exposedPct, tone: 'warning', title: 'Clientes com pelo menos um atraso agregado no recorte.', explanation: `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} clientes ativos têm pelo menos um atraso interno ou de veiculação.`, action: 'Abrir clientes expostos' },
@@ -689,9 +700,6 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         : 'QUALIDADE NÃO INFORMADA';
   const readinessClients = readinessDeduction?.affectedClients || [];
   const visibleReadinessClients = showAll ? readinessClients : readinessClients.slice(0, 5);
-  const readinessPoints = (readiness.scoreDeductions || []).reduce((total, deduction) => total + (Number(deduction.points) || 0), 0);
-  const rawScore = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score) || 0;
-  const readinessFormula = readinessPoints ? ` − (${readinessPoints} pts de prontidão)` : '';
 
   const configs = {
     health: { eyebrow: 'KPI · PLACAR EXECUTIVO', title: 'Qual é a pressão real sobre o placar?', subtitle: 'O score bruto pode ficar negativo. Ele mostra o quanto a operação está abaixo da linha de recuperação.', accent: 'critical' },
@@ -744,7 +752,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
 
         {panel.id === 'health' ? <>
           <div className="kpi-score-explanation"><div><span>SCORE BRUTO ATUAL</span><strong>{formatPoints(score)}</strong></div><div><span>PONTOS RECUPERÁVEIS</span><strong>{formatPoints(snapshot?.portfolioStability?.recoveryPointsAvailable || 0)}</strong></div></div>
-          <div className="investigation-callout"><span>COMO O PLACAR FOI COMPOSTO</span><p>100 − ({delayedInternal} atrasos internos × 2) − ({delayedPublication} veiculações vencidas × 5) − ({stalled} clientes sem execução × 5) − ({delayedDemands} demandas vencidas × 2){readinessFormula} = {rawScore} pts. O valor não é limitado a 0: quanto mais negativo, maior a missão de recuperação.</p></div>
+          <div className="investigation-callout"><span>COMO O PLACAR FOI COMPOSTO</span><p>{scoreComposition(snapshot)}</p></div>
           <div className="kpi-factor-grid"><div><strong>{delayedInternal}</strong><span>ATRASOS INTERNOS × 2</span></div><div><strong>{delayedPublication}</strong><span>VEICULAÇÕES × 5</span></div><div><strong>{stalled}</strong><span>SEM EXECUÇÃO × 5</span></div><div><strong>{delayedDemands}</strong><span>DEMANDAS VENCIDAS × 2</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)}</strong><span>{deduction.label.toUpperCase()}</span></div>)}</div>
           <p className="investigation-footnote">Este proxy não mede receita, satisfação ou produtividade individual. Ele sinaliza que a pressão operacional ultrapassou o limite da escala atual.</p>
         </> : null}

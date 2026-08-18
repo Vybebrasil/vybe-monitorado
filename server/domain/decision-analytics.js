@@ -76,7 +76,7 @@ export function buildExecutiveBriefing({ snapshot = {}, effectiveness, risks = [
   return {
     title: 'Briefing Executivo do Nexus',
     generatedAt: new Date().toISOString(),
-    opening: snapshot.portfolioStability?.score !== undefined ? `A carteira apresenta estabilidade de ${snapshot.portfolioStability.score}%, com ${snapshot.summary?.executiveRisks || 0} sinais executivos ativos.` : 'A carteira ainda aguarda dados executivos suficientes.',
+    opening: snapshot.portfolioStability?.score !== undefined ? `O placar bruto da carteira está em ${snapshot.portfolioStability.score > 0 ? '+' : ''}${snapshot.portfolioStability.score} pts, com ${snapshot.summary?.executiveRisks || 0} sinais executivos ativos. O valor representa pressão operacional e não é percentual financeiro ou de satisfação.` : 'A carteira ainda aguarda dados executivos suficientes.',
     priorities: [
       topRisk ? topRisk.recommendedAction : 'Revisar decisões sem checkpoint.',
       effectiveness?.negativeCount ? `Reavaliar ${effectiveness.negativeCount} diretriz(es) com impacto negativo.` : 'Registrar impacto das decisões ainda não avaliadas.',

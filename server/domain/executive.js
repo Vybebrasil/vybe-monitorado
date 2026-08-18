@@ -375,6 +375,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       delayedTeam,
       delayedClient,
       delayedDemands,
+      stalledClients: executionGap.stalled.length,
       missingPlanning: missingPlanning.length,
       missingDashboard: missingDashboard.length,
       executiveRisks: executiveRisks.length,
