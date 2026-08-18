@@ -94,6 +94,13 @@ function buildClientRisks(ranking) {
 
 export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], generatedAt = new Date().toISOString() }) {
   const ranking = posts.ranking || [];
+  const boardPagination = {
+    production: posts.pagination || null,
+    clients: bottlenecks.pagination || null,
+    demands: demands.pagination || null
+  };
+  const paginationStates = Object.values(boardPagination).filter(Boolean);
+  const sourcesComplete = paginationStates.length === 3 && paginationStates.every(state => state.complete === true);
   const responsavelRanking = posts.responsavelRanking || [];
   const delayDetails = posts.delayDetails || [];
   const productivity = posts.productivity || {};
@@ -311,6 +318,15 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       title: 'PAINEL EXECUTIVO',
       question: 'Qual decisão executiva precisa ser tomada agora?',
       focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
+    },
+    sourceQuality: {
+      monday: {
+        complete: sourcesComplete,
+        boards: boardPagination,
+        note: sourcesComplete
+          ? 'Todos os boards consultados foram percorridos por cursor.'
+          : 'A completude da leitura ainda não foi confirmada para todos os boards.'
+      }
     },
     methodology: {
       source: 'Monday.com · Produção de Conteúdo',

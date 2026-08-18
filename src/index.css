@@ -362,3 +362,18 @@ body {
 .list-expand { display: inline-flex; margin-top: 0.85rem; padding: 0.45rem 0.7rem; border: 1px solid var(--vybe-border); background: transparent; color: var(--vybe-orange); cursor: pointer; font: 700 0.62rem var(--font-mono); letter-spacing: 0.08em; }
 .list-expand:hover, .list-expand:focus-visible { border-color: var(--vybe-orange); background: rgba(255,85,0,0.1); color: #fff; outline: none; }
 .table-expand { margin: 0.4rem 1rem 1rem; }
+
+
+/* Ponte read-only do Vybe Painel no modo ANALISTA */
+.analyst-panel-sync{margin:0 0 18px;padding:16px 18px;background:linear-gradient(120deg,rgba(255,157,0,.08),rgba(0,243,255,.04));}
+.analyst-source-summary{color:var(--vybe-text-main);font-size:13px;letter-spacing:.02em;}
+.analyst-source-summary strong{color:var(--vybe-orange);font-size:18px;}
+.analyst-source-groups{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.analyst-source-chip{padding:6px 9px;border:1px solid rgba(255,157,0,.28);color:var(--vybe-text-muted);font-size:11px;}
+.analyst-source-chip b{color:var(--vybe-text-main);}
+.analyst-panel-affected{display:flex;justify-content:space-between;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:var(--vybe-orange);}
+.analyst-source-hint{color:var(--vybe-text-muted);}
+.analyst-source-loading,.analyst-source-warning{padding:12px;border:1px dashed rgba(255,157,0,.35);color:var(--vybe-text-muted);font-size:12px;}
+.analyst-source-warning{color:var(--vybe-gold);}
+.analyst-panel-match{color:var(--vybe-orange);font-size:10px;letter-spacing:.08em;}
+@media (max-width:760px){.analyst-panel-affected{flex-direction:column}.analyst-source-summary{line-height:1.6}}

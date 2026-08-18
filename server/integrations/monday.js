@@ -113,7 +113,7 @@ class MondayIntegration {
     return '';
   }
 
-  async query(graphqlQuery) {
+  async query(graphqlQuery, variables = {}) {
     const token = this.getToken();
     if (!token) throw new Error("MONDAY_API_TOKEN not found.");
 
@@ -127,7 +127,7 @@ class MondayIntegration {
           'Authorization': token,
           'API-Version': '2024-01'
         },
-        body: JSON.stringify({ query: graphqlQuery }),
+        body: JSON.stringify({ query: graphqlQuery, variables }),
         signal: controller.signal
       });
 
@@ -146,27 +146,55 @@ class MondayIntegration {
     }
   }
 
+  async getAllBoardItems({ boardId, selection, queryParams = '', limit = PAGE_LIMIT }) {
+    const pageLimit = Math.min(Math.max(Number(limit) || PAGE_LIMIT, 1), PAGE_LIMIT);
+    const items = [];
+    let cursor = null;
+    let pages = 0;
+
+    while (true) {
+      const query = cursor
+        ? `query($cursor: String!) {
+            next_items_page(limit: ${pageLimit}, cursor: $cursor) {
+              cursor
+              items { ${selection} }
+            }
+          }`
+        : `query {
+            boards(ids: [${boardId}]) {
+              items_page(limit: ${pageLimit}${queryParams}) {
+                cursor
+                items { ${selection} }
+              }
+            }
+          }`;
+
+      const data = await this.query(query, cursor ? { cursor } : {});
+      const page = cursor ? data.next_items_page : data.boards?.[0]?.items_page;
+      if (!page) throw new Error(`Monday não retornou a página do board ${boardId}.`);
+
+      pages += 1;
+      items.push(...(page.items || []));
+      cursor = page.cursor || null;
+      if (!cursor) break;
+    }
+
+    return { items, pagination: { pages, count: items.length, complete: true } };
+  }
+
   // 1. Clientes sem planejamento ou com dashboard atrasado
   async getClientBottlenecks() {
     // Board: 7758256536 (Gestão de Clientes)
     // Columns: link_mkzdvjjs (Planejamento), color_mkzkgn5c (Dashboard), status (Status)
-    const q = `query {
-      boards(ids: [7758256536]) {
-        items_page(limit: 100) {
-          items {
-            name
-            created_at
-            column_values {
-              id
-              text
-            }
-          }
-        }
-      }
-    }`;
-
-    const result = await this.query(q);
-    const items = result.boards[0]?.items_page?.items || [];
+    const { items, pagination } = await this.getAllBoardItems({
+      boardId: 7758256536,
+      limit: 500,
+      selection: `
+        name
+        created_at
+        column_values { id text }
+      `
+    });
 
     const missingPlanning = [];
     const missingDashboard = [];
@@ -221,7 +249,8 @@ class MondayIntegration {
         planningCoveragePct: percent(clientsWithPlanning, eligibleClients),
         clientsWithDashboard,
         dashboardCoveragePct: percent(clientsWithDashboard, eligibleClients)
-      }
+      },
+      pagination
     };
   }
 
@@ -235,37 +264,22 @@ class MondayIntegration {
     // ativa crescer para que itens sumissem em silêncio, sem erro nenhum.
     // Por isso o corte é feito na origem, filtrando o status concluído. O total
     // do board vem por items_count, que é o denominador correto de conclusão.
-    const q = `query {
-      boards(ids: [7829537690]) {
-        items_count
-        items_page(limit: ${PAGE_LIMIT}, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }) {
-          cursor
-          items {
-            id
-            name
-            group {
-              title
-            }
-            column_values {
-              id
-              text
-              value
-            }
-          }
-        }
-      }
-    }`;
+    const { items, pagination } = await this.getAllBoardItems({
+      boardId: 7829537690,
+      limit: PAGE_LIMIT,
+      queryParams: `, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }`,
+      selection: `
+        id
+        name
+        group { title }
+        column_values { id text value }
+      `
+    });
 
-    const result = await this.query(q);
-    const board = result.boards[0] || {};
-    const items = board.items_page?.items || [];
-    const boardItemsCount = Number(board.items_count) || items.length;
-
-    // Rede de segurança: se o filtro deixar de valer (rótulo renomeado, novo
-    // status de conclusão) a leitura volta a truncar. Melhor gritar que silenciar.
-    if (board.items_page?.cursor) {
-      console.warn(`[MONDAY] Leitura truncada em ${items.length} itens: o board tem mais páginas não lidas. Os números do Nexus estão incompletos.`);
-    }
+    const countResult = await this.query(`query {
+      boards(ids: [7829537690]) { items_count }
+    }`);
+    const boardItemsCount = Number(countResult.boards?.[0]?.items_count) || items.length;
 
     const postsByClient = {};
     let totalDelayed = 0;
@@ -518,7 +532,8 @@ class MondayIntegration {
         groupCounts,
         priorityCounts,
         formatCounts
-      }
+      },
+      pagination
     };
   }
 
@@ -526,27 +541,16 @@ class MondayIntegration {
   async getDelayedDemands() {
     // Board: 8385559107 (Solicitações de Demandas)
     // Columns: lista_suspensa_mkmet5gs (Cliente), status (Status), data (Prazo)
-    const q = `query {
-      boards(ids: [8385559107]) {
-        items_page(limit: 500) {
-          items {
-            id
-            name
-            group {
-              title
-            }
-            column_values {
-              id
-              text
-              value
-            }
-          }
-        }
-      }
-    }`;
-
-    const result = await this.query(q);
-    const items = result.boards[0]?.items_page?.items || [];
+    const { items, pagination } = await this.getAllBoardItems({
+      boardId: 8385559107,
+      limit: 500,
+      selection: `
+        id
+        name
+        group { title }
+        column_values { id text value }
+      `
+    });
 
     const delayedDemands = [];
     // Demanda aberta é diferente de demanda atrasada: um cliente com demandas no
@@ -594,30 +598,22 @@ class MondayIntegration {
     // O array continua sendo o retorno principal para não quebrar quem só conta
     // atrasos; a carteira com demanda aberta viaja junto como propriedade.
     delayedDemands.clientsWithOpenDemand = [...clientsWithOpenDemand];
+    delayedDemands.pagination = pagination;
     return delayedDemands;
   }
 
   // 4. Client Logs (Histórico de Reuniões)
   async getClientLogs() {
     // Board: 9918871233 (Reuniões)
-    const q = `query {
-      boards(ids: [9918871233]) {
-        items_page(limit: 500) {
-          items {
-            id
-            name
-            column_values {
-              id
-              text
-              value
-            }
-          }
-        }
-      }
-    }`;
-
-    const result = await this.query(q);
-    const items = result.boards[0]?.items_page?.items || [];
+    const { items, pagination } = await this.getAllBoardItems({
+      boardId: 9918871233,
+      limit: 500,
+      selection: `
+        id
+        name
+        column_values { id text value }
+      `
+    });
     const clientLogs = {};
 
     // 1. Preenche apenas com os Clientes Ativos
@@ -711,6 +707,7 @@ class MondayIntegration {
       return daysB - daysA;
     });
 
+    sortedLogs.pagination = pagination;
     return sortedLogs;
   }
 }

@@ -183,3 +183,11 @@ A integração usa o padrão oficial de autenticação Bearer e comandos JSON da
 A seção de **Produtividade Executiva** interpreta fluxo e capacidade da carteira, não produtividade individual. Ela apresenta o percentual concluído no recorte, itens prontos para saída, itens com atraso, carga ativa por etapa e concentração de atrasos por responsável. O Monday atual não fornece horas trabalhadas, metas individuais ou capacidade contratada suficiente para medir performance pessoal de forma confiável.
 
 Cartões, status, clientes em risco e sinais associados a clientes possuem explicações por hover e podem ser selecionados. O painel de evidência mostra o item do Monday, cliente, etapa, status, tipo de atraso, dias vencidos, prazo, responsável, criação e link direto para o registro operacional. Itens Finalizado, Publicado e Cancelado permanecem fora da base ativa; Agendado e Para agendar continuam incluídos.
+
+## Integração completa com o Vybe Painel
+
+O Nexus mantém o Monday como fonte operacional canônica, mas também possui um adaptador read-only opcional para o proxy GraphQL do Vybe Painel. A rota `GET /api/executive/vybe-panel` devolve itens completos do board de Produção, incluindo organização por grupo, atualizações e valores de colunas, sempre com paginação por cursor e metadados de completude. A ponte não cria itens, não altera status e não substitui a execução do Painel.
+
+O conector do Monday também percorre todas as páginas dos boards de Gestão de Clientes, Produção de Conteúdo, Solicitações de Demandas e Reuniões. O snapshot executivo passa a informar quantas páginas e registros foram lidos e se cada board foi concluído. Itens `Finalizado`, `Publicado` e `Cancelado` continuam fora dos KPIs ativos, mas permanecem disponíveis na leitura histórica completa.
+
+A integração do Vybe Painel usa `VYBE_PANEL_API_URL`, `VYBE_PANEL_API_VERSION` e, quando necessário, `VYBE_PANEL_API_TOKEN`. Por padrão, a URL aponta para o proxy público atual, mas a variável permite substituir o endpoint por um contrato oficial estável no futuro.

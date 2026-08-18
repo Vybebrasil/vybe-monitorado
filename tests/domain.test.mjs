@@ -15,6 +15,8 @@ import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
+import mondayIntegration from '../server/integrations/monday.js';
+import { getVybePanelProductionSnapshot } from '../server/integrations/vybe-panel.js';
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
@@ -280,5 +282,89 @@ test('Adaptador remoto serializa registros e usa autenticação Bearer', async (
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  }
+});
+
+
+test('Monday percorre todas as páginas por cursor e informa completude', async () => {
+  const originalToken = process.env.MONDAY_API_TOKEN;
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  process.env.MONDAY_API_TOKEN = 'token-for-test';
+
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, payload: JSON.parse(options.body) });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({
+        data: { boards: [{ items_page: { cursor: 'cursor-1', items: [{ id: '1', name: 'Primeiro' }] } }] }
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      data: { next_items_page: { cursor: null, items: [{ id: '2', name: 'Segundo' }] } }
+    }), { status: 200 });
+  };
+
+  try {
+    const result = await mondayIntegration.getAllBoardItems({
+      boardId: 7829537690,
+      limit: 500,
+      selection: 'id name'
+    });
+
+    assert.deepEqual(result.items.map(item => item.id), ['1', '2']);
+    assert.deepEqual(result.pagination, { pages: 2, count: 2, complete: true });
+    assert.match(requests[0].payload.query, /items_page\(limit: 500\)/);
+    assert.match(requests[1].payload.query, /next_items_page\(limit: 500, cursor: \$cursor\)/);
+    assert.deepEqual(requests[1].payload.variables, { cursor: 'cursor-1' });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.MONDAY_API_TOKEN;
+    else process.env.MONDAY_API_TOKEN = originalToken;
+  }
+});
+
+
+test('Snapshot sinaliza completude da leitura paginada do Monday', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: { pagination: { pages: 1, count: 12, complete: true } },
+    posts: {
+      ranking: [],
+      pagination: { pages: 4, count: 1600, complete: true }
+    },
+    demands: Object.assign([], { pagination: { pages: 2, count: 650, complete: true } }),
+    generatedAt: '2026-08-18T00:00:00.000Z'
+  });
+
+  assert.equal(snapshot.sourceQuality.monday.complete, true);
+  assert.equal(snapshot.sourceQuality.monday.boards.production.pages, 4);
+  assert.equal(snapshot.sourceQuality.monday.boards.demands.count, 650);
+});
+
+
+test('Vybe Painel retorna snapshot read-only completo por cursor', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, payload: JSON.parse(options.body) });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({
+        data: { boards: [{ items_page: { cursor: 'panel-cursor-1', items: [{ id: 'panel-1', name: 'Item do Painel' }] } }] }
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      data: { next_items_page: { cursor: null, items: [{ id: 'panel-2', name: 'Segundo item' }] } }
+    }), { status: 200 });
+  };
+
+  try {
+    const result = await getVybePanelProductionSnapshot({ limit: 200 });
+    assert.deepEqual(result.items.map(item => item.id), ['panel-1', 'panel-2']);
+    assert.deepEqual(result.pagination, { pages: 2, count: 2, complete: true });
+    assert.equal(result.source, 'Vybe Painel');
+    assert.deepEqual(requests[0].payload.variables, {});
+    assert.deepEqual(requests[1].payload.variables, { cursor: 'panel-cursor-1' });
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getFutureMeetings } from '../server/integrations/calendar.js';
+import { describeVybePanelSource, getVybePanelProductionSnapshot } from '../server/integrations/vybe-panel.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -98,6 +99,34 @@ app.get('/api/healthz', async (req, res) => {
     persistence,
     generatedAt: new Date().toISOString()
   });
+});
+
+// Ponte read-only para o Vybe Painel: preserva organização, descrição e evidência
+// sem permitir alterações no board ou nos status operacionais.
+app.get('/api/executive/vybe-panel', async (req, res) => {
+  try {
+    const snapshot = await getVybePanelProductionSnapshot({
+      limit: Math.min(Number(req.query.limit) || 200, 500)
+    });
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+    res.json({
+      success: true,
+      ...snapshot,
+      meta: {
+        source: describeVybePanelSource(),
+        access: 'public-link-read',
+        readOnly: true,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[API] Erro ao ler o Vybe Painel:', error);
+    res.set('Cache-Control', 'no-store');
+    res.status(502).json({
+      error: 'VYBE_PANEL_UNAVAILABLE',
+      message: error.message
+    });
+  }
 });
 
 const PORT = Number(process.env.PORT || 3005);

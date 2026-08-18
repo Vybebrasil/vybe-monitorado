@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
 import { Activity } from 'lucide-react';
 
@@ -20,6 +20,21 @@ const CustomTooltip = ({ active, payload }) => {
 export default function AnalystStation({ snapshot, onExit }) {
   const statusCounts = snapshot.quantitative?.statusCounts || {};
   const delayDetails = snapshot.delayDetails || [];
+  const [panelSnapshot, setPanelSnapshot] = useState(null);
+  const [panelError, setPanelError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/executive/vybe-panel?limit=200')
+      .then(response => response.ok ? response.json() : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.'))))
+      .then(payload => {
+        if (!cancelled) setPanelSnapshot(payload);
+      })
+      .catch(error => {
+        if (!cancelled) setPanelError(error.message);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Transform statusCounts object to array for Recharts pipeline
   const pipelineData = Object.entries(statusCounts)
@@ -29,6 +44,10 @@ export default function AnalystStation({ snapshot, onExit }) {
 
   // Evidências de atraso ordenadas para investigação executiva
   const allDelaysSorted = [...delayDetails].sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
+  const panelItemsById = useMemo(() => new Map((panelSnapshot?.items || []).map(item => [String(item.id), item])), [panelSnapshot]);
+  const panelAffectedItems = allDelaysSorted
+    .map(item => ({ ...item, panelItem: panelItemsById.get(String(item.id)) }))
+    .filter(item => item.panelItem);
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
@@ -42,7 +61,37 @@ export default function AnalystStation({ snapshot, onExit }) {
         </div>
       </header>
 
-      <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit. Ele não altera o Monday, não cria demanda e não substitui o Vybe Painel.</div>
+      <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit e cruza evidências com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
+
+      <section className="analyst-panel-sync data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
+        <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · LEITURA COMPLETA</div>
+        {panelError ? (
+          <div className="analyst-source-warning">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
+        ) : panelSnapshot ? (
+          <>
+            <div className="analyst-source-summary">
+              <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
+            </div>
+            <div className="analyst-source-groups">
+              {Object.entries((panelSnapshot.items || []).reduce((acc, item) => {
+                const group = item.group?.title || 'Sem grupo';
+                acc[group] = (acc[group] || 0) + 1;
+                return acc;
+              }, {})).slice(0, 6).map(([group, count]) => (
+                <span key={group} className="analyst-source-chip">{group}: <b>{count}</b></span>
+              ))}
+            </div>
+            {panelAffectedItems.length > 0 && (
+              <div className="analyst-panel-affected">
+                <span>Itens afetados encontrados também no Painel: <b>{panelAffectedItems.length}</b></span>
+                <span className="analyst-source-hint">A investigação usa o Monday como origem e o Painel como contexto de organização.</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="analyst-source-loading">Consultando a organização do Vybe Painel…</div>
+        )}
+      </section>
 
       <div className="dashboard-grid full">
 
@@ -97,7 +146,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                         <span className="item-meta" style={{ background: 'rgba(0,255,102,0.1)', color: '#00ff66' }}>OK</span>
                       )}
                     </td>
-                    <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">ABRIR</a></td>
+                    <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">MONDAY</a>{item.panelItem && <span className="analyst-panel-match" title="Este item também foi localizado na organização do Vybe Painel"> · PAINEL</span>}</td>
                   </tr>
                 ))}
                 {allDelaysSorted.length === 0 && (
