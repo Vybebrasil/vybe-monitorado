@@ -10,10 +10,41 @@ const STORE_DEFINITIONS = Object.freeze({
 
 const probeCache = new Map();
 const PROBE_CACHE_MS = 30_000;
+const DEFAULT_RETENTION_DAYS = 180;
+const DEFAULT_MAX_RECORDS = 5_000;
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 const localDataDirectory = () => process.env.NEXUS_LOCAL_DATA_DIR || join(process.cwd(), '.data');
 const firstValue = (...values) => values.find(value => typeof value === 'string' && value.trim())?.trim() || '';
+
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function retentionConfig() {
+  return {
+    enabled: process.env.NEXUS_STORE_RETENTION_ENABLED !== 'false',
+    retentionDays: positiveInteger(process.env.NEXUS_STORE_RETENTION_DAYS, DEFAULT_RETENTION_DAYS),
+    maxRecords: positiveInteger(process.env.NEXUS_STORE_MAX_RECORDS, DEFAULT_MAX_RECORDS)
+  };
+}
+
+function recordTimestamp(record) {
+  const value = record?.capturedAt || record?.updatedAt || record?.createdAt || record?.checkpointAt;
+  const timestamp = value ? new Date(value).getTime() : Date.now();
+  return Number.isFinite(timestamp) ? timestamp : Date.now();
+}
+
+function pruneRecords(records, config = retentionConfig(), now = Date.now()) {
+  if (!config.enabled || !Array.isArray(records)) return { records: records || [], removedIds: [] };
+  const cutoff = now - config.retentionDays * 86400000;
+  const ordered = [...records].sort((a, b) => recordTimestamp(b) - recordTimestamp(a));
+  const retained = ordered.filter(record => recordTimestamp(record) >= cutoff).slice(0, config.maxRecords);
+  const retainedIds = new Set(retained.map(record => record?.id));
+  const removedIds = ordered.filter(record => record?.id && !retainedIds.has(record.id)).map(record => record.id);
+  return { records: retained, removedIds };
+}
 
 function normalizeBaseUrl(value) {
   if (!value) return '';
@@ -64,7 +95,8 @@ function resolveRemoteConfig(storeName) {
     source,
     urlProvided: Boolean(rawUrl),
     tokenProvided: Boolean(token),
-    configured: Boolean(url && token)
+    configured: Boolean(url && token),
+    retention: retentionConfig()
   };
 }
 
@@ -145,7 +177,8 @@ export function describeRecordStore(storeName) {
       ready: true,
       source: config.source,
       key: config.key,
-      missing: []
+      missing: [],
+      retention: retentionConfig()
     };
   }
 
@@ -155,7 +188,8 @@ export function describeRecordStore(storeName) {
       ready: true,
       source: 'NEXUS_LOCAL_DATA_DIR',
       key: config.key,
-      missing: []
+      missing: [],
+      retention: retentionConfig()
     };
   }
 
@@ -167,7 +201,8 @@ export function describeRecordStore(storeName) {
     ready: false,
     source: config.source,
     key: config.key,
-    missing
+    missing,
+    retention: retentionConfig()
   };
 }
 
@@ -211,12 +246,13 @@ export function createRecordStore({ storeName, localFileName, unavailableCode, u
       return describeRecordStore(storeName);
     },
 
-    async list() {
+    async list({ limit = null } = {}) {
       const descriptor = ensureAvailable();
-      if (descriptor.mode === 'local-development') return readLocal(localFileName);
+      const clampLimit = values => Number.isInteger(Number(limit)) && Number(limit) > 0 ? values.slice(0, Number(limit)) : values;
+      if (descriptor.mode === 'local-development') return clampLimit(await readLocal(localFileName));
       try {
         const values = await executeRedis(resolveRemoteConfig(storeName), ['HVALS', descriptor.key]);
-        return (Array.isArray(values) ? values : []).map(value => parseRecord(value, storeName)).filter(Boolean);
+        return clampLimit((Array.isArray(values) ? values : []).map(value => parseRecord(value, storeName)).filter(Boolean));
       } catch (error) {
         throw storageError(unavailableCode, unavailableMessage, error);
       }
@@ -244,11 +280,19 @@ export function createRecordStore({ storeName, localFileName, unavailableCode, u
         const index = records.findIndex(item => item.id === record.id);
         if (index >= 0) records[index] = record;
         else records.push(record);
-        await writeLocal(localFileName, records);
+        const retained = pruneRecords(records, descriptor.retention).records;
+        await writeLocal(localFileName, retained);
         return record;
       }
       try {
-        await executeRedis(resolveRemoteConfig(storeName), ['HSET', descriptor.key, record.id, JSON.stringify(record)]);
+        const config = resolveRemoteConfig(storeName);
+        await executeRedis(config, ['HSET', descriptor.key, record.id, JSON.stringify(record)]);
+        if (descriptor.retention.enabled) {
+          const values = await executeRedis(config, ['HVALS', descriptor.key]);
+          const records = (Array.isArray(values) ? values : []).map(value => parseRecord(value, storeName)).filter(Boolean);
+          const pruned = pruneRecords(records, descriptor.retention);
+          if (pruned.removedIds.length) await executeRedis(config, ['HDEL', descriptor.key, ...pruned.removedIds]);
+        }
         return record;
       } catch (error) {
         throw storageError(unavailableCode, unavailableMessage, error);

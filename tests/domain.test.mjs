@@ -293,6 +293,9 @@ test('Store local fica pronto em desenvolvimento sem declarar persistência exte
   const result = describeRecordStore('decisions');
   assert.equal(result.mode, 'local-development');
   assert.equal(result.ready, true);
+  assert.equal(result.retention.enabled, true);
+  assert.equal(result.retention.retentionDays, 180);
+  assert.equal(result.retention.maxRecords, 5000);
 });
 
 test('Adaptador remoto serializa registros e usa autenticação Bearer', async () => {
