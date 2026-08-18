@@ -25,7 +25,13 @@ const PANEL_SUMMARY_SELECTION = `
   column_values { id text }
 `;
 
-const summaryCache = { value: null, expiresAt: 0, promise: null };
+// Chaveado pelos parâmetros: limit, maxPages e budgetMs vêm da query string, e
+// sem chave o primeiro que chamasse definia o que todos receberiam por um minuto.
+const summaryCache = new Map();
+
+function summaryCacheKey({ limit, maxPages, budgetMs }) {
+  return `${limit}:${maxPages}:${budgetMs}`;
+}
 
 function getApiUrl() {
   return (process.env.VYBE_PANEL_API_URL || DEFAULT_API_URL).trim();
@@ -178,26 +184,44 @@ export async function getVybePanelProductionSnapshot({ limit = PAGE_LIMIT, maxPa
 }
 
 export async function getVybePanelExecutiveSnapshot({ limit = SUMMARY_PAGE_LIMIT, maxPages = 10, budgetMs = SUMMARY_BUDGET_MS } = {}) {
+  const key = summaryCacheKey({ limit, maxPages, budgetMs });
+  const entry = summaryCache.get(key);
   const now = Date.now();
-  if (summaryCache.value && summaryCache.expiresAt > now) {
-    return { ...summaryCache.value, cache: { hit: true, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
+  if (entry?.value && entry.expiresAt > now) {
+    return { ...entry.value, cache: { hit: true, expiresAt: new Date(entry.expiresAt).toISOString() } };
   }
-  if (!summaryCache.promise) {
-    summaryCache.promise = collectPanelSnapshot({
-      limit,
-      maxPages,
-      budgetMs,
-      selection: PANEL_SUMMARY_SELECTION
-    }).then(snapshot => {
-      summaryCache.value = snapshot;
-      summaryCache.expiresAt = Date.now() + SUMMARY_CACHE_MS;
-      return snapshot;
-    }).finally(() => {
-      summaryCache.promise = null;
-    });
+  if (!entry?.promise) {
+    const promise = collectPanelSnapshot({ limit, maxPages, budgetMs, selection: PANEL_SUMMARY_SELECTION })
+      .then(snapshot => {
+        summaryCache.set(key, { value: snapshot, expiresAt: Date.now() + SUMMARY_CACHE_MS, promise: null });
+        return snapshot;
+      })
+      .catch(error => {
+        summaryCache.delete(key);
+        throw error;
+      });
+    summaryCache.set(key, { ...(entry || { value: null, expiresAt: 0 }), promise });
   }
-  const snapshot = await summaryCache.promise;
-  return { ...snapshot, cache: { hit: false, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
+  const snapshot = await summaryCache.get(key).promise;
+  const stored = summaryCache.get(key);
+  return { ...snapshot, cache: { hit: false, expiresAt: new Date(stored?.expiresAt || Date.now()).toISOString() } };
+}
+
+// Busca dirigida: a estação Analista precisa do contexto de alguns itens
+// específicos, não do board inteiro. Evita baixar centenas de KB e, sobretudo,
+// evita que uma leitura parcial esconda justamente a evidência procurada.
+export async function getVybePanelItems(ids = []) {
+  const unique = [...new Set(ids.map(id => String(id).trim()).filter(id => /^\d+$/.test(id)))];
+  if (unique.length === 0) return { source: 'Vybe Painel', boardId: String(BOARD_ID), items: [] };
+
+  const items = [];
+  // O Monday limita a consulta por ids; lotes de 100 mantêm a chamada válida.
+  for (let start = 0; start < unique.length; start += 100) {
+    const lote = unique.slice(start, start + 100);
+    const data = await panelQuery(`query { items(ids: [${lote.join(',')}]) { ${PRODUCTION_SELECTION} } }`);
+    items.push(...(data?.items || []));
+  }
+  return { source: 'Vybe Painel', boardId: String(BOARD_ID), items, requested: unique.length };
 }
 
 export async function getVybePanelPage({ cursor = null, limit = 50 } = {}) {

@@ -1,3 +1,4 @@
+import { startOfAgencyDay } from '../time.js';
 import ical from 'node-ical';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -40,8 +41,9 @@ export async function getCalendarSnapshot({ now = new Date() } = {}) {
 
   try {
     const events = await ical.async.fromURL(url);
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
+    // Início do dia na régua da agência, não no fuso do servidor: na Vercel
+    // (UTC) o corte caía às 21h de Brasília e escondia reuniões da noite.
+    const startOfToday = startOfAgencyDay(now);
     const futureMeetings = [];
 
     for (const key in events) {

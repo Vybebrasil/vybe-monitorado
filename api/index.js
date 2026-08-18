@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getFutureMeetings, getCalendarSnapshot } from '../server/integrations/calendar.js';
-import { describeVybePanelSource, getVybePanelExecutiveSnapshot, getVybePanelPage } from '../server/integrations/vybe-panel.js';
+import { describeVybePanelSource, getVybePanelExecutiveSnapshot, getVybePanelPage, getVybePanelItems } from '../server/integrations/vybe-panel.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -136,6 +136,23 @@ app.get('/api/executive/vybe-panel', async (req, res) => {
       error: 'VYBE_PANEL_UNAVAILABLE',
       message: 'O contexto do Vybe Painel está temporariamente indisponível; as evidências do Monday continuam disponíveis.'
     });
+  }
+});
+
+// Contexto do painel para itens específicos. A estação Analista precisa casar
+// as evidências do Monday com a organização do painel; pedir o board inteiro
+// para isso baixava centenas de KB e, quando a leitura era cortada por tempo,
+// removia da tela justamente as evidências sem par.
+app.get('/api/executive/vybe-panel/items', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map(id => id.trim()).filter(Boolean).slice(0, 300);
+    const payload = await getVybePanelItems(ids);
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+    res.json({ success: true, ...payload, mode: 'read-only-lookup', meta: { source: describeVybePanelSource(), access: 'public-link-read', readOnly: true } });
+  } catch (error) {
+    console.error('[API] Erro na busca dirigida do Vybe Painel:', error);
+    res.set('Cache-Control', 'no-store');
+    res.status(502).json({ error: 'VYBE_PANEL_ITEMS_UNAVAILABLE', message: 'O contexto solicitado do Vybe Painel está temporariamente indisponível.' });
   }
 });
 

@@ -1,3 +1,4 @@
+import { isBeforeToday, isWithinNextDays, daysOverdue, daysSince } from '../time.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -66,26 +67,6 @@ const PAGE_LIMIT = 500;
 // É o único status concluído existente lá hoje; Publicado e Cancelado seguem
 // tratados por texto em `isDone`, caso passem a existir.
 const DONE_STATUS_INDEX = 3;
-
-function isBeforeToday(dateString, today) {
-  return Boolean(dateString) && new Date(`${dateString}T23:59:59Z`) < today;
-}
-
-function isWithinNextDays(dateString, today, days = 7) {
-  if (!dateString) return false;
-  const date = new Date(`${dateString}T00:00:00Z`);
-  const end = new Date(today);
-  end.setUTCDate(end.getUTCDate() + days);
-  return date >= today && date <= end;
-}
-
-function daysOverdue(dateString, today = new Date()) {
-  if (!dateString) return 0;
-  const due = new Date(`${dateString}T00:00:00Z`);
-  const base = new Date(today);
-  base.setUTCHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((base.getTime() - due.getTime()) / 86400000));
-}
 
 class MondayIntegration {
   constructor() {
@@ -315,7 +296,6 @@ class MondayIntegration {
     const postsByClient = {};
     let totalDelayed = 0;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const statusCounts = {};
     const clientCounts = {};
     const groupCounts = {};
@@ -744,7 +724,6 @@ class MondayIntegration {
 
     // Processamento pós-agrupamento (ordenação e dias sem reunião)
     const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
 
     Object.values(clientLogs).forEach(client => {
       // Ordena reuniões da mais recente para a mais antiga
@@ -755,9 +734,9 @@ class MondayIntegration {
 
       if (pastMeetings.length > 0) {
         client.lastMeetingDate = pastMeetings[0].date;
-        const lastDate = new Date(client.lastMeetingDate);
-        const diffTime = Math.abs(hoje - lastDate);
-        client.daysSinceLastMeeting = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Dias de calendário na régua da agência: reunião de hoje é 0 dia,
+        // não 1 como resultava do arredondamento sobre a diferença bruta.
+        client.daysSinceLastMeeting = daysSince(client.lastMeetingDate, hoje);
       }
     });
 

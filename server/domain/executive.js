@@ -78,7 +78,14 @@ export function buildCalendarSignals({ events = [], quality = null, activeClient
   const normalizedClients = clients.map(client => ({ name: client, normalized: normalizeMatchLabel(client) })).filter(client => client.normalized);
   const meetings = (events || []).map(event => {
     const titleNormalized = normalizeMatchLabel(event.title);
-    const matched = normalizedClients.find(client => titleNormalized.includes(client.normalized) || client.normalized.includes(titleNormalized));
+    // Título vazio depois de normalizar (evento só com emoji, traço ou em
+    // branco) casava com o primeiro cliente da lista, porque includes('') é
+    // sempre verdadeiro. E fragmento curto casa por acidente: "ace" aparece
+    // dentro de "facebook". Exige título com substância nos dois sentidos.
+    const matched = titleNormalized.length >= 3
+      ? normalizedClients.find(client => titleNormalized.includes(client.normalized)
+          || (titleNormalized.length >= 4 && client.normalized.includes(titleNormalized)))
+      : null;
     return { ...event, client: matched?.name || null, matchType: matched ? 'title' : 'unmatched' };
   });
   const next7Meetings = meetings.filter(event => {

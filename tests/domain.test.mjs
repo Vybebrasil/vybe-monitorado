@@ -278,6 +278,38 @@ test('Cliente ativo sem conteúdo e sem demanda vira sinal de execução, respei
   assert.equal(snapshot.portfolioStability.score, 95);
 });
 
+
+test('Régua de atraso usa o dia da agência, não o fuso do servidor', async () => {
+  const { isBeforeToday, daysOverdue, agencyToday, startOfAgencyDay } = await import('../server/time.js');
+  // 21h30 de Brasília no dia 18 já é dia 19 em UTC.
+  const noite = new Date('2026-08-19T00:30:00Z');
+  assert.equal(agencyToday(noite), '2026-08-18');
+  assert.equal(isBeforeToday('2026-08-18', noite), false, 'prazo de hoje não está atrasado');
+  assert.equal(isBeforeToday('2026-08-17', noite), true);
+  assert.equal(daysOverdue('2026-08-17', noite), 1);
+  assert.equal(daysOverdue('2026-08-18', noite), 0);
+  assert.equal(startOfAgencyDay(noite).toISOString(), '2026-08-18T03:00:00.000Z');
+});
+
+test('Reunião sem título legível não é atribuída a nenhum cliente', () => {
+  const sinais = buildCalendarSignals({
+    events: [
+      { title: 'Reunião alinhamento VOA', date: '2026-08-20T12:00:00Z' },
+      { title: '🔴', date: '2026-08-20T13:00:00Z' },
+      { title: '', date: '2026-08-20T14:00:00Z' }
+    ],
+    activeClients: ['Experimente Papelaria', 'VOA'],
+    ranking: [],
+    generatedAt: '2026-08-18T12:00:00Z'
+  });
+  const porTitulo = Object.fromEntries(sinais.next7Meetings.map(m => [m.title, m.client]));
+  assert.equal(porTitulo['Reunião alinhamento VOA'], 'VOA');
+  // includes('') é sempre verdadeiro: sem guarda, estes casavam com o primeiro cliente.
+  assert.equal(porTitulo['🔴'], null);
+  assert.equal(porTitulo[''], null);
+  assert.equal(sinais.matchedClientCount, 1);
+});
+
 test('Release usa SHA oficial da Vercel e gera URL verificável no GitHub', () => {
   const result = buildReleaseMetadata({
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40),

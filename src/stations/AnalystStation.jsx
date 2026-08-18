@@ -28,9 +28,19 @@ export default function AnalystStation({ snapshot, onExit }) {
   const [panelLoadingMore, setPanelLoadingMore] = useState(false);
   const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '' });
 
+  // Busca só o contexto dos itens que a investigação realmente mostra. Pedir o
+  // board inteiro trazia centenas de KB, demorava mais de dez segundos e, por
+  // ser cortado por orçamento de tempo, devolvia uma quantidade diferente a cada
+  // abertura — o que fazia evidências sumirem da tela sem explicação.
+  const evidenceIds = useMemo(
+    () => [...new Set((delayDetails || []).map(item => String(item?.id || '').trim()).filter(Boolean))],
+    [delayDetails]
+  );
+
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/executive/vybe-panel?limit=200')
+    if (evidenceIds.length === 0) { setPanelSnapshot({ items: [], pagination: { count: 0, pages: 1, complete: true } }); return undefined; }
+    fetch(`/api/executive/vybe-panel/items?ids=${encodeURIComponent(evidenceIds.join(','))}`)
       .then(response => response.ok ? response.json() : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.'))))
       .then(payload => {
         if (!cancelled) setPanelSnapshot(payload);
@@ -39,7 +49,7 @@ export default function AnalystStation({ snapshot, onExit }) {
         if (!cancelled) setPanelError(error.message);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [evidenceIds]);
 
   const loadMorePanel = async () => {
     const cursor = panelSnapshot?.pagination?.nextCursor;
@@ -114,13 +124,13 @@ export default function AnalystStation({ snapshot, onExit }) {
       <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit e cruza evidências com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
 
       <section className="analyst-panel-sync data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
-        <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · LEITURA COMPLETA</div>
+        <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · CONTEXTO DAS EVIDÊNCIAS</div>
         {panelError ? (
           <div className="analyst-source-warning" role="status" aria-live="polite">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
         ) : panelSnapshot ? (
           <>
             <div className="analyst-source-summary" aria-live="polite">
-              <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
+              <strong>{(panelSnapshot.items || []).length}</strong> de <strong>{evidenceIds.length}</strong> evidências com contexto no Painel · somente leitura
               {panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
             </div>
             {panelSnapshot.warning ? <div className="analyst-source-warning" role="status" aria-live="polite">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
