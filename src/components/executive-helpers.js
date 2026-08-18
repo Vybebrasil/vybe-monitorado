@@ -34,8 +34,10 @@ export const scoreComposition = (snapshot) => {
   if (!Number.isFinite(rawScore)) return 'Composição do score indisponível nesta leitura.';
   const terms = deductions
     .filter(deduction => Number(deduction?.points) > 0)
-    .map(deduction => `(${formatNumber(deduction.count)} ${String(deduction.label || 'sinal').toLowerCase()} × ${formatNumber(deduction.pointsPerItem)} pts)`);
-  const formula = terms.length ? `100 − ${terms.join(' − ')}` : '100';
+    .map(deduction => deduction?.mode === 'source_gap'
+      ? `(${formatNumber(deduction.count)} afetados · -${formatNumber(deduction.points)} pts no total)`
+      : `(${formatNumber(deduction.count)} ${String(deduction.label || 'sinal').toLowerCase()} × -${formatNumber(deduction.pointsPerItem)} pts = -${formatNumber(deduction.points)} pts)`);
+  const formula = terms.length ? `100 pts − ${terms.join(' − ')}` : '100 pts';
   return `${formula} = ${formatPoints(rawScore)}. O score é bruto, pode ficar negativo e não representa percentual financeiro ou satisfação.`;
 };
 

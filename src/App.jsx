@@ -204,6 +204,8 @@ function MissionBoard({ snapshot, onSelect }) {
   const score = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
   const deductions = snapshot?.portfolioStability?.scoreDeductions || [];
   const recoverable = Number(snapshot?.portfolioStability?.recoveryPointsAvailable) || missions.reduce((sum, mission) => sum + mission.recoverablePoints, 0);
+  const lostPoints = deductions.reduce((sum, deduction) => sum + (Number(deduction.points) || 0), 0);
+  const scoreBase = 100;
   if (!missions.length && !deductions.length) return null;
   const readinessIds = new Set(['planning-source-gap', 'missing-planning', 'dashboard-source-gap', 'missing-dashboard']);
   const operationalDeductions = deductions.filter(deduction => !readinessIds.has(deduction.id));
@@ -218,8 +220,8 @@ function MissionBoard({ snapshot, onSelect }) {
     return (
       <button type="button" className={`score-ledger-row ${isSystemic ? 'systemic' : ''}`} key={deduction.id} onClick={() => openDeduction(deduction)}>
         <span className="score-ledger-row-copy">
-          <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts</b></span>
-          <small><strong>{formatNumber(deduction.count)} {isSystemic ? 'clientes afetados' : 'itens afetados'}</strong> <i>·</i> {isSystemic ? 'penalização única da fonte' : `${formatNumber(deduction.pointsPerItem)} pts por item`} <i>·</i> {deduction.source}</small>
+          <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts perdidos</b></span>
+          <small><strong>{formatNumber(deduction.count)} {isSystemic ? 'clientes afetados' : 'itens afetados'}</strong> <i>·</i> {isSystemic ? '-5 pts no total · penalização única da fonte' : `-${formatNumber(deduction.pointsPerItem)} pts por item`} <i>·</i> <b>-{formatNumber(deduction.points)} pts no total</b> <i>·</i> {deduction.source}</small>
         </span>
         <span className="score-ledger-row-action">ABRIR CAUSA ↗</span>
       </button>
@@ -246,7 +248,8 @@ function MissionBoard({ snapshot, onSelect }) {
           ))}
         </div>
         <div className="score-ledger">
-          <div className="score-ledger-header"><div><span>PLACAR · ORIGEM DOS DESCONTOS</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes</b></div>
+          <div className="score-ledger-header"><div><span>PLACAR · ORIGEM DOS DESCONTOS</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes · -{formatNumber(lostPoints)} pts perdidos</b></div>
+          <div className="score-ledger-summary"><span>FECHAMENTO DO PLACAR</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
           <div className="score-ledger-group"><span className="score-ledger-group-title">EXECUÇÃO E ENTREGA</span>{operationalDeductions.map(renderDeduction)}</div>
           <div className="score-ledger-group readiness"><span className="score-ledger-group-title">PRONTIDÃO DA CARTEIRA</span>{readinessDeductions.map(renderDeduction)}</div>
         </div>
@@ -606,15 +609,30 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
   const visiblePublication = showAll ? publicationDelays : publicationDelays.slice(0, 5);
   const visibleClients = showAll ? exposedClients : exposedClients.slice(0, 5);
 
-  const evidenceList = (list, label, total = list.length) => (
+  const evidencePenalty = item => {
+    const delayType = String(item.delayType || '').toLowerCase();
+    const hasInternal = delayType.includes('prazo interno');
+    const hasPublication = delayType.includes('veiculação');
+    const labels = [hasInternal ? 'atraso interno' : null, hasPublication ? 'veiculação em risco' : null].filter(Boolean);
+    const points = (hasInternal ? 2 : 0) + (hasPublication ? 5 : 0);
+    return { points: points || 2, label: labels.join(' + ') || 'sinal operacional' };
+  };
+
+  const evidenceList = (list, label, total = list.length, allItems = list) => {
+    const totalPenalty = allItems.reduce((sum, item) => sum + evidencePenalty(item).points, 0);
+    const visiblePenalty = list.reduce((sum, item) => sum + evidencePenalty(item).points, 0);
+    const isPartialList = list.length < allItems.length;
+    return (
     <>
-      <div className="kpi-investigation-section-title">{label} · {total} ITEM(S)</div>
+      <div className="kpi-investigation-section-title"><span>{label} · {total} ITEM(S)</span><strong>-{formatNumber(totalPenalty)} pts no total</strong></div>
+      {isPartialList ? <div className="kpi-evidence-subtotal">Exibindo {formatNumber(list.length)} de {formatNumber(allItems.length)} itens · -{formatNumber(visiblePenalty)} pts visíveis</div> : null}
       <ul className="kpi-evidence-list">
         {list.map((item, index) => {
           const statusColor = statusColorFor(item.status, quantitative.statusColors);
           const urgency = delayUrgency(item.daysOverdue);
+          const penalty = evidencePenalty(item);
           return <li key={item.id || `${item.name}-${index}`} className={`kpi-evidence-card urgency-${urgency.tone}`}>
-            <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`} title={urgency.description}>{item.daysOverdue ? `ATRASO: ${item.daysOverdue}D · ${urgency.label}` : 'EM ANDAMENTO'}</span></div>
+            <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`} title={urgency.description}>{item.daysOverdue ? `ATRASO: ${item.daysOverdue}D · ${urgency.label}` : 'EM ANDAMENTO'}</span><b className="evidence-penalty-chip">-{formatNumber(penalty.points)} pts · {penalty.label}</b></div>
             <div className="kpi-evidence-card-meta"><span>{item.client || 'Sem cliente'}</span><span className="people-field"><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span><span>{item.stage || 'Etapa não informada'}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColor, borderColor: statusColor }}>{item.status}</span> : null}</div>
             <div className="kpi-evidence-card-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span>{item.delayType || 'Atraso não classificado'}</span>{item.editorDesigner ? <span className="people-field"><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span> : null}</div>
             <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a>
@@ -623,7 +641,8 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
       </ul>
       {total > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${total - 5})`}</button> : null}
     </>
-  );
+    );
+  };
 
   return <div className="drawer-overlay" onClick={() => setPanel(null)}>
     <aside className={`drawer investigation-drawer kpi-investigation-drawer ${configs.accent}`} onClick={event => event.stopPropagation()}>
@@ -636,14 +655,14 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
            <div className="readiness-quality-callout"><div><span>QUALIDADE DA FONTE</span><strong>{readinessQualityLabel}</strong></div><div><span>CAMPO MONDAY</span><strong>{readinessQuality?.columnId || 'não informado'}</strong></div><div><span>COBERTURA OBSERVADA</span><strong>{formatPct(readinessQuality?.coveragePct)} · {formatNumber(readinessQuality?.populatedClients)} preenchidos de {formatNumber(readinessQuality?.eligibleClients)}</strong></div></div>
            <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural. Antes de tratar o desconto como falha operacional, valide se o campo está correto e se a fonte realmente deveria estar preenchida.' : 'A lacuna é parcial. O Nexus aplica pontos por cliente afetado, excluindo clientes sem execução e onboarding para evitar dupla penalização.'}</p></div>
           <div className="kpi-investigation-section-title">CLIENTES AFETADOS · {readinessClients.length}</div>
-          <div className="kpi-client-grid">{visibleReadinessClients.map(client => <div className="kpi-client-card" key={client}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span></div></div>)}</div>
+           <div className="kpi-client-grid">{visibleReadinessClients.map(client => <div className="kpi-client-card" key={client}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span><b className="evidence-penalty-note">{readinessDeduction?.mode === 'source_gap' ? `parte do desconto sistêmico de -${formatNumber(readinessDeduction?.points || 0)} pts` : `-${formatNumber(readinessDeduction?.pointsPerItem || 0)} pts neste cliente`}</b></div></div>)}</div>
           {readinessClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessClients.length - 5})`}</button> : null}
         </> : null}
 
         {panel.id === 'health' ? <>
           <div className="kpi-score-explanation"><div><span>SCORE BRUTO ATUAL</span><strong>{formatPoints(score)}</strong></div><div><span>PONTOS RECUPERÁVEIS</span><strong>{formatPoints(snapshot?.portfolioStability?.recoveryPointsAvailable || 0)}</strong></div></div>
           <div className="investigation-callout"><span>COMO O PLACAR FOI COMPOSTO</span><p>{scoreComposition(snapshot)}</p></div>
-          <div className="kpi-factor-grid"><div><strong>{delayedInternal}</strong><span>ATRASOS INTERNOS × 2</span></div><div><strong>{delayedPublication}</strong><span>VEICULAÇÕES × 5</span></div><div><strong>{stalled}</strong><span>SEM EXECUÇÃO × 5</span></div><div><strong>{delayedDemands}</strong><span>DEMANDAS VENCIDAS × 2</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)}</strong><span>{deduction.label.toUpperCase()}</span></div>)}</div>
+          <div className="kpi-factor-grid"><div><strong>-{formatNumber(delayedInternal * 2)} pts</strong><span>{formatNumber(delayedInternal)} atrasos × -2 pts</span></div><div><strong>-{formatNumber(delayedPublication * 5)} pts</strong><span>{formatNumber(delayedPublication)} veiculações × -5 pts</span></div><div><strong>-{formatNumber(stalled * 5)} pts</strong><span>{formatNumber(stalled)} clientes sem execução × -5 pts</span></div><div><strong>-{formatNumber(delayedDemands * 2)} pts</strong><span>{formatNumber(delayedDemands)} demandas vencidas × -2 pts</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)} pts</strong><span>{formatNumber(deduction.count)} afetados · desconto total da fonte</span></div>)}</div>
           <p className="investigation-footnote">Este proxy não mede receita, satisfação ou produtividade individual. Ele sinaliza que a pressão operacional ultrapassou o limite da escala atual.</p>
         </> : null}
 
@@ -653,9 +672,9 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
           <div className="kpi-investigation-section-title">ETAPAS EXECUTIVAS</div><div className="kpi-status-grid">{stageRows.map(([stage, count]) => <div key={stage}><span className="status-dot" style={{ backgroundColor: 'var(--vybe-cyan)' }} /><span>{canonicalStage(stage)}</span><strong>{formatNumber(count)}</strong><small>{formatPct((count / (quantitative.activeItems || 1)) * 100)}</small></div>)}</div>
         </> : null}
 
-        {panel.id === 'delays' ? evidenceList(visibleInternal, 'ATRASOS INTERNOS', internalDelays.length) : null}
-        {panel.id === 'publication' ? evidenceList(visiblePublication, 'VEICULAÇÕES EM RISCO', publicationDelays.length) : null}
-        {panel.id === 'health' ? evidenceList(visibleDelays, 'EVIDÊNCIAS QUE PENALIZAM O SCORE', delays.length) : null}
+        {panel.id === 'delays' ? evidenceList(visibleInternal, 'ATRASOS INTERNOS', internalDelays.length, internalDelays) : null}
+        {panel.id === 'publication' ? evidenceList(visiblePublication, 'VEICULAÇÕES EM RISCO', publicationDelays.length, publicationDelays) : null}
+        {panel.id === 'health' ? evidenceList(visibleDelays, 'EVIDÊNCIAS QUE PENALIZAM O SCORE', delays.length, delays) : null}
 
         {panel.id === 'exposure' ? <>
           <div className="kpi-investigation-section-title">CLIENTES EXPOSTOS · {exposedClients.length}</div><div className="kpi-client-grid">{visibleClients.map(client => <div className="kpi-client-card" key={client.client}><div className="kpi-evidence-card-head"><strong>{client.client}</strong><span className={`risk-pct ${riskTone(client.riskPct)}`}>{formatPct(client.riskPct)}</span></div><div className="risk-bar-track"><span style={{ width: `${clampPct(client.riskPct)}%` }} /></div><div className="kpi-evidence-card-meta"><span>{client.delayedItems} atrasos / {client.openItems} abertos</span><span>{client.internalDelays} internos · {client.publicationDelays} veiculação</span></div><button type="button" className="kpi-inline-action" onClick={() => { setPanel({ type: 'client', id: client.client, title: `Evidências: ${client.client}` }); }}>ABRIR CAUSA ↗</button></div>)}</div>{exposedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${exposedClients.length - 5})`}</button> : null}</> : null}
@@ -663,7 +682,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         {panel.id === 'execution' ? <>
           <div className="kpi-investigation-section-title">CLIENTES SEM EXECUÇÃO · {execution.stalled?.length || 0}</div><div className="kpi-client-grid">{(execution.stalled || []).map(client => <div className="kpi-client-card" key={client.client}><strong>{client.client}</strong><div className="kpi-evidence-card-meta"><span>{client.daysSinceEntry === null ? 'Tempo na carteira não informado' : `${client.daysSinceEntry} dias na carteira`}</span><span>Sem conteúdo em produção</span><span>Sem demanda aberta</span></div><button type="button" className="kpi-inline-action" onClick={() => setPanel({ type: 'client', id: client.client, title: `Visão: ${client.client}` })}>ABRIR CONTEXTO ↗</button></div>)}</div><div className="investigation-callout"><span>ONBOARDING SEPARADO</span><p>{(execution.onboarding || []).length} cliente(s) ainda estão na janela de implantação de {execution.onboardingWindowDays} dias e não entram no indicador de cliente parado.</p></div></> : null}
 
-        {panel.id !== 'health' && panel.id !== 'active' && panel.id !== 'delays' && panel.id !== 'publication' && panel.id !== 'exposure' && panel.id !== 'execution' ? evidenceList(visibleDelays, 'EVIDÊNCIAS') : null}
+        {panel.id !== 'health' && panel.id !== 'active' && panel.id !== 'delays' && panel.id !== 'publication' && panel.id !== 'exposure' && panel.id !== 'execution' ? evidenceList(visibleDelays, 'EVIDÊNCIAS', delays.length, delays) : null}
       </div>
     </aside>
   </div>;
