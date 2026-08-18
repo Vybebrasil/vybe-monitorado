@@ -1,3 +1,7 @@
+// O Nexus é um painel único de liderança: não há separação de responsabilidade
+// por cargo (CMO/COO). Ver ARCHITECTURE.md, seção "Modelo de acesso".
+const EXECUTIVE_OWNER_ROLE = 'Liderança executiva';
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const sum = (rows, field) => (rows || []).reduce((total, row) => total + (Number(row?.[field]) || 0), 0);
@@ -12,6 +16,49 @@ const severityLabel = severity => ({
 
 function evidence(source, detail, url = null) {
   return { source, detail, url };
+}
+
+// Cliente recém-entrado ainda não produziu nada porque está em implantação, não
+// porque parou. Sem essa janela, todo cadastro novo nasce vermelho no painel.
+const ONBOARDING_DAYS = 30;
+
+const daysSince = (isoDate, now) => {
+  if (!isoDate) return null;
+  const start = new Date(isoDate);
+  if (Number.isNaN(start.getTime())) return null;
+  return Math.floor((now.getTime() - start.getTime()) / 86400000);
+};
+
+// Eixo de execução: o cliente está ativo na carteira mas não tem nenhum conteúdo
+// em produção nem demanda aberta. Diferente da prontidão de planejamento, este
+// sinal varia sozinho conforme a operação anda — é o que o torna informativo.
+function buildExecutionGap({ activePortfolio, clientsWithContent, clientsWithOpenDemand, generatedAt }) {
+  const now = new Date(generatedAt);
+  const withContent = new Set(clientsWithContent);
+  const withDemand = new Set(clientsWithOpenDemand);
+
+  const stalled = [];
+  const onboarding = [];
+
+  activePortfolio.forEach(client => {
+    if (withContent.has(client.name) || withDemand.has(client.name)) return;
+    const age = daysSince(client.since, now);
+    const entry = { client: client.name, daysSinceEntry: age };
+    if (age !== null && age < ONBOARDING_DAYS) onboarding.push(entry);
+    else stalled.push(entry);
+  });
+
+  stalled.sort((a, b) => (b.daysSinceEntry || 0) - (a.daysSinceEntry || 0));
+
+  return {
+    eligibleClients: activePortfolio.length,
+    clientsInExecution: activePortfolio.length - stalled.length - onboarding.length,
+    executionCoveragePct: percent(activePortfolio.length - stalled.length - onboarding.length, activePortfolio.length),
+    stalled,
+    onboarding,
+    onboardingWindowDays: ONBOARDING_DAYS,
+    definition: 'Cliente ativo sem nenhum item ativo em Produção de Conteúdo e sem demanda aberta em Solicitações de Demandas.'
+  };
 }
 
 function buildClientRisks(ranking) {
@@ -37,7 +84,7 @@ function buildClientRisks(ranking) {
           ? 'Definir intervenção executiva e plano de recuperação para este cliente.'
           : 'Acompanhar a tendência e confirmar se o gargalo é pontual ou recorrente.',
         evidence: [evidence('monday', `${row.open || 0} itens abertos; ${delayedTotal} atrasos agregados.`, firstEvidence?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${firstEvidence.id}` : null)],
-        ownerRole: delayedClient > delayedTeam ? 'CMO' : 'COO',
+        ownerRole: EXECUTIVE_OWNER_ROLE,
         affectedItems: delayedPosts.map(p => `${p.name} (Prazo: ${p.prazo || 'N/A'}${p.responsavel ? ' | 👤 ' + p.responsavel : ''})`)
       };
     })
@@ -57,6 +104,12 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
   const missingDashboard = bottlenecks.missingDashboard || [];
   const readiness = bottlenecks.quantitative || {};
   const delayedDemands = demands.length;
+  const executionGap = buildExecutionGap({
+    activePortfolio: bottlenecks.activePortfolio || [],
+    clientsWithContent: ranking.map(row => row.name),
+    clientsWithOpenDemand: demands.clientsWithOpenDemand || [],
+    generatedAt
+  });
   const clientRisks = buildClientRisks(ranking);
   const totalOpen = sum(ranking, 'open');
   const clientRanking = ranking
@@ -73,7 +126,11 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       };
     })
     .sort((a, b) => b.delayedItems - a.delayedItems || b.openItems - a.openItems);
-  const stabilityScore = clamp(100 - delayedTeam * 2 - delayedClient * 5 - missingPlanning.length - delayedDemands * 2, 0, 100);
+  // A prontidão de planejamento saiu do cálculo: enquanto a coluna do Monday for
+  // preenchida com o mesmo lembrete para a carteira inteira, ela subtrai um valor
+  // fixo todo dia e não distingue um mês bom de um mês ruim. Entrou no lugar o
+  // cliente parado, que aparece e some conforme a operação anda.
+  const stabilityScore = clamp(100 - delayedTeam * 2 - delayedClient * 5 - executionGap.stalled.length * 5 - delayedDemands * 2, 0, 100);
   const stabilityStatus = stabilityScore >= 75 ? 'stable' : stabilityScore >= 50 ? 'attention' : 'risk';
 
   const capacitySignals = [];
@@ -88,7 +145,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedTeam} atrasos de prazo interno estão concentrados na carteira${topOwner ? `; ${topOwner.name} aparece com ${topOwner.delayedPrazo + topOwner.delayedVeiculacao} sinais` : ''}.`,
       recommendedDecision: 'Revisar distribuição de capacidade e identificar o gargalo de processo antes de adicionar mais produção.',
       evidence: [evidence('monday', `${delayedTeam} atrasos internos agregados.`, topOwner?.posts?.[0]?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${topOwner.posts[0].id}` : null)],
-      ownerRole: 'COO',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: responsavelRanking.filter(r => r.delayedPrazo > 0).map(r => `${r.name} (${r.delayedPrazo} atrasos)`)
     });
   }
@@ -103,13 +160,27 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${delayedClient} itens ultrapassaram a data de veiculação prevista.`,
       recommendedDecision: 'Avaliar comunicação executiva com os clientes expostos e definir prioridade de recuperação.',
       evidence: [evidence('monday', `${delayedClient} atrasos de veiculação agregados.`)],
-      ownerRole: 'CMO',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: ranking.filter(c => c.delayedVeiculacao > 0).map(c => `${c.name} (${c.delayedVeiculacao} atrasos)`)
     });
   }
 
   const executiveRisks = [
     ...capacitySignals,
+    ...(executionGap.stalled.length > 0 ? [{
+      id: 'portfolio-execution-gap',
+      type: 'client_execution_risk',
+      severity: executionGap.stalled.length >= 3 ? 'critical' : 'high',
+      severityLabel: severityLabel(executionGap.stalled.length >= 3 ? 'critical' : 'high'),
+      title: 'Clientes ativos sem execução',
+      whyItMatters: `${executionGap.stalled.length} cliente(s) da carteira ativa não têm conteúdo em produção nem demanda aberta.`,
+      recommendedDecision: 'Confirmar se o contrato segue vigente e o que trava a entrada de trabalho antes que a ausência vire cancelamento.',
+      evidence: [evidence('monday', executionGap.definition)],
+      ownerRole: EXECUTIVE_OWNER_ROLE,
+      affectedItems: executionGap.stalled.map(c => c.daysSinceEntry === null
+        ? c.client
+        : `${c.client} (na carteira há ${c.daysSinceEntry} dias)`)
+    }] : []),
     ...clientRisks.slice(0, 8),
     ...(missingPlanning.length > 0 ? [{
       id: 'portfolio-planning-gap',
@@ -120,7 +191,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingPlanning.length} clientes não apresentam planejamento estratégico identificado na fonte operacional.`,
       recommendedDecision: 'Definir prioridade de regularização do planejamento por impacto de carteira, sem transformar o Nexus em fila de execução.',
       evidence: [evidence('monday', `${missingPlanning.length} clientes sem planejamento identificado.`)],
-      ownerRole: 'Liderança executiva',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: missingPlanning
     }] : []),
     ...(missingDashboard.length > 0 ? [{
@@ -132,7 +203,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       whyItMatters: `${missingDashboard.length} clientes têm dashboard pendente ou desatualizado na fonte operacional.`,
       recommendedDecision: 'Definir a ordem de atualização da base antes de tomar decisões comparativas sobre a carteira.',
       evidence: [evidence('monday', `${missingDashboard.length} clientes com dashboard pendente ou desatualizado.`)],
-      ownerRole: 'Liderança executiva',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: missingDashboard
     }] : [])
   ];
@@ -143,7 +214,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-client-intervention',
       title: 'Escolher clientes que exigem intervenção executiva',
       context: `${clientRisks.length} clientes apresentam sinais agregados de risco de previsibilidade.`,
-      ownerRole: 'CMO/COO',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       priority: clientRisks[0].severity,
       affectedItems: clientRisks.map(r => r.client)
     });
@@ -153,7 +224,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-portfolio-readiness',
       title: 'Definir a ordem de recuperação da prontidão da carteira',
       context: `${missingPlanning.length} clientes sem planejamento e ${missingDashboard.length} com dashboard pendente ou desatualizado.`,
-      ownerRole: 'CMO/COO',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       priority: missingPlanning.length >= 5 ? 'high' : 'medium',
       affectedItems: [...new Set([...missingPlanning, ...missingDashboard])]
     });
@@ -163,7 +234,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       id: 'decision-capacity',
       title: 'Decidir resposta para a pressão de capacidade',
       context: `${delayedTeam} atrasos internos agregados na leitura atual.`,
-      ownerRole: 'COO',
+      ownerRole: EXECUTIVE_OWNER_ROLE,
       priority: delayedTeam >= 10 ? 'high' : 'medium',
       affectedItems: responsavelRanking.filter(r => r.delayedPrazo > 0).map(r => `${r.name} (${r.delayedPrazo} atrasos)`)
     });
@@ -178,8 +249,9 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       score: stabilityScore,
       status: stabilityStatus,
       label: stabilityStatus === 'stable' ? 'ESTÁVEL' : stabilityStatus === 'attention' ? 'SOB OBSERVAÇÃO' : 'RISCO EXECUTIVO',
-      explanation: 'Proxy operacional baseado em atrasos agregados, prontidão de planejamento e demandas vencidas. Não substitui indicadores financeiros ou de satisfação.'
+      explanation: 'Proxy operacional baseado em atrasos agregados, clientes sem execução e demandas vencidas. Não substitui indicadores financeiros ou de satisfação.'
     },
+    portfolioExecution: executionGap,
     delayDetails,
     productivity,
     summary: {
@@ -197,7 +269,9 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       planningCoveragePct: readiness.planningCoveragePct ?? null,
       dashboardCoveragePct: readiness.dashboardCoveragePct ?? null,
       missingPlanning: missingPlanning.length,
-      missingDashboard: missingDashboard.length
+      missingDashboard: missingDashboard.length,
+      clientsWithoutPlanning: missingPlanning,
+      clientsWithoutDashboard: missingDashboard
     },
     quantitative: {
       totalItems: quantitative.totalItems ?? totalOpen,
