@@ -1,272 +1,332 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Cpu, Activity, Clock, Layers, AlertTriangle, Target, CheckCircle2, RefreshCw, ExternalLink, Info, Power, TerminalSquare, PieChart as PieChartIcon } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, Cell, PieChart, Pie } from 'recharts';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { Target, Activity, ShieldAlert, Crosshair, X } from 'lucide-react';
+
+// Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
+const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
 
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
   const date = new Date(`${dateStr}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+  // A data vem do Monday como dia puro (YYYY-MM-DD) e é lida como UTC:
+  // sem timeZone: 'UTC' a formatação recua um dia em qualquer fuso a oeste.
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
 };
 
-
-const formatDateTime = (value) => {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'N/A';
-  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-};
-
-const PLACEHOLDER_MARKERS = [
-  'um texto curto e direto relatando',
-  'parágrafo forte, visão estratégica baseada',
-  'nome do problema (baseado nos dados reais)',
-  'fato comprovado que prova o problema',
-  'por que isso é um problema?',
-  'o que ganhamos ao resolver',
-  'passo prático 1',
-  'auditoria pendente',
-  'análise ainda não validada'
-];
-
-const isPlaceholderText = (value) => {
-  if (typeof value !== 'string') return false;
-  const normalized = value.trim().toLowerCase();
-  return PLACEHOLDER_MARKERS.some(marker => normalized.includes(marker));
-};
-
-const activateOnKeyboard = (event, callback) => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    callback();
-  }
-};
-
-function ExecutiveCockpit({ metrics, detailPanel, setDetailPanel, externalDetailPanel, forceRenderDrawer }) {
-  const safeSnapshot = metrics || {};
-  const summary = safeSnapshot.summary || {};
-  const stability = safeSnapshot.portfolioStability || {};
-  const activeLens = safeSnapshot.executiveLens || {
-    title: 'PAINEL EXECUTIVO',
-    question: 'Qual decisão executiva precisa ser tomada agora?',
-    focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
-  };
-  const risks = (safeSnapshot.executiveRisks || []).slice(0, 5);
-  const decisions = (safeSnapshot.decisionsNeeded || []).slice(0, 3);
-  const stabilityColor = stability.status === 'stable' ? 'var(--cy-neon-green)' : stability.status === 'attention' ? 'var(--cy-neon-yellow)' : 'var(--cy-neon-magenta)';
-  const quantitative = safeSnapshot.quantitative || {};
-  const readiness = safeSnapshot.portfolioReadiness || {};
-  const clientRows = safeSnapshot.clientRanking || [];
-  const statusRows = Object.entries(quantitative.statusCounts || {}).sort((a, b) => b[1] - a[1]);
-
-  const capacityDecision = safeSnapshot.decisionsNeeded?.find(d => d.id === 'decision-capacity');
-  const ownerDelaysData = (capacityDecision?.affectedItems || [])
-    .map(item => {
-      const match = item.match(/(.+?)\s*\((\d+)\s+atrasos?\)/);
-      if (match) return { name: match[1], delays: parseInt(match[2], 10) };
-      return null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.delays - a.delays);
-
-  const volumeBreakdownData = Object.entries(quantitative.statusCounts || {})
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
-
-  const displayPct = value => value === null || value === undefined ? '—' : `${value}%`;
-  
-  const [activeTab, setActiveTab] = useState('overview');
-  const [showAllClientRisks, setShowAllClientRisks] = useState(false);
-  const delayDetails = safeSnapshot.delayDetails || [];
-  const productivity = safeSnapshot.productivity || {};
-  const internalDelayDetails = delayDetails.filter(item => item.delayType?.includes('prazo interno'));
-  const stageRows = productivity.byStage || [];
-  const topResponsibles = productivity.topResponsibles || [];
-  const visibleClientRows = showAllClientRisks ? clientRows : clientRows.slice(0, 5);
-
-  const chartData = [
-    { name: 'Saudável', value: stability.score || 0 },
-    { name: 'Em Risco', value: 100 - (stability.score || 0) }
-  ];
-  
-  const isHealthy = (stability.score || 0) > 70;
-  const chartColors = [
-    isHealthy ? 'var(--cy-neon-green)' : 'rgba(255,255,255,0.05)',
-    !isHealthy ? stabilityColor : 'rgba(255,255,255,0.05)'
-  ];
-
-  const customTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div style={{ background: 'rgba(10,10,10,0.9)', border: '1px solid #333', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.8rem', color: '#fff', backdropFilter: 'blur(10px)' }}>
-          <p style={{ margin: 0 }}>{payload[0].payload.name || payload[0].payload.stage || payload[0].payload.label}</p>
-          <p style={{ margin: 0, fontWeight: 'bold', color: payload[0].fill || 'var(--cy-neon-cyan)' }}>{payload[0].value} itens</p>
-        </div>
-      );
+// Cards, linhas e itens de lista são divs clicáveis: sem isto o painel só
+// funciona no mouse. Devolve as props que tornam o elemento operável por teclado.
+const clickable = (onActivate, label) => ({
+  role: 'button',
+  tabIndex: 0,
+  'aria-label': label,
+  onClick: onActivate,
+  onKeyDown: (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onActivate();
     }
-    return null;
-  };
+  }
+});
 
-  const activePanel = forceRenderDrawer ? externalDetailPanel : detailPanel;
-  const selectedDetails = activePanel?.type === 'client'
-    ? delayDetails.filter(item => item.client === activePanel.client)
-    : activePanel?.type === 'delays' ? internalDelayDetails
-    : activePanel?.type === 'owner' ? delayDetails.filter(item => item.responsavel?.includes(activePanel.owner) && item.delayType?.includes('prazo interno'))
-    : activePanel?.type === 'planning' ? (safeSnapshot.executiveRisks?.find(r => r.id === 'portfolio-planning-gap')?.affectedItems || []).map((client, i) => ({ id: `plan-${i}`, name: 'Falta planejamento estratégico', client, delayType: 'Risco de Prontidão' }))
-    : [];
+const splitOwners = (value) => String(value || '')
+  .split(',')
+  .map(name => name.trim())
+  .filter(Boolean);
 
-  if (forceRenderDrawer) {
+// --- COMPONENTES VYBE OS ---
+
+const HudHeader = ({ title, subtitle }) => (
+  <div className="hud-bar">
+    <div>
+      <span style={{ color: 'var(--vybe-text-muted)' }}>+ VYBE INTELLIGENCE / </span>
+      <span style={{ color: 'var(--vybe-orange)' }}>{title}</span>
+    </div>
+    <div style={{ color: 'var(--vybe-text-muted)' }}>{subtitle}</div>
+  </div>
+);
+
+const HudFooter = ({ snapshot }) => {
+  const stability = snapshot?.portfolioStability?.score ?? 0;
+  // O corte é do domínio (stable / attention / risk), não um número solto na UI.
+  const stabilityStatus = snapshot?.portfolioStability?.status;
+  const overdueInternal = snapshot?.quantitative?.overdueInternal ?? 0;
+  const stalled = snapshot?.portfolioExecution?.stalled?.length ?? 0;
+
+  return (
+    <div className="hud-bar bottom">
+      <div>SELECIONE UMA ESTAÇÃO PARA INICIAR</div>
+      <div className="hud-telemetry">
+        <div className={`telemetry-box ${stabilityStatus === 'risk' ? 'alert' : stabilityStatus === 'attention' ? 'warning' : ''}`}>
+          <span className="telemetry-val">{stability}%</span>
+          <span className="telemetry-label">ESTABILIDADE</span>
+        </div>
+        <div className={`telemetry-box ${overdueInternal > 0 ? 'warning' : ''}`}>
+          <span className="telemetry-val">{overdueInternal}</span>
+          <span className="telemetry-label">GARGALOS INT.</span>
+        </div>
+        <div className={`telemetry-box ${stalled > 0 ? 'alert' : ''}`}>
+          <span className="telemetry-val">{stalled}</span>
+          <span className="telemetry-label">SEM EXECUÇÃO</span>
+        </div>
+      </div>
+      <div>VYBE OS / CENTRAL OPERACIONAL</div>
+    </div>
+  );
+};
+
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
     return (
-      <div className="executive-detail-list">
-        {selectedDetails.map(item => (
-          <article className="executive-detail-item" key={`${item.id}-${item.delayType}`}>
-            <div>
-              <strong>{item.name}</strong>
-              <span>{item.client} {item.stage ? `· ${item.stage}` : ''} {item.status ? `· ${item.status}` : ''}</span>
-            </div>
-            <div className="executive-detail-meta">
-              <span className="badge-alert">{item.delayType}</span>
-              {item.daysOverdue !== undefined && <span>{item.daysOverdue} dia(s) de atraso</span>}
-              {item.prazo && <span>Prazo: {formatDate(item.prazo)}</span>}
-              {item.responsavel && <span>Responsável: {item.responsavel}</span>}
-            </div>
-          </article>
-        ))}
+      <div className="custom-tooltip">
+        <p>{payload[0].payload.name || payload[0].payload.stage}</p>
+        <span>{payload[0].value} ITENS</span>
       </div>
     );
   }
+  return null;
+};
+
+const DetailDrawer = ({ panel, setPanel, delayDetails }) => {
+  useEffect(() => {
+    if (!panel) return undefined;
+    const onKeyDown = (event) => { if (event.key === 'Escape') setPanel(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [panel, setPanel]);
+
+  if (!panel) return null;
+
+  let list = [];
+  if (panel.type === 'owner') {
+    list = delayDetails.filter(d => splitOwners(d.responsavel).includes(panel.id));
+  } else if (panel.type === 'client') {
+    list = delayDetails.filter(d => d.client === panel.id);
+  }
+
+  // Sort list by days overdue if available
+  list = list.slice().sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
 
   return (
-    <section className="executive-cockpit card" aria-labelledby="executive-cockpit-title">
-      <div className="executive-cockpit-header">
-        <div>
-          <div className="executive-kicker"><Target size={15} /> COMMAND LAYER · LIDERANÇA EXECUTIVA</div>
-          <h2 id="executive-cockpit-title">COCKPIT DE COMANDO E DECISÃO</h2>
-          <p>{activeLens.question}</p>
-        </div>
-      </div>
-
-      <div className="executive-tabs-container">
-        <button type="button" className={`executive-tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
-          <AlertTriangle size={14} /> Comando Executivo
-        </button>
-        <button type="button" className={`executive-tab ${activeTab === 'clients' ? 'active' : ''}`} onClick={() => setActiveTab('clients')}>
-          <Target size={14} /> Clientes & Relacionamento
-        </button>
-        <button type="button" className={`executive-tab ${activeTab === 'bottlenecks' ? 'active' : ''}`} onClick={() => setActiveTab('bottlenecks')}>
-          <RefreshCw size={14} /> Operação & Auditoria
-        </button>
-      </div>
-
-      <div className="executive-tab-content fade-in">
-        {activeTab === 'overview' && (
-          <>
-            <div className="executive-summary-grid">
-              <button type="button" className="executive-summary-card executive-interactive-card interactive-glow" onClick={() => setDetailPanel({ type: 'math', title: 'Auditoria de Estabilidade' })}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '100%' }}>
-                  <div style={{ flex: 1 }}>
-                    <span style={{ color: 'var(--cy-neon-cyan)' }}>ESTABILIDADE DA CARTEIRA</span>
-                    <strong style={{ color: stabilityColor }}>{stability.score ?? '—'}%</strong>
-                  </div>
-                  <div style={{ width: '100px', height: '100px', marginRight: '-10px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={chartData} innerRadius={35} outerRadius={48} dataKey="value" stroke="none">
-                          {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />)}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </button>
-              <div className="executive-summary-card interactive-glow">
-                <span>VOLUME OPERACIONAL</span>
-                <strong>{quantitative.activeItems ?? summary.openItems ?? 0}</strong>
-              </div>
-              <button type="button" className="executive-summary-card executive-interactive-card interactive-glow" onClick={() => setDetailPanel({ type: 'delays', title: 'Atrasos internos' })}>
-                <span style={{ color: 'var(--cy-neon-yellow)' }}>ATRASOS (INT VS EXT)</span>
-                <strong style={{ color: 'var(--cy-neon-yellow)' }}>{quantitative.overdueInternal ?? summary.delayedTeam ?? 0} <span style={{fontSize:'1.2rem', color: 'var(--cy-neon-magenta)'}}>vs {quantitative.overduePublication ?? summary.delayedClient ?? 0}</span></strong>
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function JarvisInterface({ metrics, setDetailPanel }) {
-  const safeSnapshot = metrics || {};
-  const stability = safeSnapshot.portfolioStability || {};
-  const quantitative = safeSnapshot.quantitative || {};
-  const summary = safeSnapshot.summary || {};
-  const readiness = safeSnapshot.portfolioReadiness || {};
-
-  const delayedTotal = quantitative.overdueInternal ?? summary.delayedTeam ?? 0;
-  const missingPlans = readiness.missingPlanning ?? 0;
-  const pendingMeetings = (safeSnapshot.clientLogs || []).filter(c => c.healthScore?.score < 60).length;
-
-  return (
-    <div className="jarvis-container fade-in">
-      <h1 className="jarvis-greeting">Status da Carteira</h1>
-      <p className="jarvis-status">
-        Estabilidade: <strong style={{ color: stability.score > 70 ? 'var(--cy-neon-green)' : 'var(--cy-neon-cyan)' }}>{stability.score ?? 0}%</strong>.
-        Identifiquei <strong>{delayedTotal} gargalos</strong> e <strong>{missingPlans} planejamentos</strong> ausentes.
-      </p>
-
-      <div className="jarvis-actions">
-        {delayedTotal > 0 && (
-          <div className="jarvis-action-card critical" onClick={() => setDetailPanel({ type: 'delays', title: 'Atrasos de Produção', subtitle: 'Tarefas que venceram o prazo' })}>
-            <h3>{delayedTotal} Gargalos Internos</h3>
-            <button className="jarvis-action-btn">Neutralizar Atrasos</button>
+    <div className="drawer-overlay" onClick={() => setPanel(null)}>
+      <aside className="drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-header">
+          <div>
+            <h3>{panel.title}</h3>
+            <p>DETALHAMENTO DE AUDITORIA</p>
           </div>
-        )}
-        <div className="jarvis-action-card" onClick={() => setDetailPanel({ type: 'math', title: 'Auditoria de Estabilidade' })}>
-          <h3>Auditoria ({stability.score ?? 0}%)</h3>
-          <button className="jarvis-action-btn">Abrir Inspeção</button>
+          <button className="drawer-close" onClick={() => setPanel(null)}><X size={32} /></button>
+        </div>
+        <div className="drawer-content">
+          {list.length === 0 ? (
+            <div style={{ color: 'var(--vybe-text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>Nenhum item isolado encontrado.</div>
+          ) : (
+            <ul className="data-list">
+              {list.map((item, i) => (
+                <li key={i} className="data-list-item" style={{ flexDirection: 'column', alignItems: 'flex-start', cursor: 'default' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                    <span className="item-primary">{item.name}</span>
+                    <span className={`item-meta ${item.daysOverdue > 0 ? 'critical' : ''}`}>
+                      {item.daysOverdue ? `ATRASO: ${item.daysOverdue}D` : 'EM ANDAMENTO'}
+                    </span>
+                  </div>
+                  <div className="item-sub" style={{ marginTop: '0.8rem', display: 'flex', gap: '1rem', fontFamily: 'var(--font-mono)' }}>
+                    <span>CLIENTE: {item.client}</span>
+                    <span>PRAZO: {formatDate(item.prazo)}</span>
+                    {item.responsavel && <span>RESP: {item.responsavel}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+};
+
+
+// --- ESTAÇÕES DE TRABALHO ---
+
+function ManagerStation({ snapshot, onExit }) {
+  const [detailPanel, setDetailPanel] = useState(null);
+
+  const delayDetails = snapshot.delayDetails || [];
+  
+  // Logic 1: Top Ofensores (Equipe)
+  // Cruzando productivity top responsibles e filtrando apenas atrasos internos
+  const internalDelays = delayDetails.filter(d => d.delayType?.includes('prazo interno'));
+  const blameMap = {};
+  internalDelays.forEach(d => {
+    // `responsavel` vem do Monday como lista separada por vírgula.
+    splitOwners(d.responsavel).forEach(name => {
+      blameMap[name] = (blameMap[name] || 0) + 1;
+    });
+  });
+  const topBlame = Object.entries(blameMap)
+    .map(([name, count]) => ({ id: name, name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  // Logic 2: Piores Clientes (maior % de itens atrasados sobre itens abertos)
+  const clientRanking = snapshot.clientRanking || [];
+  const worstClients = clientRanking
+    .filter(c => (c.riskPct || 0) > 0)
+    .sort((a, b) => (b.riskPct || 0) - (a.riskPct || 0))
+    .slice(0, 5);
+
+  // Logic 3: Clientes ativos sem nada em execução — risco de churn silencioso.
+  const execution = snapshot.portfolioExecution || {};
+  const stalledClients = execution.stalled || [];
+  const onboardingClients = execution.onboarding || [];
+
+  return (
+    <div className="animate-fade" style={{ minHeight: '100vh' }}>
+      <header className="app-header">
+        <div className="app-header-title">
+          <Target size={28} /> MATRIZ EXECUTIVA <span className="badge">GESTOR</span>
+        </div>
+        <div className="app-header-meta">
+          <span>ALVO: RISCO E CAPACIDADE</span>
+          <button onClick={onExit}>&times; ENCERRAR SESSÃO</button>
+        </div>
+      </header>
+
+      <div className="dashboard-grid">
+        {/* COLUNA ESQUERDA - ALERTAS DIRETOS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          
+          <div className="data-panel animate-slide delay-1">
+            <div className="data-panel-title">OFENSORES DE CAPACIDADE (EQUIPE)</div>
+            <ul className="data-list">
+              {topBlame.length === 0 ? <li className="item-sub">Nenhum atraso interno mapeado.</li> : null}
+              {topBlame.map(person => (
+                <li
+                  key={person.id}
+                  className="data-list-item"
+                  {...clickable(
+                    () => setDetailPanel({ type: 'owner', id: person.id, title: `Gargalos: ${person.name}` }),
+                    `Ver os ${person.count} atrasos de ${person.name}`
+                  )}
+                >
+                  <div>
+                    <div className="item-primary">{person.name}</div>
+                    <div className="item-sub">Represando fluxo operacional</div>
+                  </div>
+                  <div className="item-meta critical">{person.count} ATRASOS</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="data-panel animate-slide delay-2">
+            <div className="data-panel-title">CLIENTES ATIVOS SEM EXECUÇÃO</div>
+            <ul className="data-list">
+              {stalledClients.length === 0 ? (
+                <li className="item-sub">Toda a carteira ativa tem conteúdo ou demanda em andamento.</li>
+              ) : null}
+              {stalledClients.map(item => (
+                <li
+                  key={item.client}
+                  className="data-list-item"
+                  {...clickable(
+                    () => setDetailPanel({ type: 'client', id: item.client, title: `Visão: ${item.client}` }),
+                    `Ver os itens de ${item.client}`
+                  )}
+                >
+                  <div>
+                    <div className="item-primary">{item.client}</div>
+                    <div className="item-sub">Sem conteúdo em produção e sem demanda aberta</div>
+                  </div>
+                  <div className="item-meta critical">
+                    {item.daysSinceEntry === null ? 'PARADO' : `${item.daysSinceEntry}D NA CARTEIRA`}
+                  </div>
+                </li>
+              ))}
+              {onboardingClients.length > 0 ? (
+                <li className="item-sub" style={{ marginTop: '1rem' }}>
+                  {onboardingClients.map(c => c.client).join(', ')} — em implantação, dentro da janela de {execution.onboardingWindowDays} dias.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+
+        {/* COLUNA DIREITA - VISÃO DE CARTEIRA */}
+        <div className="data-panel animate-slide delay-3">
+          <div className="data-panel-title">CONTAS EM RISCO CRÍTICO (CHURN ALERT)</div>
+          <div className="vybe-table-wrapper">
+            <table className="vybe-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Risco (atrasos / abertos)</th>
+                  <th>Atrasos (Interno)</th>
+                  <th>Atrasos (Veiculação)</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {worstClients.map(c => (
+                  <tr
+                    key={c.client}
+                    style={{ cursor: 'pointer' }}
+                    {...clickable(
+                      () => setDetailPanel({ type: 'client', id: c.client, title: `Dossiê: ${c.client}` }),
+                      `Abrir dossiê de ${c.client}`
+                    )}
+                  >
+                    <td className="item-primary" style={{ color: 'var(--vybe-orange)' }}>{c.client}</td>
+                    <td>
+                      <span className={`badge ${c.riskPct >= 40 ? 'red' : c.riskPct >= 20 ? 'orange' : 'green'}`}>
+                        {c.riskPct ?? 0}% ({c.delayedItems}/{c.openItems})
+                      </span>
+                    </td>
+                    <td>{c.internalDelays} gargalos</td>
+                    <td>{c.publicationDelays} pendências</td>
+                    <td>
+                      <span className="item-meta">{c.riskPct >= 40 ? 'CRÍTICO' : 'ATENÇÃO'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} />
     </div>
   );
 }
 
-function CommandCenter() {
-  const [appMode, setAppMode] = useState(null); // null = splash, 'jarvis' = jarvis, 'analyst' = analyst
+
+// --- MAIN APP ---
+
+function App() {
+  const [appMode, setAppMode] = useState(null); // null = splash, 'manager' = jarvis, 'analyst' = analyst
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [scanText, setScanText] = useState("Acessando servidores do Monday.com...");
-  const [meta, setMeta] = useState(null);
-  const [detailPanel, setDetailPanel] = useState(null);
 
   const loadMetrics = async () => {
     setLoading(true);
     setError('');
-    setScanText('Acessando servidores do Monday.com...');
 
     try {
-      const metricsRes = await fetch('/api/dashboard/metrics');
+      // A resposta é cacheável na CDN de propósito, para que o time inteiro
+      // abrindo o painel não multiplique leituras no Monday. Mas o navegador
+      // precisa sempre perguntar: quem abre a tela tem que ver o estado atual,
+      // não uma cópia local de minutos atrás. Quem responde rápido é a CDN.
+      const metricsRes = await fetch('/api/dashboard/metrics', { cache: 'no-store' });
       const metricsData = await metricsRes.json().catch(() => ({}));
 
       if (!metricsRes.ok || !metricsData.success) {
-        throw new Error(`Command Center: ${metricsData.error || 'não foi possível carregar as métricas do Monday.com.'}`);
+        throw new Error(`Command Center: ${metricsData.error || 'não foi possível carregar as métricas.'}`);
       }
 
-      setScanText('Cruzando dados de clientes e reuniões...');
-      const logsRes = await fetch('/api/dashboard/clients-logs');
-      const logsData = await logsRes.json().catch(() => ({}));
-
-      const combinedSnapshot = {
-        ...metricsData.metrics.executiveSnapshot,
-        clientLogs: logsData.success ? logsData.logs : []
-      };
-
-      setMetrics({ executiveSnapshot: combinedSnapshot });
-      setMeta(metricsData.meta || null);
-      setScanText('Sincronização concluída.');
+      setMetrics({ executiveSnapshot: metricsData.metrics.executiveSnapshot });
     } catch (err) {
-      setError(err.message || 'Erro de conexão com a API do Command Center.');
+      setError(err.message || 'Falha catastrófica de comunicação com o Monday.com.');
     } finally {
       setLoading(false);
     }
@@ -278,118 +338,104 @@ function CommandCenter() {
 
   if (loading) {
     return (
-      <div className="loading-state fade-in" role="status" aria-label="Sincronizando dados">
-        <Cpu className="pulse" size={32} color="var(--cy-neon-purple)" />
-        <p className="loading-text" aria-live="polite">{scanText}</p>
-        <div className="sync-progress"><span /></div>
+      <div className="vybe-os-grid">
+        <div className="loading-wrapper">
+          <Crosshair size={40} color="var(--vybe-orange)" className="animate-fade" style={{ marginBottom: '2rem', animation: 'pulseCore 2s infinite' }} />
+          <div className="loading-text">ESTABELECENDO LINK COM MONDAY.COM</div>
+          <div className="loading-bar"></div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="error-state fade-in" role="alert">
-        <ShieldAlert size={40} color="var(--cy-neon-magenta)" />
-        <div>
-          <h2>CRITICAL: SINAL PERDIDO</h2>
-          <p>{error}</p>
-          <button type="button" onClick={loadMetrics} className="decision-see-more" style={{ marginTop: '1rem', border: '1px solid var(--cy-neon-magenta)', color: 'var(--cy-neon-magenta)' }}>TENTAR RECONEXÃO</button>
+      <div className="vybe-os-grid">
+        <div className="loading-wrapper" style={{ textAlign: 'center' }}>
+          <ShieldAlert size={60} color="var(--vybe-red)" style={{ marginBottom: '2rem' }} />
+          <h2 style={{ fontFamily: 'var(--font-mono)', color: 'var(--vybe-red)', letterSpacing: '4px' }}>SINAL PERDIDO</h2>
+          <p style={{ color: 'var(--vybe-text-muted)', margin: '1rem 0 2rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{error}</p>
+          <button onClick={loadMetrics} style={{ background: 'transparent', border: '1px solid var(--vybe-red)', color: 'var(--vybe-red)', padding: '1rem 2rem', fontFamily: 'var(--font-mono)', cursor: 'pointer', letterSpacing: '2px' }}>TENTAR RECONEXÃO</button>
         </div>
       </div>
     );
   }
 
-  // Splash Screen
-  if (!appMode) {
-    return (
-      <div className="splash-screen fade-in">
-        <div className="splash-title">
-          <h1>NEXUS</h1>
-          <p>Selecione a interface operacional</p>
-        </div>
+  return (
+    <>
+      <div className="vybe-os-grid"></div>
 
-        <div className="splash-cards-container">
-          <div className="mode-card jarvis" onClick={() => setAppMode('jarvis')}>
-            <TerminalSquare className="mode-icon" />
-            <h2>MODO JARVIS</h2>
-            <p>Assistente C-Level. Uma interface gamificada em laranja e preto que converte milhares de dados em um briefing executivo claro. O foco é na ação imediata e resolução de gargalos, sem distrações analíticas.</p>
-          </div>
+      {!appMode && (
+        <div className="splash-container animate-fade">
+          <HudHeader title="IDENTIFICAÇÃO DE ESTAÇÃO" subtitle="CENTRAL OPERACIONAL // PRONTA" />
           
-          <div className="mode-card analyst" onClick={() => setAppMode('analyst')}>
-            <PieChartIcon className="mode-icon" />
-            <h2>MODO ANALISTA</h2>
-            <p>A clássica Sala de Máquinas. Interface ciano e preta voltada para auditoria profunda, contendo funis operacionais, gráficos de barra e distribuição percentual detalhada de toda a carteira.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="splash-titles animate-slide delay-1">
+              <h2>VYBE OS</h2>
+              <h1>Qual estação você vai operar?</h1>
+              <p>// LINK ESTÁVEL<br />Seu contexto ajusta a fila, os comandos e a inteligência que entra em cena.</p>
+            </div>
 
-  return (
-    <div className={`app-container fade-in ${appMode === 'jarvis' ? 'theme-jarvis' : 'theme-analyst'}`} style={{ minHeight: '100vh', padding: '1rem', background: 'var(--cy-bg)' }}>
-      {/* HEADER DE MODO */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', padding: '0 1rem', borderBottom: '1px solid var(--cy-border)', paddingBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--cy-neon-cyan)' }}>
-          <Activity size={18} />
-          <strong style={{ fontFamily: 'var(--font-mono)', letterSpacing: '2px', fontSize: '1rem' }}>VYBE NEXUS</strong>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button type="button" onClick={() => setAppMode('jarvis')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: appMode === 'jarvis' ? '#ff6600' : 'var(--cy-text-secondary)', fontWeight: appMode === 'jarvis' ? 'bold' : 'normal', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <TerminalSquare size={14} /> JARVIS
-          </button>
-          <button type="button" onClick={() => setAppMode('analyst')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: appMode === 'analyst' ? '#00f3ff' : 'var(--cy-text-secondary)', fontWeight: appMode === 'analyst' ? 'bold' : 'normal', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <PieChartIcon size={14} /> ANALISTA
-          </button>
-          <div style={{ width: '1px', background: 'var(--cy-border)', margin: '0 0.5rem' }}></div>
-          <button type="button" onClick={() => setAppMode(null)} title="Sair" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--cy-text-secondary)' }}>
-            <Power size={14} />
-          </button>
-        </div>
-      </header>
+            <div className="stations-layout animate-slide delay-2">
+              <div className="station-card" {...clickable(() => setAppMode('manager'), 'Iniciar a estação Jarvis')}>
+                <div className="card-header">
+                  <span>01 / INTELIGÊNCIA EXECUTIVA</span>
+                  <span style={{ color: 'var(--vybe-gold)' }}>&#9679; ONLINE</span>
+                </div>
+                <Target className="card-icon" />
+                <h3>JARVIS</h3>
+                <p>Toda a operação em uma linha de visão. Prioriza risco, capacidade e decisões da equipe.</p>
+                
+                <div className="card-tags">
+                  <span className="tag">RISCO</span>
+                  <span className="tag">CAPACIDADE</span>
+                  <span className="tag">DECISÃO</span>
+                </div>
 
-      {/* CONTEÚDO PRINCIPAL */}
-      {appMode === 'jarvis' ? (
-        <JarvisInterface metrics={metrics.executiveSnapshot} setDetailPanel={setDetailPanel} />
-      ) : (
-        <ExecutiveCockpit metrics={metrics.executiveSnapshot} detailPanel={detailPanel} setDetailPanel={setDetailPanel} />
-      )}
-
-      {/* DRAWER LATERAL (COMPARTILHADO PARA O JARVIS TAMBÉM) */}
-      {detailPanel && appMode === 'jarvis' && (
-        <div className="executive-drawer-overlay" onClick={() => setDetailPanel(null)}>
-          <aside className="executive-drawer slide-in-right" aria-label="Detalhes executivos" onClick={e => e.stopPropagation()}>
-            <div className="executive-drawer-header">
-              <div>
-                <div className="executive-mini-heading"><Info size={13} /> {detailPanel.title}</div>
-                <p>{detailPanel.subtitle}</p>
+                <div className="card-action">INICIAR JARVIS &rarr;</div>
               </div>
-              <button type="button" className="executive-drawer-close" onClick={() => setDetailPanel(null)}>&times;</button>
+
+              <div className="core-link"></div>
+              <div className="core-sphere">V</div>
+              <div className="core-link"></div>
+
+              <div className="station-card analyst" {...clickable(() => setAppMode('analyst'), 'Iniciar a estação Analista')}>
+                <div className="card-header">
+                  <span>02 / OPERAÇÃO DE DADOS</span>
+                  <span style={{ color: 'var(--vybe-cyan)' }}>&#9679; ONLINE</span>
+                </div>
+                <Activity className="card-icon" />
+                <h3>ANALISTA</h3>
+                <p>Sua fila de execução completa, vazão do funil de produção e tabela crua de auditoria.</p>
+                
+                <div className="card-tags">
+                  <span className="tag">FUNIL</span>
+                  <span className="tag">PRAZOS</span>
+                  <span className="tag">RAW DATA</span>
+                </div>
+
+                <div className="card-action">INICIAR ANALISTA &rarr;</div>
+                <div className="card-cross-btm"></div>
+              </div>
             </div>
-            
-            <div className="executive-drawer-content">
-              <ExecutiveCockpit metrics={metrics.executiveSnapshot} externalDetailPanel={detailPanel} forceRenderDrawer={true} setDetailPanel={setDetailPanel} />
-            </div>
-          </aside>
+          </div>
+
+          <HudFooter snapshot={metrics.executiveSnapshot} />
         </div>
       )}
 
-      <footer className="footer-meta" style={{ marginTop: '3rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--cy-text-secondary)', fontSize: '0.7rem' }}>
-          CONFIDENCIAL: Liderança Vybe | {meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR') : 'Tempo Real'}
-        </p>
-      </footer>
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <div className="app-shell" style={{ minHeight: '100vh', backgroundColor: 'var(--cy-bg)' }}>
-      <main className="app-main" style={{ minHeight: '100vh' }}>
-        <CommandCenter />
-      </main>
-    </div>
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode(null)} />}
+      {appMode === 'analyst' && (
+        <Suspense fallback={(
+          <div className="loading-wrapper">
+            <div className="loading-text">CARREGANDO CONSOLE DO ANALISTA</div>
+            <div className="loading-bar"></div>
+          </div>
+        )}>
+          <AnalystStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode(null)} />
+        </Suspense>
+      )}
+    </>
   );
 }
 
