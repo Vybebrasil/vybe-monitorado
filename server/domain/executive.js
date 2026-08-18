@@ -117,6 +117,26 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     clientsWithOpenDemand: demands.clientsWithOpenDemand || [],
     generatedAt
   });
+  const stalledClients = new Set(executionGap.stalled.map(client => client.client));
+  const onboardingClients = new Set(executionGap.onboarding.map(client => client.client));
+  const eligibleForReadiness = Number(readiness.eligibleClients) || executionGap.eligibleClients || 0;
+  const planningCoveragePct = readiness.planningCoveragePct ?? null;
+  const dashboardCoveragePct = readiness.dashboardCoveragePct ?? null;
+  const planningSystemicGap = missingPlanning.length > 0 && eligibleForReadiness > 0 && (planningCoveragePct === 0 || missingPlanning.length >= eligibleForReadiness);
+  const dashboardSystemicGap = missingDashboard.length > 0 && eligibleForReadiness > 0 && (dashboardCoveragePct === 0 || missingDashboard.length >= eligibleForReadiness);
+  const planningClients = missingPlanning.filter(client => !stalledClients.has(client) && !onboardingClients.has(client));
+  const dashboardClients = missingDashboard.filter(client => !stalledClients.has(client) && !onboardingClients.has(client));
+  const readinessDeductions = [];
+  if (planningSystemicGap) {
+    readinessDeductions.push({ id: 'planning-source-gap', kind: 'planning', label: 'Planejamento da carteira sem preenchimento', count: missingPlanning.length, penalizedCount: 1, pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: missingPlanning });
+  } else if (planningClients.length > 0) {
+    readinessDeductions.push({ id: 'missing-planning', kind: 'planning', label: 'Clientes sem planejamento válido', count: planningClients.length, penalizedCount: planningClients.length, pointsPerItem: 3, points: planningClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: planningClients });
+  }
+  if (dashboardSystemicGap) {
+    readinessDeductions.push({ id: 'dashboard-source-gap', kind: 'dashboard', label: 'Dashboard/calendário da carteira sem preenchimento', count: missingDashboard.length, penalizedCount: 1, pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: missingDashboard });
+  } else if (dashboardClients.length > 0) {
+    readinessDeductions.push({ id: 'missing-dashboard', kind: 'dashboard', label: 'Clientes sem dashboard/calendário válido', count: dashboardClients.length, penalizedCount: dashboardClients.length, pointsPerItem: 3, points: dashboardClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: dashboardClients });
+  }
   const clientRisks = buildClientRisks(ranking);
   const totalOpen = sum(ranking, 'open');
   const clientRanking = ranking
@@ -133,12 +153,19 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       };
     })
     .sort((a, b) => b.delayedItems - a.delayedItems || b.openItems - a.openItems);
-  // A prontidão de planejamento saiu do cálculo: enquanto a coluna do Monday for
-  // preenchida com o mesmo lembrete para a carteira inteira, ela subtrai um valor
-  // fixo todo dia e não distingue um mês bom de um mês ruim. Entrou no lugar o
-  // cliente parado, que aparece e some conforme a operação anda.
-  const stabilityScore = clamp(100 - delayedTeam * 2 - delayedClient * 5 - executionGap.stalled.length * 5 - delayedDemands * 2, 0, 100);
-  const stabilityStatus = stabilityScore >= 75 ? 'stable' : stabilityScore >= 50 ? 'attention' : 'risk';
+  // Prontidão entra no score somente como lacuna sistêmica ou lacuna parcial
+  // comprovada, com precedência sobre clientes sem execução e onboarding para
+  // impedir que o mesmo problema seja descontado duas vezes.
+  const readinessPenalty = readinessDeductions.reduce((total, deduction) => total + deduction.points, 0);
+  const stabilityScore = 100 - delayedTeam * 2 - delayedClient * 5 - executionGap.stalled.length * 5 - delayedDemands * 2 - readinessPenalty;
+  const stabilityStatus = stabilityScore >= 75 ? 'stable' : stabilityScore >= 50 ? 'attention' : stabilityScore < 0 ? 'catastrophic' : 'risk';
+  const scoreDeductions = [
+    { id: 'internal-delays', label: 'Atrasos internos', count: delayedTeam, pointsPerItem: 2, points: delayedTeam * 2, source: 'Monday.com · prazo interno' },
+    { id: 'publication-risk', label: 'Veiculações vencidas', count: delayedClient, pointsPerItem: 5, points: delayedClient * 5, source: 'Monday.com · veiculação' },
+    { id: 'execution-gap', label: 'Clientes sem execução', count: executionGap.stalled.length, pointsPerItem: 5, points: executionGap.stalled.length * 5, source: 'Monday.com · carteira ativa sem conteúdo/demanda' },
+    { id: 'overdue-demands', label: 'Demandas vencidas', count: delayedDemands, pointsPerItem: 2, points: delayedDemands * 2, source: 'Monday.com · Solicitações de Demandas' },
+    ...readinessDeductions
+  ];
 
   const capacitySignals = [];
   if (delayedTeam > 0) {
@@ -254,9 +281,13 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     model: 'executive-signal-v1',
     portfolioStability: {
       score: stabilityScore,
+      rawScore: stabilityScore,
+      baseline: 100,
       status: stabilityStatus,
-      label: stabilityStatus === 'stable' ? 'ESTÁVEL' : stabilityStatus === 'attention' ? 'SOB OBSERVAÇÃO' : 'RISCO EXECUTIVO',
-      explanation: 'Proxy operacional baseado em atrasos agregados, clientes sem execução e demandas vencidas. Não substitui indicadores financeiros ou de satisfação.'
+      label: stabilityStatus === 'stable' ? 'ESTÁVEL' : stabilityStatus === 'attention' ? 'SOB OBSERVAÇÃO' : stabilityStatus === 'catastrophic' ? 'ABAIXO DA LINHA DE RECUPERAÇÃO' : 'RISCO EXECUTIVO',
+      explanation: 'Score bruto de pressão operacional. Pode ficar negativo. Cada fator retira pontos; as missões mostram quantos pontos podem ser recuperados.',
+      scoreDeductions,
+      recoveryPointsAvailable: scoreDeductions.reduce((total, deduction) => total + deduction.points, 0)
     },
     portfolioExecution: executionGap,
     delayDetails,
@@ -278,7 +309,11 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       missingPlanning: missingPlanning.length,
       missingDashboard: missingDashboard.length,
       clientsWithoutPlanning: missingPlanning,
-      clientsWithoutDashboard: missingDashboard
+      clientsWithoutDashboard: missingDashboard,
+      planningSystemicGap,
+      dashboardSystemicGap,
+      scoreDeductions: readinessDeductions,
+      note: 'Lacunas sistêmicas de cobertura geram uma missão de fonte única; lacunas parciais geram pontos por cliente. Clientes sem execução e onboarding não recebem penalização de prontidão duplicada.'
     },
     quantitative: {
       totalItems: quantitative.totalItems ?? totalOpen,
@@ -302,6 +337,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       groupCounts: quantitative.groupCounts || {},
       priorityCounts: quantitative.priorityCounts || {},
       formatCounts: quantitative.formatCounts || {},
+      statusColors: quantitative.statusColors || {},
       dataQuality: {
         itemsSampled: quantitative.totalItems ?? totalOpen,
         clientCoveragePct: quantitative.clientCoveragePct ?? null,

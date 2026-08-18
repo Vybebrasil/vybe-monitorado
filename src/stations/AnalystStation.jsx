@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
 import { Activity } from 'lucide-react';
+import { statusColorFor } from '../data/status-colors.js';
+import { PeopleAvatars } from '../components/PeopleAvatars.jsx';
 
 // Esta estação é o único consumidor do Recharts. Mantê-la em módulo separado
 // permite carregá-la sob demanda e tirar o gráfico do bundle inicial.
@@ -137,8 +139,8 @@ export default function AnalystStation({ snapshot, onExit }) {
                     <td><span className="badge">{item.id || 'N/A'}</span></td>
                     <td className="item-primary">{item.name}</td>
                     <td style={{ color: 'var(--vybe-cyan)' }}>{item.client}</td>
-                    <td>{item.status || item.stage}</td>
-                    <td>{item.responsavel || 'Não Atribuído'}</td>
+                    <td><span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot.quantitative?.statusColors) }}>{item.status || item.stage}</span></td>
+                    <td><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></td>
                     <td>
                       {item.daysOverdue > 0 ? (
                         <span className="item-meta critical">-{item.daysOverdue}D</span>

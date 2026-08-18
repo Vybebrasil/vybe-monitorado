@@ -161,7 +161,8 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
         overduePublication: 1,
         overduePublicationPctOfActive: 6.7,
         priorityCoveragePct: 40,
-        statusCounts: { 'Finalizado': 5, 'Em andamento': 10, 'A Fazer': 5 }
+        statusCounts: { 'Finalizado': 5, 'Em andamento': 10, 'A Fazer': 5 },
+        statusColors: { 'Finalizado': '#9cd326', 'Em andamento': '#fdab3d', 'A Fazer': '#c4c4c4' }
       }
     },
     demands: [],
@@ -176,8 +177,36 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.clientRanking[0].riskPct, 20);
   assert.equal(snapshot.delayDetails[0].delayType, 'prazo interno');
   assert.equal(snapshot.productivity.readyToSchedule, 4);
+  assert.equal(snapshot.quantitative.statusColors['Em andamento'], '#fdab3d');
   assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
+});
+
+test('Prontidão sistêmica gera missões de fonte sem duplicar execução ou onboarding', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      missingPlanning: ['Cliente Produzindo', 'Cliente Parado', 'Cliente Novo'],
+      missingDashboard: ['Cliente Produzindo', 'Cliente Parado', 'Cliente Novo'],
+      quantitative: { eligibleClients: 3, planningCoveragePct: 0, dashboardCoveragePct: 0 },
+      activePortfolio: [
+        { name: 'Cliente Produzindo', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente Parado', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente Novo', since: '2026-08-16T00:00:00Z' }
+      ]
+    },
+    posts: {
+      ranking: [{ name: 'Cliente Produzindo', open: 4, delayedPrazo: 0, delayedVeiculacao: 0, details: [] }]
+    },
+    demands: Object.assign([], { clientsWithOpenDemand: [] }),
+    generatedAt: '2026-08-17T00:00:00.000Z'
+  });
+
+  assert.equal(snapshot.portfolioStability.score, 85);
+  assert.deepEqual(snapshot.portfolioReadiness.scoreDeductions.map(item => item.id), ['planning-source-gap', 'dashboard-source-gap']);
+  assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'planning-source-gap').points, 5);
+  assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'dashboard-source-gap').points, 5);
+  assert.equal(snapshot.portfolioReadiness.scoreDeductions[0].affectedClients.length, 3);
+  assert.equal(snapshot.portfolioStability.scoreDeductions.some(item => item.id === 'missing-planning'), false);
 });
 
 test('Cliente ativo sem conteúdo e sem demanda vira sinal de execução, respeitando onboarding', () => {

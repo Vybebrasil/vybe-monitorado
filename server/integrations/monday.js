@@ -2,30 +2,10 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { clients as activeClients } from '../../src/data/clients.js';
+import { STATUS_COLORS } from '../../src/data/status-colors.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-const STATUS_COLORS = {
-  'Em andamento': '#fdab3d',
-  'Falta D.A': '#4eccc6',
-  'Alteração': '#df2f4a',
-  'Finalizado': '#9cd326',
-  'Aguardo': '#9d50dd',
-  'A Fazer': '#c4c4c4',
-  'Para agendar': '#037f4c',
-  'Para aprovação': '#579bfc',
-  'Cap. Agendada': '#ff007f',
-  'Pode Fazer': '#ffcb00',
-  'Ag. Aprovação Cliente': '#faa1f1',
-  'Ag. Info Cliente': '#bca58a',
-  'Falta Info': '#ff6d3b',
-  'Agendando Cap': '#ff5ac4',
-  'Falta OFF': '#784bd1',
-  'Segurar Post': '#7f5347',
-  'Aguardo Redação': '#e484bd',
-  'Agendado': '#a1e3f6'
-};
 
 const ALIAS_MAP = {
   'Antonov Center': 'Antonov',
@@ -52,6 +32,23 @@ function normalizeClientName(name) {
 
 function percent(value, total) {
   return total ? Number(((value / total) * 100).toFixed(1)) : null;
+}
+
+function parsePeopleColumn(column) {
+  if (!column?.value) return [];
+  try {
+    const parsed = JSON.parse(column.value);
+    return (parsed.personsAndTeams || [])
+      .filter(entry => entry?.kind === 'person' && entry.id)
+      .map(entry => ({ id: String(entry.id) }));
+  } catch {
+    return [];
+  }
+}
+
+function fallbackPeople(text = '', refs = []) {
+  const names = String(text || '').split(',').map(name => name.trim()).filter(Boolean);
+  return refs.map((ref, index) => ({ id: String(ref.id), name: names[index] || `Pessoa ${ref.id}`, avatarUrl: null }));
 }
 
 function parseDateValue(value) {
@@ -111,6 +108,22 @@ class MondayIntegration {
       console.warn('Could not read MONDAY_API_TOKEN from .env');
     }
     return '';
+  }
+
+  async getPeopleDirectory(ids = []) {
+    const uniqueIds = [...new Set(ids.map(String).filter(Boolean))];
+    if (!uniqueIds.length) return {};
+    try {
+      const data = await this.query(`query { users(ids: [${uniqueIds.join(',')}]) { id name photo_small } }`);
+      return Object.fromEntries((data.users || []).map(user => [String(user.id), {
+        id: String(user.id),
+        name: user.name || '',
+        avatarUrl: user.photo_small || null
+      }]));
+    } catch (error) {
+      console.warn(`Monday não retornou fotos de pessoas; usando fallback por iniciais: ${error.message}`);
+      return {};
+    }
   }
 
   async query(graphqlQuery, variables = {}) {
@@ -290,6 +303,7 @@ class MondayIntegration {
     const groupCounts = {};
     const priorityCounts = {};
     const formatCounts = {};
+    const personIds = new Set();
     let totalItems = 0;
     // Concluídos filtrados na origem: o board inteiro menos o que a query devolveu.
     // Antes isto contava apenas os concluídos que coubessem na página lida.
@@ -310,12 +324,22 @@ class MondayIntegration {
       let veiculacaoStr = '';
       let responsavel = '';
       let editorDesigner = '';
+      let responsavelRefs = [];
+      let editorDesignerRefs = [];
 
       item.column_values.forEach(c => {
         if (c.id === 'lista_suspensa_mkmqnjbv') cliente = normalizeClientName(c.text);
         if (c.id === 'status') status = c.text || '';
-        if (c.id === 'person') responsavel = c.text || '';
-        if (c.id === 'multiple_person_mm18b2p0') editorDesigner = c.text || '';
+        if (c.id === 'person') {
+          responsavel = c.text || '';
+          responsavelRefs = parsePeopleColumn(c);
+          responsavelRefs.forEach(person => personIds.add(person.id));
+        }
+        if (c.id === 'multiple_person_mm18b2p0') {
+          editorDesigner = c.text || '';
+          editorDesignerRefs = parsePeopleColumn(c);
+          editorDesignerRefs.forEach(person => personIds.add(person.id));
+        }
         if (c.id === 'data') {
           try {
             if (c.value) {
@@ -407,11 +431,27 @@ class MondayIntegration {
           veiculacao: veiculacaoStr,
           responsavel,
           editorDesigner,
+          responsavelRefs,
+          editorDesignerRefs,
           isDelayedPrazo,
           isDelayedVeiculacao
         });
       }
     });
+
+    const peopleDirectory = await this.getPeopleDirectory([...personIds]);
+    Object.values(postsByClient).forEach(clientData => clientData.details.forEach(post => {
+      post.responsavelPeople = (post.responsavelRefs?.length ? post.responsavelRefs : fallbackPeople(post.responsavel)).map(person => ({
+        ...person,
+        ...(peopleDirectory[person.id] || {}),
+        name: peopleDirectory[person.id]?.name || person.name || post.responsavel || 'Pessoa não identificada'
+      }));
+      post.editorDesignerPeople = (post.editorDesignerRefs?.length ? post.editorDesignerRefs : fallbackPeople(post.editorDesigner)).map(person => ({
+        ...person,
+        ...(peopleDirectory[person.id] || {}),
+        name: peopleDirectory[person.id]?.name || person.name || post.editorDesigner || 'Pessoa não identificada'
+      }));
+    }));
 
     // Ordenar por clientes com mais atrasos/abertos, e ordenar posts do mais antigo para mais novo
     const ranking = Object.keys(postsByClient).map(cliente => {
@@ -473,6 +513,8 @@ class MondayIntegration {
           veiculacao: post.veiculacao,
           responsavel: post.responsavel,
           editorDesigner: post.editorDesigner,
+          responsavelPeople: post.responsavelPeople || [],
+          editorDesignerPeople: post.editorDesignerPeople || [],
           delayType: [post.isDelayedPrazo ? 'prazo interno' : '', post.isDelayedVeiculacao ? 'veiculação' : ''].filter(Boolean).join(' + '),
           daysOverdue: Math.max(daysOverdue(post.prazo, today), daysOverdue(post.veiculacao, today))
         })))
