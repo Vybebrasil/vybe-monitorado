@@ -237,10 +237,10 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
   const stabilityScore = 100 - delayedTeam * 2 - delayedClient * 5 - executionGap.stalled.length * 5 - delayedDemands * 2 - readinessPenalty;
   const stabilityStatus = stabilityScore >= 75 ? 'stable' : stabilityScore >= 50 ? 'attention' : stabilityScore < 0 ? 'catastrophic' : 'risk';
   const scoreDeductions = [
-    { id: 'internal-delays', label: 'Atrasos internos', count: delayedTeam, pointsPerItem: 2, points: delayedTeam * 2, source: 'Monday.com · prazo interno' },
+    { id: 'internal-delays', label: 'Atrasos em Produção de Conteúdo', count: delayedTeam, pointsPerItem: 2, points: delayedTeam * 2, source: 'Monday.com · Produção de Conteúdo · prazo interno' },
     { id: 'publication-risk', label: 'Veiculações vencidas', count: delayedClient, pointsPerItem: 5, points: delayedClient * 5, source: 'Monday.com · veiculação' },
     { id: 'execution-gap', label: 'Clientes sem execução', count: executionGap.stalled.length, pointsPerItem: 5, points: executionGap.stalled.length * 5, source: 'Monday.com · carteira ativa sem conteúdo/demanda' },
-    { id: 'overdue-demands', label: 'Demandas vencidas', count: delayedDemands, pointsPerItem: 2, points: delayedDemands * 2, source: 'Monday.com · Solicitações de Demandas' },
+    { id: 'overdue-demands', label: 'Solicitações de Demandas vencidas', count: delayedDemands, pointsPerItem: 2, points: delayedDemands * 2, source: 'Monday.com · Solicitações de Demandas · prazo da solicitação' },
     ...readinessDeductions
   ];
 
@@ -252,10 +252,10 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       type: 'capacity_risk',
       severity: delayedTeam >= 10 ? 'high' : 'medium',
       severityLabel: severityLabel(delayedTeam >= 10 ? 'high' : 'medium'),
-      title: 'Capacidade interna pressionada',
-      whyItMatters: `${delayedTeam} atrasos de prazo interno estão concentrados na carteira${topOwner ? `; ${topOwner.name} aparece com ${topOwner.delayedPrazo + topOwner.delayedVeiculacao} sinais` : ''}.`,
+      title: 'Capacidade da Produção de Conteúdo pressionada',
+      whyItMatters: `${delayedTeam} itens de Produção de Conteúdo estão com prazo interno vencido e concentrados na carteira${topOwner ? `; ${topOwner.name} aparece com ${topOwner.delayedPrazo + topOwner.delayedVeiculacao} sinais` : ''}.`,
       recommendedDecision: 'Revisar distribuição de capacidade e identificar o gargalo de processo antes de adicionar mais produção.',
-      evidence: [evidence('monday', `${delayedTeam} atrasos internos agregados.`, topOwner?.posts?.[0]?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${topOwner.posts[0].id}` : null)],
+      evidence: [evidence('monday', `${delayedTeam} itens de Produção de Conteúdo com prazo interno vencido.`, topOwner?.posts?.[0]?.id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${topOwner.posts[0].id}` : null)],
       ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: responsavelRanking.filter(r => r.delayedPrazo > 0).map(r => `${r.name} (${r.delayedPrazo} atrasos)`)
     });

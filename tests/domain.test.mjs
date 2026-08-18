@@ -184,6 +184,8 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.quantitative.statusColors['Em andamento'], '#fdab3d');
   assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
+  assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'internal-delays').label, 'Atrasos em Produção de Conteúdo');
+  assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'internal-delays').source, 'Monday.com · Produção de Conteúdo · prazo interno');
 });
 
 test('Snapshot expõe frescor da fonte e clientes em risco sem reunião futura', () => {

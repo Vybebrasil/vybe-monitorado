@@ -66,10 +66,10 @@ export const buildMissions = (snapshot) => {
     recoverablePoints: deduction.points
   }));
   const missions = [
-    { id: 'internal-delays', kpiId: 'delays', title: 'Destravar atrasos internos', current: Number(quantitative.overdueInternal) || 0, pointsPerItem: 2, unit: 'atrasos', accent: 'critical', description: 'Cada prazo interno recuperado devolve 2 pontos.' },
+    { id: 'internal-delays', kpiId: 'delays', title: 'Regularizar itens da Produção de Conteúdo', current: Number(quantitative.overdueInternal) || 0, pointsPerItem: 2, unit: 'itens de Produção', accent: 'critical', source: 'Monday.com · Produção de Conteúdo · prazo interno', description: 'Cada item com prazo interno da Produção de Conteúdo regularizado devolve 2 pontos.' },
     { id: 'publication-risk', kpiId: 'publication', title: 'Salvar veiculações em risco', current: Number(quantitative.overduePublication) || 0, pointsPerItem: 5, unit: 'veiculações', accent: 'high', description: 'Cada veiculação recuperada devolve 5 pontos.' },
     { id: 'execution-gap', kpiId: 'execution', title: 'Reativar clientes sem execução', current: Number(execution.stalled?.length) || 0, pointsPerItem: 5, unit: 'clientes', accent: 'warning', description: 'Cada cliente reativado devolve 5 pontos.' },
-    { id: 'overdue-demands', kpiId: 'health', title: 'Regularizar demandas vencidas', current: delayedDemands, pointsPerItem: 2, unit: 'demandas', accent: 'attention', description: 'Cada demanda vencida regularizada devolve 2 pontos.' },
+    { id: 'overdue-demands', kpiId: 'health', title: 'Atender Solicitações de Demandas vencidas', current: delayedDemands, pointsPerItem: 2, unit: 'solicitações', accent: 'attention', source: 'Monday.com · Solicitações de Demandas · prazo da solicitação', description: 'Cada Solicitação de Demanda vencida atendida devolve 2 pontos.' },
     ...readinessMissions
   ];
   return missions.filter(mission => mission.current > 0).map(mission => ({

@@ -51,9 +51,9 @@ export function summarizeExecutiveDelta(currentSnapshot = null, previousSnapshot
   const previousScore = Number(previousSnapshot.portfolioStability?.score);
   const value = (key, source = currentSummary) => Number(source?.[key]) || 0;
   const fields = [
-    ['delayedTeam', 'Atrasos internos'],
+    ['delayedTeam', 'Atrasos em Produção de Conteúdo'],
     ['delayedClient', 'Veiculações vencidas'],
-    ['delayedDemands', 'Demandas vencidas'],
+    ['delayedDemands', 'Solicitações de Demandas vencidas'],
     ['missingPlanning', 'Clientes sem planejamento'],
     ['missingDashboard', 'Clientes sem dashboard/calendário']
   ];
