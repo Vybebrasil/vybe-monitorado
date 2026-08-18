@@ -86,6 +86,55 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
+const mondayItemUrl = (id) => id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${id}` : null;
+
+const buildInvestigation = (panel, list) => {
+  const internal = list.filter(item => item.delayType?.includes('prazo interno'));
+  const publication = list.filter(item => item.delayType?.includes('veiculação'));
+  const totalDays = list.reduce((total, item) => total + (Number(item.daysOverdue) || 0), 0);
+  const clients = [...new Set(list.map(item => item.client).filter(Boolean))];
+  const stages = [...new Set(list.map(item => item.stage).filter(Boolean))];
+  const oldest = list.reduce((oldestItem, item) => (item.daysOverdue || 0) > (oldestItem?.daysOverdue || 0) ? item : oldestItem, null);
+  const dominantStage = Object.entries(list.reduce((map, item) => {
+    const stage = item.stage || 'Etapa não informada';
+    map[stage] = (map[stage] || 0) + 1;
+    return map;
+  }, {})).sort((a, b) => b[1] - a[1])[0];
+
+  if (panel?.type === 'owner') {
+    return {
+      eyebrow: 'JARVIS · INVESTIGAÇÃO DE CAPACIDADE',
+      title: `${panel.id} concentra um gargalo de fluxo`,
+      narrative: `${list.length} item(s) atrasado(s) associado(s) a esta pessoa, distribuído(s) em ${clients.length || 1} cliente(s). O padrão aponta para concentração de prazo, não para uma medição de produtividade individual.`,
+      why: `${internal.length} atraso(s) de prazo interno${publication.length ? ` e ${publication.length} de veiculação` : ''}. ${dominantStage ? `A maior concentração aparece em “${dominantStage[0]}” (${dominantStage[1]} item(s)).` : 'A etapa do fluxo não está preenchida.'}`,
+      recommendation: 'Investigar a causa do fluxo — dependência, aprovação, briefing ou distribuição — antes de atribuir mais carga ou cobrar velocidade.',
+      metrics: [
+        { label: 'ITENS AFETADOS', value: list.length },
+        { label: 'CLIENTES', value: clients.length },
+        { label: 'DIAS ACUMULADOS', value: totalDays },
+        { label: 'MAIOR ATRASO', value: oldest ? `${oldest.daysOverdue}D` : 'N/D' }
+      ],
+      footer: 'A leitura identifica concentração de sinais; não classifica performance pessoal.'
+    };
+  }
+
+  const client = panel?.id || 'este cliente';
+  return {
+    eyebrow: 'JARVIS · INVESTIGAÇÃO DE PREVISIBILIDADE',
+    title: `${client} exige uma leitura de causa`,
+    narrative: `${list.length} item(s) atrasado(s) foram encontrados para este cliente. A pergunta executiva é se o risco está no prazo interno, na veiculação ou em uma dependência que precisa ser destravada.`,
+    why: `${internal.length} atraso(s) interno(s)${publication.length ? ` e ${publication.length} de veiculação` : ''}. ${stages.length ? `O fluxo atravessa ${stages.length} etapa(s), com maior concentração em “${dominantStage?.[0] || stages[0]}”.` : 'A etapa do fluxo não está preenchida.'}`,
+    recommendation: 'Abrir os itens mais antigos, confirmar o próximo marco com a equipe e preparar a conversa executiva com o cliente se a data de veiculação estiver comprometida.',
+    metrics: [
+      { label: 'ITENS AFETADOS', value: list.length },
+      { label: 'ATRASOS INTERNOS', value: internal.length },
+      { label: 'VEICULAÇÕES', value: publication.length },
+      { label: 'DIAS ACUMULADOS', value: totalDays }
+    ],
+    footer: 'O risco é uma leitura de previsibilidade baseada nos itens encontrados no Monday.'
+  };
+};
+
 const DetailDrawer = ({ panel, setPanel, delayDetails }) => {
   useEffect(() => {
     if (!panel) return undefined;
@@ -102,41 +151,57 @@ const DetailDrawer = ({ panel, setPanel, delayDetails }) => {
   } else if (panel.type === 'client') {
     list = delayDetails.filter(d => d.client === panel.id);
   }
-
-  // Sort list by days overdue if available
   list = list.slice().sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
+  const investigation = buildInvestigation(panel, list);
 
   return (
     <div className="drawer-overlay" onClick={() => setPanel(null)}>
-      <aside className="drawer" onClick={e => e.stopPropagation()}>
+      <aside className="drawer investigation-drawer" onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
           <div>
             <h3>{panel.title}</h3>
-            <p>DETALHAMENTO DE AUDITORIA</p>
+            <p>INVESTIGAÇÃO EXECUTIVA · SOMENTE LEITURA</p>
           </div>
-          <button className="drawer-close" onClick={() => setPanel(null)}><X size={32} /></button>
+          <button className="drawer-close" aria-label="Fechar investigação" onClick={() => setPanel(null)}><X size={32} /></button>
         </div>
         <div className="drawer-content">
           {list.length === 0 ? (
-            <div style={{ color: 'var(--vybe-text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>Nenhum item isolado encontrado.</div>
+            <div className="investigation-empty"><strong>Sem evidência suficiente.</strong><span>O JARVIS não vai inventar uma causa quando o Monday não trouxe itens para este recorte.</span></div>
           ) : (
-            <ul className="data-list">
-              {list.map((item, i) => (
-                <li key={i} className="data-list-item" style={{ flexDirection: 'column', alignItems: 'flex-start', cursor: 'default' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                    <span className="item-primary">{item.name}</span>
-                    <span className={`item-meta ${item.daysOverdue > 0 ? 'critical' : ''}`}>
-                      {item.daysOverdue ? `ATRASO: ${item.daysOverdue}D` : 'EM ANDAMENTO'}
-                    </span>
-                  </div>
-                  <div className="item-sub" style={{ marginTop: '0.8rem', display: 'flex', gap: '1rem', fontFamily: 'var(--font-mono)' }}>
-                    <span>CLIENTE: {item.client}</span>
-                    <span>PRAZO: {formatDate(item.prazo)}</span>
-                    {item.responsavel && <span>RESP: {item.responsavel}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <section className="investigation-hero">
+                <span className="investigation-eyebrow">{investigation.eyebrow}</span>
+                <h4>{investigation.title}</h4>
+                <p>{investigation.narrative}</p>
+              </section>
+              <div className="investigation-metrics">
+                {investigation.metrics.map(metric => <div key={metric.label}><strong>{metric.value}</strong><span>{metric.label}</span></div>)}
+              </div>
+              <section className="investigation-callout">
+                <span>POR QUE ISSO IMPORTA</span>
+                <p>{investigation.why}</p>
+              </section>
+              <section className="investigation-callout recommendation">
+                <span>RECOMENDAÇÃO DO JARVIS</span>
+                <p>{investigation.recommendation}</p>
+              </section>
+              <div className="investigation-section-title">EVIDÊNCIAS · {list.length} ITEM(S)</div>
+              <ul className="data-list investigation-evidence-list">
+                {list.map((item, i) => {
+                  const link = mondayItemUrl(item.id);
+                  return (
+                    <li key={item.id || i} className="investigation-evidence-item">
+                      <div className="investigation-evidence-top"><strong>{item.name}</strong><span className="item-meta critical">{item.daysOverdue ? `ATRASO: ${item.daysOverdue}D` : 'EM ANDAMENTO'}</span></div>
+                      <div className="investigation-evidence-meta"><span>{item.client}</span><span>{item.stage || 'Etapa não informada'}</span><span>{item.delayType || 'Atraso não classificado'}</span></div>
+                      <div className="investigation-evidence-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span>Resp.: {item.responsavel || 'N/D'}</span></div>
+                      {item.editorDesigner && <div className="investigation-evidence-meta"><span>Editor/Designer: {item.editorDesigner}</span></div>}
+                      {link ? <a className="investigation-evidence-link" href={link} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="investigation-footnote">{investigation.footer}</p>
+            </>
           )}
         </div>
       </aside>
@@ -147,10 +212,31 @@ const DetailDrawer = ({ panel, setPanel, delayDetails }) => {
 
 // --- ESTAÇÕES DE TRABALHO ---
 
-function ManagerStation({ snapshot, onExit }) {
+function JarvisCopilot({ message, nextCommand }) {
+  return (
+    <section className="jarvis-copilot" aria-live="polite">
+      <div className="jarvis-copilot-presence">
+        <div className="jarvis-mini-orb" aria-hidden="true"><Target size={21} /></div>
+        <div><strong>JARVIS</strong><span>ATIVO · GUIANDO</span></div>
+      </div>
+      <div className="jarvis-copilot-speech">
+        <div className="jarvis-copilot-label"><span /> JARVIS · AGORA</div>
+        <p>{message.text}</p>
+        <small>{message.hint}</small>
+      </div>
+      <div className="jarvis-copilot-next"><span>PRÓXIMO COMANDO</span><strong>{nextCommand}</strong></div>
+    </section>
+  );
+}
+
+function ManagerStation({ snapshot, onExit, onOpenAnalyst }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
+  const [jarvisMessage, setJarvisMessage] = useState({
+    text: 'Estou com você. A leitura está organizada e vou conduzir o próximo ponto que merece decisão.',
+    hint: 'Selecione qualquer evidência; eu explico por que ela importa.'
+  });
 
   const delayDetails = snapshot.delayDetails || [];
   
@@ -185,6 +271,14 @@ function ManagerStation({ snapshot, onExit }) {
       : worstClients.length > 0
         ? 'Abrir as evidências dos clientes com maior exposição.'
         : 'A carteira não apresenta um comando crítico nesta leitura.';
+  const initialJarvisMessage = stalledClients.length > 0
+    ? { text: `Encontrei ${stalledClients.length} cliente(s) ativo(s) sem conteúdo em produção ou demanda aberta. Esse é o primeiro ponto que eu investigaria com você.`, hint: 'O risco aqui é de previsibilidade: vamos confirmar o contexto antes de concluir qualquer coisa.' }
+    : internalDelays.length > 0
+      ? { text: `A carteira tem ${internalDelays.length} atraso(s) interno(s) concentrado(s) em ${topBlame.length || 1} responsável(is). Vou separar causa de volume para orientar a decisão.`, hint: 'Selecione um responsável ou cliente e eu abro a leitura completa.' }
+      : worstClients.length > 0
+        ? { text: `${worstClients[0].client} aparece com ${worstClients[0].riskPct}% de exposição no recorte. Vou começar pela evidência antes de recomendar qualquer intervenção.`, hint: 'A decisão vem depois da causa; primeiro vamos entender o sinal.' }
+        : { text: 'A leitura está organizada. Não encontrei um risco dominante, então vou acompanhar os sinais que podem mudar a decisão.', hint: 'Selecione uma evidência para investigar qualquer variação com contexto.' };
+  const activeJarvisMessage = jarvisMessage || initialJarvisMessage;
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
@@ -193,12 +287,12 @@ function ManagerStation({ snapshot, onExit }) {
           <Target size={28} /> JARVIS / GUIA EXECUTIVO <span className="badge">GUIADO</span>
         </div>
         <div className="app-header-meta">
-          <span>PASSO 1 · RISCO, CAPACIDADE E DECISÃO</span>
-          <button onClick={onExit}>&larr; VOLTAR AO INÍCIO</button>
+          <span>JARVIS ATIVO · RISCO, CAPACIDADE E DECISÃO</span>
+          <button className="jarvis-exit-analyst" onClick={onOpenAnalyst}>SAIR DO JARVIS · ABRIR ANALISTA &rarr;</button>
         </div>
       </header>
 
-      <div className="jarvis-command-strip"><span>PRÓXIMO COMANDO</span><strong>{nextCommand}</strong><small>Selecione uma linha para abrir evidências; nada nesta estação altera o Monday.</small></div>
+      <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
       <div className="dashboard-grid">
         {/* COLUNA ESQUERDA - ALERTAS DIRETOS */}
@@ -213,7 +307,10 @@ function ManagerStation({ snapshot, onExit }) {
                   key={person.id}
                   className="data-list-item"
                   {...clickable(
-                    () => setDetailPanel({ type: 'owner', id: person.id, title: `Gargalos: ${person.name}` }),
+                    () => {
+                      setDetailPanel({ type: 'owner', id: person.id, title: `Gargalos: ${person.name}` });
+                      setJarvisMessage({ text: `Estou investigando ${person.count} atraso(s) associado(s) a ${person.name}. A evidência ajuda a separar causa de percepção.`, hint: 'Próximo: abrir os itens e entender onde o prazo se perdeu.' });
+                    },
                     `Ver os ${person.count} atrasos de ${person.name}`
                   )}
                 >
@@ -239,7 +336,10 @@ function ManagerStation({ snapshot, onExit }) {
                   key={item.client}
                   className="data-list-item"
                   {...clickable(
-                    () => setDetailPanel({ type: 'client', id: item.client, title: `Visão: ${item.client}` }),
+                    () => {
+                      setDetailPanel({ type: 'client', id: item.client, title: `Visão: ${item.client}` });
+                      setJarvisMessage({ text: `${item.client} está ativo, mas sem conteúdo em produção ou demanda aberta. Esse é um sinal de previsibilidade, não uma acusação operacional.`, hint: 'Próximo: abrir a evidência e verificar a última movimentação.' });
+                    },
                     `Ver os itens de ${item.client}`
                   )}
                 >
@@ -281,7 +381,10 @@ function ManagerStation({ snapshot, onExit }) {
                     key={c.client}
                     style={{ cursor: 'pointer' }}
                     {...clickable(
-                      () => setDetailPanel({ type: 'client', id: c.client, title: `Evidências: ${c.client}` }),
+                      () => {
+                        setDetailPanel({ type: 'client', id: c.client, title: `Evidências: ${c.client}` });
+                        setJarvisMessage({ text: `${c.client} tem ${c.riskPct}% de exposição no recorte (${c.delayedItems} de ${c.openItems} itens). Vou abrir a evidência antes de sugerir qualquer decisão.`, hint: 'Próximo: entender se o risco é interno, de veiculação ou de contexto.' });
+                      },
                       `Abrir evidências de ${c.client}`
                     )}
                   >
@@ -320,7 +423,6 @@ const getGreeting = (date = new Date()) => {
 
 function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
   const stability = Number.isFinite(snapshot?.portfolioStability?.score) ? snapshot.portfolioStability.score : null;
-  const stabilityLabel = snapshot?.portfolioStability?.label || (stability === null ? 'SEM SCORE' : 'LEITURA EXECUTIVA');
   const overdue = snapshot?.quantitative?.overdueInternal ?? 0;
   const stalled = snapshot?.portfolioExecution?.stalled?.length ?? 0;
   const clientRisks = snapshot?.clientRanking?.filter(item => (item.delayedItems || 0) > 0).length ?? 0;
@@ -332,37 +434,70 @@ function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
       : clientRisks > 0
         ? `${clientRisks} cliente(s) apresentam sinais de previsibilidade que merecem acompanhamento.`
         : 'A carteira não apresenta um sinal crítico dominante nesta leitura.';
-
   const priorityClass = stability === null ? 'attention' : stability < 50 ? 'critical' : stability < 75 ? 'attention' : 'stable';
-  const guidedSteps = [
-    { number: '01', title: 'Estado da carteira', text: `${stability === null ? 'N/D' : `${stability}%`} de estabilidade operacional · ${stabilityLabel.toLowerCase()}` },
-    { number: '02', title: 'O que mudou', text: `${overdue} atraso(s) interno(s), ${clientRisks} cliente(s) exposto(s) e ${decisions} decisão(ões) sugerida(s).` },
-    { number: '03', title: 'Próximo comando', text: stalled > 0 ? 'Investigar clientes sem sinal de execução.' : overdue > 0 ? 'Abrir a concentração de atrasos e decidir a resposta.' : 'Entrar no Analista para investigar a carteira.' }
-  ];
 
   return (
-    <div className="jarvis-home splash-container animate-fade">
-      <HudHeader title="JARVIS / LIDERANÇA EXECUTIVA" subtitle="LINK ESTÁVEL // MONDAY.COM AO VIVO" />
-      <main className="jarvis-home-main">
-        <div className="jarvis-eyebrow"><Target size={15} /> COMANDO EXECUTIVO UNIFICADO <span>CMO / COO · UMA LIDERANÇA</span></div>
-        <h2>{getGreeting()}, liderança.</h2>
-        <h1>O que merece sua atenção agora?</h1>
-        <p className="jarvis-intro">Eu organizei a leitura da carteira para você. Primeiro mostramos o sinal mais importante; depois abrimos a evidência e a decisão recomendada.</p>
-        <section className={`jarvis-priority-card ${priorityClass}`}>
-          <div className="jarvis-priority-top"><span>PRIORIDADE SUGERIDA</span><strong>{stabilityLabel}</strong></div>
-          <h3>{firstPriority}</h3>
-          <p>Não é uma ordem automática nem altera o Monday. É a sequência mais útil para iniciar a conversa executiva.</p>
+    <div className="jarvis-clean-home splash-container animate-fade">
+      <div className="jarvis-clean-top"><span><Target size={14} /> VYBE NEXUS</span><span>JARVIS · ONLINE</span></div>
+      <main className="jarvis-clean-main" aria-live="polite">
+        <section className="jarvis-clean-presence" aria-label="Presença do JARVIS">
+          <div className="jarvis-orb" aria-hidden="true">
+            <div className="jarvis-orb-core"><Target size={34} /></div>
+            <i className="jarvis-orb-ring ring-one" /><i className="jarvis-orb-ring ring-two" /><i className="jarvis-orb-ring ring-three" />
+          </div>
+          <div className="jarvis-presence-status"><span className="jarvis-live-dot" /> FALANDO COM A LIDERANÇA</div>
+          <div className="jarvis-voice-wave" aria-hidden="true">{[1,2,3,4,5,6,7,8].map(bar => <i key={bar} />)}</div>
         </section>
-        <div className="jarvis-actions">
-          <button type="button" className="jarvis-primary-action" onClick={onOpenJarvis}><Target size={18} /> ENTRAR NO JARVIS <span>GUIAR-ME</span></button>
-          <button type="button" className="jarvis-secondary-action" onClick={onOpenAnalyst}><Activity size={18} /> ABRIR ANALISTA <span>INVESTIGAR POR CONTA PRÓPRIA</span></button>
-        </div>
-        <section className="jarvis-guided-steps" aria-label="Roteiro de leitura do Jarvis">
-          {guidedSteps.map(step => <div className="jarvis-guided-step" key={step.number}><span>{step.number}</span><div><strong>{step.title}</strong><p>{step.text}</p></div></div>)}
+
+        <section className="jarvis-clean-conversation">
+          <div className="jarvis-clean-kicker">JARVIS <span>·</span> LEITURA EXECUTIVA</div>
+          <h1>{getGreeting()}, liderança.</h1>
+          <p className="jarvis-clean-lead">Já li a carteira. Encontrei um ponto para começarmos.</p>
+          <div className={`jarvis-clean-insight ${priorityClass}`}>
+            <span>ATENÇÃO AGORA</span>
+            <strong>{firstPriority}</strong>
+          </div>
+          <p className="jarvis-clean-explanation">Vou mostrar a evidência e conduzir a próxima decisão. Nada será alterado no Monday.</p>
+          <div className="jarvis-clean-question">Quer que eu conduza?</div>
+          <div className="jarvis-clean-actions">
+            <button type="button" className="jarvis-clean-primary" onClick={onOpenJarvis}><Target size={17} /> CONTINUAR COM O JARVIS</button>
+            <button type="button" className="jarvis-clean-analyst" onClick={onOpenAnalyst}><Activity size={15} /> Explorar no Analista <span>investigação profunda</span></button>
+          </div>
+          <div className="jarvis-clean-context"><span>{overdue} atrasos internos</span><i /> <span>{clientRisks} clientes expostos</span><i /> <span>{stalled > 0 ? stalled : decisions} próximo(s) comando(s)</span></div>
+          <div className="jarvis-clean-boundary"><Info size={13} /> JARVIS conduz. ANALISTA investiga. Vybe Painel executa.</div>
         </section>
-        <div className="jarvis-mode-note"><Info size={13} /> O JARVIS conduz. O ANALISTA investiga. Nenhum dos dois altera status, cria demanda ou substitui o Vybe Painel.</div>
       </main>
-      <HudFooter snapshot={snapshot} contextLabel="JARVIS / GUIA EXECUTIVO" />
+    </div>
+  );
+}
+
+function JarvisWakeScreen({ stage }) {
+  const stages = [
+    { label: 'ACORDANDO O NÚCLEO', detail: 'Inicializando presença executiva.' },
+    { label: 'LENDO A CARTEIRA', detail: 'Conectando Monday.com, Vybe Painel e agenda.' },
+    { label: 'CRUZANDO OS SINAIS', detail: 'Separando ruído de decisão.' },
+    { label: 'JARVIS ONLINE', detail: `${getGreeting()}, liderança. Estou pronto.` }
+  ];
+  const current = stages[Math.min(stage, stages.length - 1)];
+  const progress = `${Math.min(100, 18 + stage * 27)}%`;
+
+  return (
+    <div className="jarvis-wake-screen" aria-live="polite">
+      <div className="jarvis-wake-grid" />
+      <div className="jarvis-wake-brand"><Target size={15} /> VYBE NEXUS <span>// BOOT SEQUENCE</span></div>
+      <main className="jarvis-wake-core">
+        <div className="jarvis-wake-orb" aria-hidden="true">
+          <div className="jarvis-wake-orb-core"><Target size={42} /></div>
+          <i className="jarvis-wake-ring wake-ring-one" /><i className="jarvis-wake-ring wake-ring-two" /><i className="jarvis-wake-ring wake-ring-three" />
+        </div>
+        <div className="jarvis-wake-status"><span className="jarvis-live-dot" /> JARVIS {stage >= 3 ? 'ONLINE' : 'DESPERTANDO'}</div>
+        <div className="jarvis-wake-kicker">{current.label}</div>
+        <h1>{stage >= 3 ? `${getGreeting()}, liderança.` : 'Despertando.'}</h1>
+        <p>{current.detail}</p>
+        <div className="jarvis-wake-progress"><span style={{ width: progress }} /></div>
+        <div className="jarvis-wake-log"><span className={stage >= 0 ? 'done' : ''}>NÚCLEO DE PRESENÇA</span><span className={stage >= 1 ? 'done' : ''}>FONTES EXECUTIVAS</span><span className={stage >= 2 ? 'done' : ''}>LEITURA DE CONTEXTO</span></div>
+      </main>
+      <div className="jarvis-wake-footer">UMA LIDERANÇA · UM COMANDO · UMA LEITURA</div>
     </div>
   );
 }
@@ -370,7 +505,8 @@ function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
 // --- MAIN APP ---
 
 function App() {
-  const [appMode, setAppMode] = useState(null); // null = splash, 'manager' = jarvis, 'analyst' = analyst
+  const [appMode, setAppMode] = useState('wake'); // wake -> manager by default; analyst is an explicit exit
+  const [wakeStage, setWakeStage] = useState(0);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -403,6 +539,18 @@ function App() {
     loadMetrics();
   }, []);
 
+  useEffect(() => {
+    if (loading || !metrics) return undefined;
+    setWakeStage(0);
+    const timers = [
+      window.setTimeout(() => setWakeStage(1), 650),
+      window.setTimeout(() => setWakeStage(2), 1300),
+      window.setTimeout(() => setWakeStage(3), 1950),
+      window.setTimeout(() => setAppMode('manager'), 2700)
+    ];
+    return () => timers.forEach(window.clearTimeout);
+  }, [loading, metrics]);
+
   if (loading) {
     return (
       <div className="vybe-os-grid">
@@ -432,9 +580,9 @@ function App() {
     <>
       <div className="vybe-os-grid"></div>
 
-      {!appMode && <JarvisHome snapshot={metrics.executiveSnapshot} onOpenJarvis={() => setAppMode('manager')} onOpenAnalyst={() => setAppMode('analyst')} />}
+      {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode(null)} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">
@@ -442,7 +590,7 @@ function App() {
             <div className="loading-bar"></div>
           </div>
         )}>
-          <AnalystStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode(null)} />
+          <AnalystStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode('manager')} />
         </Suspense>
       )}
     </>
