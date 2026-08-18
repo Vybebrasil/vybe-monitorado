@@ -63,6 +63,13 @@ function parseDateValue(value) {
   }
 }
 
+// Teto de itens por página da API do Monday.
+const PAGE_LIMIT = 500;
+// Índice do rótulo "Finalizado" na coluna `status` do board de Produção de Conteúdo.
+// É o único status concluído existente lá hoje; Publicado e Cancelado seguem
+// tratados por texto em `isDone`, caso passem a existir.
+const DONE_STATUS_INDEX = 3;
+
 function isBeforeToday(dateString, today) {
   return Boolean(dateString) && new Date(`${dateString}T23:59:59Z`) < today;
 }
@@ -89,15 +96,21 @@ class MondayIntegration {
   }
 
   getToken() {
+    // A variável de ambiente é a fonte oficial: é o que a Vercel injeta e o que
+    // o dotenv carrega em desenvolvimento. A leitura direta do .env fica só como
+    // resgate para scripts que rodam sem dotenv.
+    if (process.env.MONDAY_API_TOKEN) return process.env.MONDAY_API_TOKEN.trim();
+
     try {
       const envPath = join(__dirname, '..', '..', '.env');
       const envContent = readFileSync(envPath, 'utf8');
       const tokenLine = envContent.split('\n').find(l => l.startsWith('MONDAY_API_TOKEN='));
-      if (tokenLine) return tokenLine.split('=')[1].trim();
+      // slice em vez de split: o token pode conter '='.
+      if (tokenLine) return tokenLine.slice('MONDAY_API_TOKEN='.length).trim();
     } catch (e) {
-      console.warn("Could not read MONDAY_API_TOKEN from .env");
+      console.warn('Could not read MONDAY_API_TOKEN from .env');
     }
-    return process.env.MONDAY_API_TOKEN || '';
+    return '';
   }
 
   async query(graphqlQuery) {
@@ -142,6 +155,7 @@ class MondayIntegration {
         items_page(limit: 100) {
           items {
             name
+            created_at
             column_values {
               id
               text
@@ -156,6 +170,9 @@ class MondayIntegration {
 
     const missingPlanning = [];
     const missingDashboard = [];
+    // Carteira ativa com a data de entrada de cada cliente: é o que permite
+    // separar quem parou de quem acabou de chegar.
+    const activePortfolio = [];
     let eligibleClients = 0;
     let clientsWithPlanning = 0;
     let clientsWithDashboard = 0;
@@ -174,6 +191,7 @@ class MondayIntegration {
       // Se o cliente não estiver "Inativo" ou "Pausado" (ajuste conforme o status real de vocês)
       if (status && !status.toLowerCase().includes('inativo')) {
         eligibleClients += 1;
+        activePortfolio.push({ name: item.name, since: item.created_at || null });
         // Planejamento: se estiver vazio ou se tiver o texto padrão de "Fazer planejamento"
         const planningMissing = !planejamento || planejamento.toLowerCase().includes('fazer planejamento');
         if (planningMissing) {
@@ -196,6 +214,7 @@ class MondayIntegration {
     return {
       missingPlanning,
       missingDashboard,
+      activePortfolio,
       quantitative: {
         eligibleClients,
         clientsWithPlanning,
@@ -209,9 +228,18 @@ class MondayIntegration {
   // 2. Posts Atrasados / Acumulados
   async getOpenPosts() {
     // Board: 7829537690 (Produção de Conteúdo)
+    //
+    // O board acumula todo o histórico (milhares de itens) e o grupo Finalizados
+    // responde pela maior parte. Pedir a página inteira e descartar os concluídos
+    // em memória esbarraria no limite de 500 itens por página: bastaria a operação
+    // ativa crescer para que itens sumissem em silêncio, sem erro nenhum.
+    // Por isso o corte é feito na origem, filtrando o status concluído. O total
+    // do board vem por items_count, que é o denominador correto de conclusão.
     const q = `query {
       boards(ids: [7829537690]) {
-        items_page(limit: 500) {
+        items_count
+        items_page(limit: ${PAGE_LIMIT}, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }) {
+          cursor
           items {
             id
             name
@@ -229,7 +257,15 @@ class MondayIntegration {
     }`;
 
     const result = await this.query(q);
-    const items = result.boards[0]?.items_page?.items || [];
+    const board = result.boards[0] || {};
+    const items = board.items_page?.items || [];
+    const boardItemsCount = Number(board.items_count) || items.length;
+
+    // Rede de segurança: se o filtro deixar de valer (rótulo renomeado, novo
+    // status de conclusão) a leitura volta a truncar. Melhor gritar que silenciar.
+    if (board.items_page?.cursor) {
+      console.warn(`[MONDAY] Leitura truncada em ${items.length} itens: o board tem mais páginas não lidas. Os números do Nexus estão incompletos.`);
+    }
 
     const postsByClient = {};
     let totalDelayed = 0;
@@ -241,7 +277,9 @@ class MondayIntegration {
     const priorityCounts = {};
     const formatCounts = {};
     let totalItems = 0;
-    let completedItems = 0;
+    // Concluídos filtrados na origem: o board inteiro menos o que a query devolveu.
+    // Antes isto contava apenas os concluídos que coubessem na página lida.
+    let completedItems = Math.max(0, boardItemsCount - items.length);
     let itemsWithClient = 0;
     let itemsWithInternalDeadline = 0;
     let itemsWithPublicationDate = 0;
@@ -307,6 +345,8 @@ class MondayIntegration {
       }
 
       // Finalizado/Publicado/Cancelado sai dos KPIs; Agendado e Para agendar permanecem no recorte ativo.
+      // Aqui só entram os concluídos que escaparam do filtro da query (Publicado,
+      // Cancelado); os Finalizados já foram contados via items_count.
       if (isDone) completedItems += 1;
 
       if (!isDone && status !== '') {
@@ -318,16 +358,19 @@ class MondayIntegration {
         let isDelayedPrazo = false;
         let isDelayedVeiculacao = false;
 
-        const hoje = new Date();
-        hoje.setHours(0,0,0,0);
-
         // Agendado/Para agendar continua no recorte, mas não é atraso operacional.
+        // KPI agregado e ranking por cliente usam a mesma régua (isBeforeToday):
+        // item com prazo hoje ainda não está atrasado.
         if (!isReady) {
-          if (prazoStr && isBeforeToday(prazoStr, today)) {
+          if (isBeforeToday(prazoStr, today)) {
             overdueInternal += 1;
+            postsByClient[cliente].delayedPrazo += 1;
+            isDelayedPrazo = true;
           }
-          if (veiculacaoStr && isBeforeToday(veiculacaoStr, today)) {
+          if (isBeforeToday(veiculacaoStr, today)) {
             overduePublication += 1;
+            postsByClient[cliente].delayedVeiculacao += 1;
+            isDelayedVeiculacao = true;
           }
         }
         if (prazoStr && isWithinNextDays(prazoStr, today)) {
@@ -335,24 +378,6 @@ class MondayIntegration {
         }
         if (veiculacaoStr && isWithinNextDays(veiculacaoStr, today)) {
           dueWithin7Publication += 1;
-        }
-
-        if (!isReady) {
-          if (prazoStr) {
-            const prazoDate = new Date(prazoStr);
-            if (prazoDate < hoje) {
-              postsByClient[cliente].delayedPrazo += 1;
-              isDelayedPrazo = true;
-            }
-          }
-
-          if (veiculacaoStr) {
-            const veicDate = new Date(veiculacaoStr);
-            if (veicDate < hoje) {
-              postsByClient[cliente].delayedVeiculacao += 1;
-              isDelayedVeiculacao = true;
-            }
-          }
         }
 
         if (isDelayedPrazo || isDelayedVeiculacao) {
@@ -524,6 +549,11 @@ class MondayIntegration {
     const items = result.boards[0]?.items_page?.items || [];
 
     const delayedDemands = [];
+    // Demanda aberta é diferente de demanda atrasada: um cliente com demandas no
+    // prazo está sendo atendido, e não pode ser lido como parado só porque nada
+    // dele venceu ainda.
+    const clientsWithOpenDemand = new Set();
+    const today = new Date();
 
     items.forEach(item => {
       let cliente = '';
@@ -545,11 +575,10 @@ class MondayIntegration {
 
       const isDone = status.toLowerCase().includes('feito') || status.toLowerCase().includes('concluído') || status.toLowerCase().includes('entregue') || status.toLowerCase().includes('cancelado');
 
-      if (!isDone && status !== '' && prazoStr) {
-        const prazoDate = new Date(prazoStr);
-        const hoje = new Date();
-        hoje.setHours(0,0,0,0);
-        if (prazoDate < hoje) {
+      if (!isDone && status !== '') {
+        if (cliente) clientsWithOpenDemand.add(cliente);
+        // Mesma régua dos posts: demanda com prazo hoje ainda não está atrasada.
+        if (isBeforeToday(prazoStr, today)) {
           delayedDemands.push({
             id: item.id,
             name: item.name,
@@ -562,6 +591,9 @@ class MondayIntegration {
       }
     });
 
+    // O array continua sendo o retorno principal para não quebrar quem só conta
+    // atrasos; a carteira com demanda aberta viaja junto como propriedade.
+    delayedDemands.clientsWithOpenDemand = [...clientsWithOpenDemand];
     return delayedDemands;
   }
 

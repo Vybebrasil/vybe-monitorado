@@ -178,6 +178,40 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
 });
 
+test('Cliente ativo sem conteúdo e sem demanda vira sinal de execução, respeitando onboarding', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      missingPlanning: [],
+      missingDashboard: [],
+      activePortfolio: [
+        { name: 'Cliente Produzindo', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente Só Demanda', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente Parado', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente Novo', since: '2026-08-10T00:00:00Z' }
+      ]
+    },
+    posts: {
+      ranking: [{ name: 'Cliente Produzindo', open: 4, delayedPrazo: 0, delayedVeiculacao: 0, details: [] }]
+    },
+    demands: Object.assign([], { clientsWithOpenDemand: ['Cliente Só Demanda'] }),
+    generatedAt: '2026-08-17T00:00:00.000Z'
+  });
+
+  const execution = snapshot.portfolioExecution;
+  assert.deepEqual(execution.stalled.map(c => c.client), ['Cliente Parado']);
+  assert.deepEqual(execution.onboarding.map(c => c.client), ['Cliente Novo']);
+  assert.equal(execution.clientsInExecution, 2);
+
+  // Quem tem demanda aberta, mesmo sem nenhum atraso, não pode ser lido como parado.
+  assert.equal(execution.stalled.some(c => c.client === 'Cliente Só Demanda'), false);
+
+  // O sinal precisa chegar ao risco executivo e ao score, no lugar da antiga constante.
+  const risk = snapshot.executiveRisks.find(r => r.id === 'portfolio-execution-gap');
+  assert.ok(risk, 'risco de execução deveria existir');
+  assert.equal(risk.affectedItems.length, 1);
+  assert.equal(snapshot.portfolioStability.score, 95);
+});
+
 test('Release usa SHA oficial da Vercel e gera URL verificável no GitHub', () => {
   const result = buildReleaseMetadata({
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40),

@@ -40,7 +40,7 @@ const storageMode = (...storeNames) => {
 
 const adminTokenMatches = req => {
   const expected = process.env.NEXUS_ADMIN_TOKEN || '';
-  const received = req.get('x-nexus-admin-token') || req.get('authorization')?.replace(/^Bearer\\s+/i, '') || '';
+  const received = req.get('x-nexus-admin-token') || req.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
   if (!expected || !received) return false;
   const expectedBuffer = Buffer.from(expected);
   const receivedBuffer = Buffer.from(received);
@@ -470,6 +470,14 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       }
     }
 
+    // A leitura custa três consultas ao Monday e alguns segundos. Sem cache, cada
+    // pessoa do time que abre o painel dispara tudo de novo e o consumo da API do
+    // Monday cresce com o número de espectadores. A CDN da Vercel guarda a resposta
+    // por um minuto e ainda serve a versão anterior enquanto revalida em segundo
+    // plano, então o painel abre instantâneo e o Monday vê no máximo uma leitura
+    // por minuto. Um minuto de defasagem é irrelevante para sinal executivo.
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+
     res.json({
       success: true,
       metrics: {
@@ -479,6 +487,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
     });
   } catch (error) {
     console.error("[API] Erro ao buscar métricas do Monday:", error);
+    // Falha não pode ser cacheada: a próxima tentativa precisa ir ao Monday.
+    res.set('Cache-Control', 'no-store');
     res.status(500).json({ error: error.message });
   }
 });
@@ -637,8 +647,14 @@ app.get('/api/executive/analytics', async (req, res) => {
   }
 });
 
-// NOVO ENDPOINT: Client Logs (Dossiê)
-app.get('/api/dashboard/clients-logs', async (req, res) => {
+// Client Logs (Dossiê) — histórico de reuniões e relacionamento por cliente.
+//
+// Diferente do resto do Nexus, esta rota devolve dado bruto de relacionamento
+// (títulos e datas de reunião, dias desde o último contato) e não alimenta
+// nenhuma tela. Num painel de acesso público por link, isso é exposição sem
+// contrapartida: qualquer pessoa com a URL lia o histórico da carteira inteira.
+// Fica atrás da barreira administrativa até que alguma superfície a consuma.
+app.get('/api/dashboard/clients-logs', requireAdminAccess, async (req, res) => {
   try {
     const [logs, futureMeetings, posts, demands, bottlenecks] = await Promise.all([
       mondayIntegration.getClientLogs(),
