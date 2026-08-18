@@ -19,6 +19,7 @@ import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
+import { securityHeaders, createRateLimiter } from '../server/security.js';
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
@@ -510,4 +511,43 @@ test('Vybe Painel oferece resumo executivo cacheável com seleção enxuta', asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test('Headers de segurança são aplicados sem exigir autenticação pública', () => {
+  const headers = {};
+  let nextCalled = false;
+  const req = { get: () => '', ip: '127.0.0.1' };
+  const res = { set(name, value) {
+    if (typeof name === 'object') Object.assign(headers, name);
+    else headers[name] = value;
+  } };
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    securityHeaders(req, res, () => { nextCalled = true; });
+  } finally {
+    process.env.NODE_ENV = originalNodeEnv;
+  }
+  assert.equal(nextCalled, true);
+  assert.equal(headers['X-Content-Type-Options'], 'nosniff');
+  assert.equal(headers['X-Frame-Options'], 'DENY');
+  assert.match(headers['Content-Security-Policy'], /frame-ancestors 'none'/);
+  assert.equal(headers['Strict-Transport-Security'], 'max-age=31536000; includeSubDomains');
+  assert.match(headers['X-Request-Id'], /^[0-9a-f-]{36}$/);
+});
+
+test('Rate limiter bloqueia excesso por janela sem bloquear a primeira leitura', () => {
+  const limiter = createRateLimiter({ windowMs: 60_000, max: 1, name: `test-${Date.now()}-${Math.random()}` });
+  const req = { get: () => '', ip: '198.51.100.10' };
+  let nextCount = 0;
+  let blockedStatus = null;
+  const makeResponse = () => ({
+    set() {},
+    status(code) { blockedStatus = code; return { json() {} }; }
+  });
+  limiter(req, makeResponse(), () => { nextCount += 1; });
+  limiter(req, makeResponse(), () => { nextCount += 1; });
+  assert.equal(nextCount, 1);
+  assert.equal(blockedStatus, 429);
 });

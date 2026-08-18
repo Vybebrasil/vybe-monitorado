@@ -26,6 +26,7 @@ export default function AnalystStation({ snapshot, onExit }) {
   const [panelError, setPanelError] = useState('');
   const [panelPageError, setPanelPageError] = useState('');
   const [panelLoadingMore, setPanelLoadingMore] = useState(false);
+  const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '' });
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +85,19 @@ export default function AnalystStation({ snapshot, onExit }) {
   const panelAffectedItems = allDelaysSorted
     .map(item => ({ ...item, panelItem: panelItemsById.get(String(item.id)) }))
     .filter(item => item.panelItem);
+  const filterOptions = useMemo(() => {
+    const values = key => [...new Set(delayDetails.map(item => String(item?.[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return { clients: values('client'), responsible: values('responsavel'), stages: values('stage'), statuses: values('status') };
+  }, [delayDetails]);
+  const filteredDelays = useMemo(() => allDelaysSorted.filter(item => {
+    const matches = (key, selected) => !selected || String(item?.[key] || '') === selected;
+    return matches('client', filters.client)
+      && matches('responsavel', filters.responsible)
+      && matches('stage', filters.stage)
+      && matches('status', filters.status);
+  }), [allDelaysSorted, filters]);
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const updateFilter = (key, value) => setFilters(previous => ({ ...previous, [key]: value }));
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
@@ -102,15 +116,15 @@ export default function AnalystStation({ snapshot, onExit }) {
       <section className="analyst-panel-sync data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
         <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · LEITURA COMPLETA</div>
         {panelError ? (
-          <div className="analyst-source-warning">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
+          <div className="analyst-source-warning" role="status" aria-live="polite">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
         ) : panelSnapshot ? (
           <>
-            <div className="analyst-source-summary">
+            <div className="analyst-source-summary" aria-live="polite">
               <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
               {panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
             </div>
-            {panelSnapshot.warning ? <div className="analyst-source-warning">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
-            {panelPageError ? <div className="analyst-source-warning">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
+            {panelSnapshot.warning ? <div className="analyst-source-warning" role="status" aria-live="polite">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
+            {panelPageError ? <div className="analyst-source-warning" role="status" aria-live="polite">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
             <div className="analyst-source-groups">
               {Object.entries((panelSnapshot.items || []).reduce((acc, item) => {
                 const group = item.group?.title || 'Sem grupo';
@@ -131,6 +145,17 @@ export default function AnalystStation({ snapshot, onExit }) {
         ) : (
           <div className="analyst-source-loading">Consultando a organização do Vybe Painel…</div>
         )}
+      </section>
+
+      <section className="analyst-filters data-panel animate-slide delay-1" aria-label="Filtros cruzados da investigação">
+        <div className="data-panel-title" aria-live="polite" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>FILTRAR A INVESTIGAÇÃO · {filteredDelays.length} EVIDÊNCIAS</div>
+        <div className="analyst-filter-grid">
+          <label>CLIENTE<select value={filters.client} onChange={event => updateFilter('client', event.target.value)}><option value="">Todos os clientes</option>{filterOptions.clients.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>RESPONSÁVEL<select value={filters.responsible} onChange={event => updateFilter('responsible', event.target.value)}><option value="">Todos os responsáveis</option>{filterOptions.responsible.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>ETAPA<select value={filters.stage} onChange={event => updateFilter('stage', event.target.value)}><option value="">Todas as etapas</option>{filterOptions.stages.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>STATUS MONDAY<select value={filters.status} onChange={event => updateFilter('status', event.target.value)}><option value="">Todos os status</option>{filterOptions.statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+        </div>
+        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button> : null}
       </section>
 
       <div className="dashboard-grid full">
@@ -172,7 +197,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                 </tr>
               </thead>
               <tbody>
-                {allDelaysSorted.map(item => (
+                {filteredDelays.map(item => (
                   <tr key={item.id}>
                     <td><span className="badge">{item.id || 'N/A'}</span></td>
                     <td className="item-primary">{item.name}</td>
@@ -189,9 +214,9 @@ export default function AnalystStation({ snapshot, onExit }) {
                     <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">MONDAY</a>{item.panelItem && <span className="analyst-panel-match" title="Este item também foi localizado na organização do Vybe Painel"> · PAINEL</span>}</td>
                   </tr>
                 ))}
-                {allDelaysSorted.length === 0 && (
+                {filteredDelays.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>Nenhum atraso encontrado nesta leitura do Monday.</td>
+                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>{activeFilterCount ? 'Nenhuma evidência combina com os filtros selecionados.' : 'Nenhum atraso encontrado nesta leitura do Monday.'}</td>
                   </tr>
                 )}
               </tbody>

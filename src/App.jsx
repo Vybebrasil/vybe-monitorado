@@ -459,17 +459,23 @@ function OwnerBars({ owners, totalDelays, statusColors, selectedOwnerId, onSelec
             <div
               className={`owner-bar-row ${owner.urgency.key} ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
               key={owner.id}
-              {...clickable(selectOwner, `${isSelected ? 'Pessoa selecionada' : 'Selecionar'} ${owner.name}`)}
               onMouseEnter={() => setHoveredOwnerId(owner.id)}
               onMouseLeave={() => setHoveredOwnerId(null)}
-              onFocus={() => setHoveredOwnerId(owner.id)}
-              onBlur={() => setHoveredOwnerId(null)}
-              aria-expanded={showOwnerPreview}
             >
-              <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><div className="owner-bar-person-summary"><span className="owner-bar-person-name">{owner.name}</span><strong>{formatNumber(owner.count)} atrasos</strong><span>{owner.publication ? `${owner.publication} veiculação` : 'sem veiculação'}</span><em className={`owner-urgency-chip ${owner.urgency.key}`}>{owner.urgency.short} · {owner.urgency.label}</em></div><span className="owner-bar-share">{formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
-              <div className={`owner-bar-track ${owner.urgency.key}`}><span style={{ width: `${(owner.count / max) * 100}%` }} /></div>
-              <small className="owner-bar-instruction"><strong>Maior atraso: {owner.maxDays} dia(s)</strong> · {isSelected ? 'selecionado · abrir abaixo' : 'selecione para fixar'}</small>
-              <button type="button" className="owner-bar-open" onClick={event => { event.stopPropagation(); onOpen(owner); }} aria-label={`Abrir todas as entregas de ${owner.name}`}>ABRIR {formatNumber(owner.count)} ENTREGAS ↗</button>
+              <button
+                type="button"
+                className="owner-bar-select"
+                onClick={selectOwner}
+                onFocus={() => setHoveredOwnerId(owner.id)}
+                onBlur={() => setHoveredOwnerId(null)}
+                aria-expanded={showOwnerPreview}
+                aria-label={`${isSelected ? 'Pessoa selecionada' : 'Selecionar'} ${owner.name}`}
+              >
+                <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><div className="owner-bar-person-summary"><span className="owner-bar-person-name">{owner.name}</span><strong>{formatNumber(owner.count)} atrasos</strong><span>{owner.publication ? `${owner.publication} veiculação` : 'sem veiculação'}</span><em className={`owner-urgency-chip ${owner.urgency.key}`}>{owner.urgency.short} · {owner.urgency.label}</em></div><span className="owner-bar-share">{formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
+                <div className={`owner-bar-track ${owner.urgency.key}`}><span style={{ width: `${(owner.count / max) * 100}%` }} /></div>
+                <small className="owner-bar-instruction"><strong>Maior atraso: {owner.maxDays} dia(s)</strong> · {isSelected ? 'selecionado · abrir abaixo' : 'selecione para fixar'}</small>
+              </button>
+              <button type="button" className="owner-bar-open" onClick={() => onOpen(owner)} aria-label={`Abrir todas as entregas de ${owner.name}`}>ABRIR {formatNumber(owner.count)} ENTREGAS ↗</button>
               {showOwnerPreview ? <div className="owner-bar-hover" role="tooltip">
                 <div className="owner-bar-hover-title">{hoverDetails.length < 5 ? `${hoverDetails.length} DEMANDAS EM RISCO` : '5 DEMANDAS MAIS URGENTES'} · {owner.name}</div>
                 {hoverDetails.length ? hoverDetails.map((item, index) => { const urgency = ownerUrgency(item.daysOverdue); return <a className={`owner-bar-hover-item ${urgency.key}`} key={item.id || `${item.name}-${index}`} href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer" title="Abrir evidência no Monday"><strong>{item.name}</strong><span>{item.client || 'Sem cliente'} · {item.stage || 'Etapa não informada'}</span><small><b>{urgency.short} · {urgency.label}</b>{item.status ? ` · ${item.status}` : ''} <em>ABRIR NO MONDAY ↗</em></small></a>; }) : <span className="owner-bar-hover-empty">Nenhuma demanda detalhada disponível.</span>}

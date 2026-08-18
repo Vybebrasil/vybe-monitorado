@@ -22,6 +22,7 @@ import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/e
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
 import { buildReleaseMetadata } from '../server/release.js';
+import { securityHeaders, createRateLimiter, rateLimitConfig } from '../server/security.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
@@ -67,6 +68,9 @@ function blockLegacyFilePersistence(req, res, next) {
 }
 
 const app = express();
+const rateLimits = rateLimitConfig();
+app.use(securityHeaders);
+app.use('/api', createRateLimiter({ ...rateLimits.public, name: 'public-api' }));
 app.use(cors({
   origin(origin, callback) {
     if (!isProduction || !origin) return callback(null, true);
@@ -74,6 +78,9 @@ app.use(cors({
   }
 }));
 app.use(express.json());
+app.use('/api/executive/decisions', createRateLimiter({ ...rateLimits.admin, name: 'admin-decisions' }));
+app.use('/api/executive/impacts', createRateLimiter({ ...rateLimits.admin, name: 'admin-impacts' }));
+app.use('/api/executive/snapshots', createRateLimiter({ ...rateLimits.admin, name: 'admin-snapshots' }));
 
 app.get('/api/healthz', async (req, res) => {
   const production = process.env.NODE_ENV === 'production';

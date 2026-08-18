@@ -24,20 +24,32 @@ const report = await page.evaluate(() => {
     hoverVisible,
     missionCount,
     kpiCount: document.querySelectorAll('.executive-kpi-card').length,
+    nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
   };
 });
 
 const firstOwner = page.locator('.owner-bar-row').first();
-await firstOwner.tap();
+const firstOwnerSelect = firstOwner.locator('.owner-bar-select');
+await firstOwnerSelect.focus();
+const focusState = await firstOwnerSelect.evaluate(element => ({ outlineStyle: getComputedStyle(element).outlineStyle, outlineWidth: getComputedStyle(element).outlineWidth }));
+await firstOwnerSelect.tap();
 await page.waitForTimeout(250);
 const selected = await page.evaluate(() => ({
   selectedOwner: document.querySelector('.owner-bar-row.selected .owner-bar-person-name')?.textContent?.trim() || '',
   popoverTitle: document.querySelector('.owner-bar-hover-title')?.textContent?.trim() || '',
   mondayLinks: document.querySelectorAll('.owner-bar-hover-item[href*="monday.com/boards/7829537690/pulses/"]').length,
-  drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
+    drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
+  }));
+
+await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();
+await page.waitForTimeout(350);
+const analystState = await page.evaluate(() => ({
+  filterCount: document.querySelectorAll('.analyst-filter-grid select').length,
+  bodyWidth: document.body.scrollWidth,
+  viewportWidth: window.innerWidth
 }));
 
-console.log(JSON.stringify({ ...report, afterTap: selected }, null, 2));
+console.log(JSON.stringify({ ...report, afterTap: selected, analystState }, null, 2));
 
 const failures = [];
 if (report.viewport.width !== 390) failures.push(`viewport width esperado 390, obtido ${report.viewport.width}`);
@@ -50,6 +62,10 @@ if (selected.selectedOwner !== 'Deivid Oliveira Ribeiro') failures.push(`seleç�
 if (!selected.popoverTitle.includes('2 DEMANDAS EM RISCO')) failures.push(`popover esperado com 2 demandas, obtido: ${selected.popoverTitle}`);
 if (selected.mondayLinks !== 2) failures.push(`links Monday esperados 2, obtidos ${selected.mondayLinks}`);
 if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado: ${selected.drawerCount}`);
+if (analystState.filterCount !== 4) failures.push(`filtros cruzados esperados 4 no ANALISTA, obtidos ${analystState.filterCount}`);
+if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);
+if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
+if (focusState.outlineStyle === 'none' || focusState.outlineWidth === '0px') failures.push(`foco visível ausente no seletor de responsável: ${JSON.stringify(focusState)}`);
 
 await browser.close();
 if (failures.length) {
