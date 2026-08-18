@@ -80,11 +80,11 @@ export default function AnalystStation({ snapshot, onExit }) {
     .slice(0, 10);
 
   // Evidências de atraso ordenadas para investigação executiva
-  const allDelaysSorted = [...delayDetails].sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
-  const panelItemsById = useMemo(() => new Map((panelSnapshot?.items || []).map(item => [String(item.id), item])), [panelSnapshot]);
-  const panelAffectedItems = allDelaysSorted
+  const allDelaysSorted = useMemo(() => [...delayDetails].sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0)), [delayDetails]);
+  const panelItemsById = useMemo(() => new Map((panelSnapshot?.items || []).map(item => [String(item.id), item])), [panelSnapshot?.items]);
+  const panelAffectedItems = useMemo(() => allDelaysSorted
     .map(item => ({ ...item, panelItem: panelItemsById.get(String(item.id)) }))
-    .filter(item => item.panelItem);
+    .filter(item => item.panelItem), [allDelaysSorted, panelItemsById]);
   const filterOptions = useMemo(() => {
     const values = key => [...new Set(delayDetails.map(item => String(item?.[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     return { clients: values('client'), responsible: values('responsavel'), stages: values('stage'), statuses: values('status') };

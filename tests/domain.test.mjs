@@ -20,6 +20,7 @@ import { createRecordStore, describeRecordStore } from '../server/persistence/re
 import mondayIntegration from '../server/integrations/monday.js';
 import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
+import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
@@ -550,4 +551,20 @@ test('Rate limiter bloqueia excesso por janela sem bloquear a primeira leitura',
   limiter(req, makeResponse(), () => { nextCount += 1; });
   assert.equal(nextCount, 1);
   assert.equal(blockedStatus, 429);
+});
+
+
+test('Auditoria legada usa identidade determinística e exige validação humana', () => {
+  const record = createVersionedAuditRecord({
+    id: 'audit-legacy-cliente-a',
+    clientId: 'cliente-a',
+    source: 'clients.js-legacy-migration',
+    status: 'legacy_unvalidated',
+    confidence: 'unverified',
+    analysis: { igStats: 'Dados legados', cmoDirective: 'Validar antes de decidir', issues: [] }
+  });
+  assert.equal(record.id, 'audit-legacy-cliente-a');
+  assert.equal(record.status, 'legacy_unvalidated');
+  assert.equal(record.confidence, 'unverified');
+  assert.equal(record.history[0].status, 'legacy_unvalidated');
 });

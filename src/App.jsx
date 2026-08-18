@@ -2,38 +2,11 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Target, Activity, ShieldAlert, Crosshair, X, Info } from 'lucide-react';
 import { statusColorFor } from './data/status-colors.js';
 import { PeopleAvatars } from './components/PeopleAvatars.jsx';
+import { buildMissions, canonicalStage, clickable, delayUrgency, formatDate, formatNumber, formatPct, formatPoints, mondayItemUrl, riskTone, scoreComposition, splitOwners, statusTone } from './components/executive-helpers.js';
+import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return 'N/A';
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return dateStr;
-  // A data vem do Monday como dia puro (YYYY-MM-DD) e é lida como UTC:
-  // sem timeZone: 'UTC' a formatação recua um dia em qualquer fuso a oeste.
-  return date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
-};
-
-// Cards, linhas e itens de lista são divs clicáveis: sem isto o painel só
-// funciona no mouse. Devolve as props que tornam o elemento operável por teclado.
-const clickable = (onActivate, label) => ({
-  role: 'button',
-  tabIndex: 0,
-  'aria-label': label,
-  onClick: onActivate,
-  onKeyDown: (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onActivate();
-    }
-  }
-});
-
-const splitOwners = (value) => String(value || '')
-  .split(',')
-  .map(name => name.trim())
-  .filter(Boolean);
 
 // --- COMPONENTES VYBE OS ---
 
@@ -87,95 +60,6 @@ const CustomTooltip = ({ active, payload }) => {
   }
   return null;
 };
-
-const mondayItemUrl = (id) => id ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${id}` : null;
-
-const formatNumber = (value) => new Intl.NumberFormat('pt-BR').format(Number(value) || 0);
-const formatPct = (value) => value === null || value === undefined || Number.isNaN(Number(value)) ? 'N/D' : `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
-const clampPct = (value) => Math.max(0, Math.min(100, Number(value) || 0));
-const formatPoints = (value) => {
-  const numeric = Number(value) || 0;
-  return `${numeric > 0 ? '+' : ''}${formatNumber(numeric)} pts`;
-};
-
-const scoreComposition = (snapshot) => {
-  const rawScore = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
-  const deductions = Array.isArray(snapshot?.portfolioStability?.scoreDeductions) ? snapshot.portfolioStability.scoreDeductions : [];
-  if (!Number.isFinite(rawScore)) return 'Composição do score indisponível nesta leitura.';
-  const terms = deductions
-    .filter(deduction => Number(deduction?.points) > 0)
-    .map(deduction => `(${formatNumber(deduction.count)} ${String(deduction.label || 'sinal').toLowerCase()} × ${formatNumber(deduction.pointsPerItem)} pts)`);
-  const formula = terms.length ? `100 − ${terms.join(' − ')}` : '100';
-  return `${formula} = ${formatPoints(rawScore)}. O score é bruto, pode ficar negativo e não representa percentual financeiro ou satisfação.`;
-};
-
-const delayUrgency = (days) => {
-  const value = Number(days) || 0;
-  if (value >= 15) return { tone: 'catastrophic', label: 'CRÍTICO', description: 'Atraso crítico: exige intervenção executiva imediata.' };
-  if (value >= 7) return { tone: 'critical', label: 'SEVERO', description: 'Atraso severo: risco elevado de quebra de previsibilidade.' };
-  if (value >= 3) return { tone: 'high', label: 'ALTO', description: 'Atraso alto: precisa de causa e próximo marco.' };
-  return { tone: 'attention', label: 'ATENÇÃO', description: 'Atraso recente: acompanhar antes que escale.' };
-};
-
-const buildMissions = (snapshot) => {
-  const quantitative = snapshot?.quantitative || {};
-  const execution = snapshot?.portfolioExecution || {};
-  const delayedDemands = Number(snapshot?.summary?.delayedDemands) || 0;
-  const readinessMissions = (snapshot?.portfolioReadiness?.scoreDeductions || []).map(deduction => ({
-    id: deduction.id,
-    kpiId: 'readiness',
-    readinessId: deduction.id,
-    title: deduction.kind === 'planning' ? (deduction.mode === 'source_gap' ? 'Preencher a fonte de planejamento' : 'Completar planejamentos da carteira') : (deduction.mode === 'source_gap' ? 'Preencher a fonte de calendário' : 'Completar calendários da carteira'),
-    current: deduction.count,
-    pointsPerItem: deduction.pointsPerItem,
-    unit: deduction.mode === 'source_gap' ? 'clientes afetados' : 'clientes',
-    accent: deduction.kind === 'planning' ? 'attention' : 'cyan',
-    description: deduction.mode === 'source_gap' ? `${deduction.count} clientes sinalizam uma lacuna sistêmica; a missão recupera a fonte inteira sem cobrar o mesmo cliente duas vezes.` : `Cada cliente regularizado devolve ${deduction.pointsPerItem} pontos.`,
-    recoverablePoints: deduction.points
-  }));
-  const missions = [
-    { id: 'internal-delays', kpiId: 'delays', title: 'Destravar atrasos internos', current: Number(quantitative.overdueInternal) || 0, pointsPerItem: 2, unit: 'atrasos', accent: 'critical', description: 'Cada prazo interno recuperado devolve 2 pontos.' },
-    { id: 'publication-risk', kpiId: 'publication', title: 'Salvar veiculações em risco', current: Number(quantitative.overduePublication) || 0, pointsPerItem: 5, unit: 'veiculações', accent: 'high', description: 'Cada veiculação recuperada devolve 5 pontos.' },
-    { id: 'execution-gap', kpiId: 'execution', title: 'Reativar clientes sem execução', current: Number(execution.stalled?.length) || 0, pointsPerItem: 5, unit: 'clientes', accent: 'warning', description: 'Cada cliente reativado devolve 5 pontos.' },
-    { id: 'overdue-demands', kpiId: 'health', title: 'Regularizar demandas vencidas', current: delayedDemands, pointsPerItem: 2, unit: 'demandas', accent: 'attention', description: 'Cada demanda vencida regularizada devolve 2 pontos.' },
-    ...readinessMissions
-  ];
-  return missions.filter(mission => mission.current > 0).map(mission => ({
-    ...mission,
-    recoverablePoints: mission.recoverablePoints ?? mission.current * mission.pointsPerItem,
-    progressPct: 0,
-    status: 'MISSÃO ABERTA'
-  }));
-};
-
-const riskTone = (risk) => Number(risk) >= 40 ? 'critical' : Number(risk) >= 20 ? 'warning' : 'stable';
-const statusTone = (status) => {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized.includes('finalizado') || normalized.includes('publicado')) return 'complete';
-  if (normalized.includes('aguardo') || normalized.includes('alteração') || normalized.includes('falta') || normalized.includes('info')) return 'waiting';
-  if (normalized.includes('agendado') || normalized.includes('para agendar')) return 'scheduled';
-  return 'active';
-};
-
-const canonicalStage = (stage) => {
-  const normalized = String(stage || '').toLowerCase();
-  if (normalized.includes('redação')) return 'Redação';
-  if (normalized.includes('produção')) return 'Produção';
-  if (normalized.includes('design') || normalized.includes('edição') || normalized.includes('criação')) return 'Criação';
-  if (normalized.includes('gestão') || normalized.includes('publica') || normalized.includes('saída')) return 'Saídas';
-  return stage || 'Não informado';
-};
-
-function Meter({ value, min = 0, max = 100, tone = 'cyan', label, showValue = true, displayValue }) {
-  const range = Number(max) - Number(min);
-  const ratio = range > 0 ? clampPct(((Number(value) - Number(min)) / range) * 100) : 0;
-  return (
-    <div className={`visual-meter ${tone}`} aria-label={label || `${formatPct(value)} do total`}>
-      <span className="visual-meter-track"><span className="visual-meter-fill" style={{ width: `${ratio}%` }} /></span>
-      {showValue ? <strong>{displayValue ?? formatPct(value)}</strong> : null}
-    </div>
-  );
-}
 
 function SourceFreshness({ snapshot }) {
   const quality = snapshot?.sourceQuality || {};
@@ -305,7 +189,7 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history }) {
             <span className="executive-kpi-label">{card.label}</span>
             <strong className="executive-kpi-value">{card.value}</strong>
             <span className="executive-kpi-detail">{card.detail}</span>
-            <Meter value={card.progress} min={card.min ?? 0} max={card.max ?? 100} tone={card.tone} label={card.title} displayValue={card.id === 'health' ? formatPoints(healthScore) : undefined} />
+            <ExecutiveMeter value={card.progress} min={card.min ?? 0} max={card.max ?? 100} tone={card.tone} label={card.title} displayValue={card.id === 'health' ? formatPoints(healthScore) : undefined} />
             <span className="executive-kpi-click">CLIQUE PARA INVESTIGAR ↗</span>
             <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
           </article>

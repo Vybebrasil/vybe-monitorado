@@ -4,12 +4,11 @@ const text = (value, maxLength = 4000) => typeof value === 'string' ? value.trim
 export const AUDIT_STATUSES = ['pending_validation', 'in_review', 'validated', 'stale', 'superseded', 'legacy_unvalidated'];
 export const AUDIT_CONFIDENCE = ['unverified', 'partial', 'medium', 'high'];
 
-export function createVersionedAuditRecord({ clientId, analysis, source = 'manual', status = 'pending_validation', confidence = 'unverified' }) {
-  const capturedAt = new Date().toISOString();
+export function createVersionedAuditRecord({ clientId, analysis, source = 'manual', status = 'pending_validation', confidence = 'unverified', id = null, capturedAt = new Date().toISOString() }) {
   const safeStatus = AUDIT_STATUSES.includes(status) ? status : 'pending_validation';
   const safeConfidence = AUDIT_CONFIDENCE.includes(confidence) ? confidence : 'unverified';
   return {
-    id: `audit-${clientId}-${Date.now()}`,
+    id: id || `audit-${clientId}-${Date.now()}`,
     clientId,
     version: 1,
     schemaVersion: AUDIT_SCHEMA_VERSION,
