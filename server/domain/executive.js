@@ -174,7 +174,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       severityLabel: severityLabel(executionGap.stalled.length >= 3 ? 'critical' : 'high'),
       title: 'Clientes ativos sem execução',
       whyItMatters: `${executionGap.stalled.length} cliente(s) da carteira ativa não têm conteúdo em produção nem demanda aberta.`,
-      recommendedDecision: 'Confirmar se o contrato segue vigente e o que trava a entrada de trabalho antes que a ausência vire cancelamento.',
+      recommendedDecision: 'Confirmar se o contrato segue vigente e o que trava a entrada de trabalho antes que a ausência vire risco de previsibilidade.',
       evidence: [evidence('monday', executionGap.definition)],
       ownerRole: EXECUTIVE_OWNER_ROLE,
       affectedItems: executionGap.stalled.map(c => c.daysSinceEntry === null

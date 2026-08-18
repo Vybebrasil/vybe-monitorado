@@ -27,26 +27,28 @@ export default function AnalystStation({ snapshot, onExit }) {
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 
-  // Tabela completa de auditoria visível e ordenada
+  // Evidências de atraso ordenadas para investigação executiva
   const allDelaysSorted = [...delayDetails].sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
       <header className="app-header">
         <div className="app-header-title">
-          <Activity size={28} color="var(--vybe-cyan)" /> <span style={{ color: 'var(--vybe-cyan)' }}>CONSOLE PESSOAL</span> <span className="badge" style={{ background: 'var(--vybe-cyan)' }}>FOCO</span>
+          <Activity size={28} color="var(--vybe-cyan)" /> <span style={{ color: 'var(--vybe-cyan)' }}>ANALISTA / INVESTIGAÇÃO EXECUTIVA</span> <span className="badge" style={{ background: 'var(--vybe-cyan)' }}>FOCO</span>
         </div>
         <div className="app-header-meta">
-          <span>ALVO: FILA DE EXECUÇÃO E GARGALOS</span>
-          <button onClick={onExit} style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>&times; ENCERRAR SESSÃO</button>
+          <span>ALVO: CAUSAS, EVIDÊNCIAS E IMPACTOS</span>
+          <button onClick={onExit} style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>&larr; VOLTAR AO JARVIS</button>
         </div>
       </header>
 
+      <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit. Ele não altera o Monday, não cria demanda e não substitui o Vybe Painel.</div>
+
       <div className="dashboard-grid full">
 
-        {/* GRÁFICO DE PIPELINE */}
+        {/* GRÁFICO DE FLUXO */}
         <div className="data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-cyan)' }}>
-          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>ESTEIRA DE PRODUÇÃO (PIPELINE GLOBAL)</div>
+          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>FLUXO DA CARTEIRA · POR STATUS</div>
           <div style={{ width: '100%', height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={pipelineData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
@@ -64,9 +66,9 @@ export default function AnalystStation({ snapshot, onExit }) {
           </div>
         </div>
 
-        {/* TABELA DE AUDITORIA ABERTA */}
+        {/* EVIDÊNCIAS DOS ATRASOS */}
         <div className="data-panel animate-slide delay-2" style={{ borderColor: 'var(--vybe-cyan)' }}>
-          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>REGISTRO DE AUDITORIA (RAW DATA)</div>
+          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>EVIDÊNCIAS DO MONDAY · ITENS AFETADOS</div>
           <div className="vybe-table-wrapper" style={{ maxHeight: '600px', overflowY: 'auto' }}>
             <table className="vybe-table">
               <thead style={{ position: 'sticky', top: 0, background: 'rgba(10,10,10,0.95)', zIndex: 1 }}>
@@ -77,6 +79,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                   <th>Status (Etapa)</th>
                   <th>Responsável</th>
                   <th>Atraso</th>
+                  <th>Evidência</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,11 +97,12 @@ export default function AnalystStation({ snapshot, onExit }) {
                         <span className="item-meta" style={{ background: 'rgba(0,255,102,0.1)', color: '#00ff66' }}>OK</span>
                       )}
                     </td>
+                    <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">ABRIR</a></td>
                   </tr>
                 ))}
                 {allDelaysSorted.length === 0 && (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>Nenhuma pendência na auditoria.</td>
+                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>Nenhum atraso encontrado nesta leitura do Monday.</td>
                   </tr>
                 )}
               </tbody>

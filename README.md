@@ -6,7 +6,7 @@ O **VYBE NEXUS** é a camada de comando e decisão da Vybe. Ele transforma dados
 
 ## Estado atual
 
-A leitura é pública por link e não há painéis separados por cargo. A interface abre numa tela de seleção com duas estações: **Jarvis** (risco de carteira, ofensores de capacidade e prontidão estratégica) e **Analista** (funil de produção e tabela de auditoria). As telas operacionais de Auditoria/Dossiê foram retiradas da navegação pública para evitar duplicação com o Vybe Painel.
+A leitura é pública por link e mantém uma única liderança CMO/COO. A entrada oferece dois modos complementares: **JARVIS**, que cumprimenta, resume o estado da carteira e conduz a liderança por uma sequência de atenção e decisão; e **ANALISTA**, que permite investigar causas, evidências, fluxo e itens afetados. Nenhum modo altera status, cria demanda ou substitui o Vybe Painel.
 
 O frontend consome hoje uma única rota: `GET /api/dashboard/metrics`. As rotas `/api/executive/*` (decisões, snapshots, impactos, memória, cenários, analytics, Health Score) e os endpoints legados de auditoria continuam publicados e testados, mas sem consumidor na interface. Decisões, impactos, snapshots e Health Score usam arquivos JSON em desenvolvimento e um adaptador HTTP para Upstash Redis REST em produção, desde que as credenciais estejam configuradas. Sem o datastore de produção, as rotas persistentes retornam indisponibilidade controlada e o `/api/healthz` informa `ready: false` — que é o estado do deploy atual.
 

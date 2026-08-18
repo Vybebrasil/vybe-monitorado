@@ -303,3 +303,62 @@ body {
 .custom-tooltip { background: rgba(10,10,10,0.95); border: 1px solid var(--vybe-border); padding: 1rem; font-family: var(--font-mono); font-size: 0.75rem; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
 .custom-tooltip p { margin: 0 0 0.5rem 0; color: var(--vybe-text-muted); text-transform: uppercase; letter-spacing: 1px; }
 .custom-tooltip span { font-weight: bold; color: var(--vybe-orange); font-size: 1rem; }
+
+/* JARVIS guiado e ANALISTA investigativo */
+.jarvis-home { min-height: 100vh; display: flex; flex-direction: column; }
+.jarvis-home-main { width: min(1120px, calc(100% - 3rem)); margin: 0 auto; padding: 4rem 0 6rem; }
+.jarvis-eyebrow { display: flex; align-items: center; gap: 0.55rem; color: var(--vybe-cyan); font: 700 0.7rem var(--font-mono); letter-spacing: 0.11em; }
+.jarvis-eyebrow span { margin-left: auto; color: var(--vybe-text-muted); font-size: 0.62rem; letter-spacing: 0.05em; }
+.jarvis-home-main h2 { margin-top: 2.25rem; color: var(--vybe-orange); font: 700 clamp(1rem, 2vw, 1.35rem) var(--font-mono); letter-spacing: 0.04em; }
+.jarvis-home-main h1 { max-width: 780px; margin-top: 0.55rem; color: #fff; font: 700 clamp(2.1rem, 5vw, 4.6rem) var(--font-display); letter-spacing: -0.025em; line-height: 0.98; }
+.jarvis-intro { max-width: 650px; margin-top: 1.15rem; color: var(--vybe-text-muted); font-size: 0.95rem; line-height: 1.6; }
+.jarvis-priority-card { max-width: 860px; margin-top: 2rem; padding: 1.35rem 1.5rem; border: 1px solid rgba(0,243,255,0.25); border-left: 3px solid var(--vybe-cyan); background: rgba(0,243,255,0.04); }
+.jarvis-priority-card.attention { border-color: rgba(255,190,0,0.35); border-left-color: var(--vybe-gold); background: rgba(255,190,0,0.045); }
+.jarvis-priority-card.critical { border-color: rgba(255,0,51,0.4); border-left-color: var(--vybe-red); background: rgba(255,0,51,0.045); }
+.jarvis-priority-top { display: flex; justify-content: space-between; gap: 1rem; color: var(--vybe-text-muted); font: 700 0.62rem var(--font-mono); letter-spacing: 0.09em; }
+.jarvis-priority-top strong { color: var(--vybe-cyan); }
+.jarvis-priority-card.attention .jarvis-priority-top strong { color: var(--vybe-gold); }
+.jarvis-priority-card.critical .jarvis-priority-top strong { color: var(--vybe-red); }
+.jarvis-priority-card h3 { max-width: 760px; margin-top: 0.85rem; color: #fff; font-size: 1.15rem; line-height: 1.4; }
+.jarvis-priority-card p { margin-top: 0.6rem; color: var(--vybe-text-muted); font-size: 0.72rem; line-height: 1.5; }
+.jarvis-actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.2rem; }
+.jarvis-primary-action, .jarvis-secondary-action { display: inline-flex; align-items: center; gap: 0.55rem; min-height: 3rem; padding: 0.8rem 1rem; cursor: pointer; font: 700 0.68rem var(--font-mono); letter-spacing: 0.04em; transition: 160ms ease; }
+.jarvis-primary-action { border: 1px solid var(--vybe-orange); background: rgba(255,85,0,0.13); color: var(--vybe-orange); }
+.jarvis-primary-action:hover, .jarvis-primary-action:focus-visible { background: var(--vybe-orange); color: #080808; outline: none; }
+.jarvis-secondary-action { border: 1px solid rgba(0,243,255,0.35); background: rgba(0,243,255,0.05); color: var(--vybe-cyan); }
+.jarvis-secondary-action:hover, .jarvis-secondary-action:focus-visible { border-color: var(--vybe-cyan); background: rgba(0,243,255,0.14); color: #fff; outline: none; }
+.jarvis-actions button span { color: var(--vybe-text-muted); font-size: 0.56rem; letter-spacing: 0.02em; }
+.jarvis-guided-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; max-width: 950px; margin-top: 2.5rem; }
+.jarvis-guided-step { display: flex; gap: 0.75rem; padding: 0.85rem; border-top: 1px solid var(--vybe-border); background: rgba(255,255,255,0.02); }
+.jarvis-guided-step > span { color: var(--vybe-orange); font: 700 0.7rem var(--font-mono); }
+.jarvis-guided-step strong { color: #fff; font: 700 0.68rem var(--font-mono); }
+.jarvis-guided-step p { margin-top: 0.35rem; color: var(--vybe-text-muted); font-size: 0.68rem; line-height: 1.45; }
+.jarvis-mode-note, .analyst-intro { display: flex; align-items: flex-start; gap: 0.45rem; color: var(--vybe-text-muted); font: 0.65rem var(--font-mono); line-height: 1.5; }
+.jarvis-mode-note { max-width: 850px; margin-top: 1.2rem; }
+.analyst-intro { margin: 1rem auto 0; width: min(1200px, calc(100% - 3rem)); padding: 0.8rem 1rem; border-left: 2px solid var(--vybe-cyan); background: rgba(0,243,255,0.04); }
+.analyst-evidence-link { color: var(--vybe-cyan); font: 700 0.65rem var(--font-mono); text-decoration: none; }
+.analyst-evidence-link:hover { color: #fff; text-decoration: underline; }
+@media (max-width: 900px) {
+  .jarvis-home-main { width: min(100% - 2rem, 720px); padding-top: 2.5rem; }
+  .jarvis-guided-steps { grid-template-columns: 1fr; }
+  .jarvis-eyebrow { align-items: flex-start; flex-wrap: wrap; }
+  .jarvis-eyebrow span { width: 100%; margin-left: 1.45rem; }
+  .analyst-intro { width: calc(100% - 2rem); }
+}
+@media (max-width: 560px) {
+  .jarvis-home-main { width: calc(100% - 1.25rem); }
+  .jarvis-home-main h1 { font-size: 2.25rem; }
+  .jarvis-actions { flex-direction: column; }
+  .jarvis-primary-action, .jarvis-secondary-action { justify-content: center; width: 100%; }
+  .jarvis-priority-top { align-items: flex-start; flex-direction: column; gap: 0.35rem; }
+}
+
+.jarvis-command-strip { width: min(1200px, calc(100% - 3rem)); margin: 1.25rem auto 0; padding: 0.85rem 1rem; border-left: 3px solid var(--vybe-orange); background: rgba(255,85,0,0.055); }
+.jarvis-command-strip span { display: block; color: var(--vybe-orange); font: 700 0.6rem var(--font-mono); letter-spacing: 0.1em; }
+.jarvis-command-strip strong { display: block; margin-top: 0.3rem; color: #fff; font: 700 0.85rem var(--font-mono); }
+.jarvis-command-strip small { display: block; margin-top: 0.35rem; color: var(--vybe-text-muted); font-size: 0.65rem; }
+@media (max-width: 900px) { .jarvis-command-strip { width: calc(100% - 2rem); } }
+
+.list-expand { display: inline-flex; margin-top: 0.85rem; padding: 0.45rem 0.7rem; border: 1px solid var(--vybe-border); background: transparent; color: var(--vybe-orange); cursor: pointer; font: 700 0.62rem var(--font-mono); letter-spacing: 0.08em; }
+.list-expand:hover, .list-expand:focus-visible { border-color: var(--vybe-orange); background: rgba(255,85,0,0.1); color: #fff; outline: none; }
+.table-expand { margin: 0.4rem 1rem 1rem; }

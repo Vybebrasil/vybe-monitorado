@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Target, Activity, ShieldAlert, Crosshair, X } from 'lucide-react';
+import { Target, Activity, ShieldAlert, Crosshair, X, Info } from 'lucide-react';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -10,7 +10,7 @@ const formatDate = (dateStr) => {
   if (Number.isNaN(date.getTime())) return dateStr;
   // A data vem do Monday como dia puro (YYYY-MM-DD) e é lida como UTC:
   // sem timeZone: 'UTC' a formatação recua um dia em qualquer fuso a oeste.
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+  return date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 };
 
 // Cards, linhas e itens de lista são divs clicáveis: sem isto o painel só
@@ -45,8 +45,8 @@ const HudHeader = ({ title, subtitle }) => (
   </div>
 );
 
-const HudFooter = ({ snapshot }) => {
-  const stability = snapshot?.portfolioStability?.score ?? 0;
+const HudFooter = ({ snapshot, contextLabel = 'JARVIS / GUIA EXECUTIVO' }) => {
+  const stability = Number.isFinite(snapshot?.portfolioStability?.score) ? snapshot.portfolioStability.score : null;
   // O corte é do domínio (stable / attention / risk), não um número solto na UI.
   const stabilityStatus = snapshot?.portfolioStability?.status;
   const overdueInternal = snapshot?.quantitative?.overdueInternal ?? 0;
@@ -54,10 +54,10 @@ const HudFooter = ({ snapshot }) => {
 
   return (
     <div className="hud-bar bottom">
-      <div>SELECIONE UMA ESTAÇÃO PARA INICIAR</div>
+      <div>{contextLabel}</div>
       <div className="hud-telemetry">
         <div className={`telemetry-box ${stabilityStatus === 'risk' ? 'alert' : stabilityStatus === 'attention' ? 'warning' : ''}`}>
-          <span className="telemetry-val">{stability}%</span>
+          <span className="telemetry-val">{stability === null ? 'N/D' : `${stability}%`}</span>
           <span className="telemetry-label">ESTABILIDADE</span>
         </div>
         <div className={`telemetry-box ${overdueInternal > 0 ? 'warning' : ''}`}>
@@ -149,10 +149,12 @@ const DetailDrawer = ({ panel, setPanel, delayDetails }) => {
 
 function ManagerStation({ snapshot, onExit }) {
   const [detailPanel, setDetailPanel] = useState(null);
+  const [showAllOwners, setShowAllOwners] = useState(false);
+  const [showAllClients, setShowAllClients] = useState(false);
 
   const delayDetails = snapshot.delayDetails || [];
   
-  // Logic 1: Top Ofensores (Equipe)
+  // Concentração de atrasos por responsável; não é ranking de produtividade.
   // Cruzando productivity top responsibles e filtrando apenas atrasos internos
   const internalDelays = delayDetails.filter(d => d.delayType?.includes('prazo interno'));
   const blameMap = {};
@@ -164,42 +166,49 @@ function ManagerStation({ snapshot, onExit }) {
   });
   const topBlame = Object.entries(blameMap)
     .map(([name, count]) => ({ id: name, name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+    .sort((a, b) => b.count - a.count);
 
   // Logic 2: Piores Clientes (maior % de itens atrasados sobre itens abertos)
   const clientRanking = snapshot.clientRanking || [];
   const worstClients = clientRanking
     .filter(c => (c.riskPct || 0) > 0)
-    .sort((a, b) => (b.riskPct || 0) - (a.riskPct || 0))
-    .slice(0, 5);
+    .sort((a, b) => (b.riskPct || 0) - (a.riskPct || 0));
 
-  // Logic 3: Clientes ativos sem nada em execução — risco de churn silencioso.
+  // Clientes ativos sem nada em execução — sinal de previsibilidade da carteira.
   const execution = snapshot.portfolioExecution || {};
   const stalledClients = execution.stalled || [];
   const onboardingClients = execution.onboarding || [];
+  const nextCommand = stalledClients.length > 0
+    ? 'Começar pelos clientes ativos sem execução.'
+    : internalDelays.length > 0
+      ? 'Investigar a concentração de atrasos antes de assumir mais produção.'
+      : worstClients.length > 0
+        ? 'Abrir as evidências dos clientes com maior exposição.'
+        : 'A carteira não apresenta um comando crítico nesta leitura.';
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
       <header className="app-header">
         <div className="app-header-title">
-          <Target size={28} /> MATRIZ EXECUTIVA <span className="badge">GESTOR</span>
+          <Target size={28} /> JARVIS / GUIA EXECUTIVO <span className="badge">GUIADO</span>
         </div>
         <div className="app-header-meta">
-          <span>ALVO: RISCO E CAPACIDADE</span>
-          <button onClick={onExit}>&times; ENCERRAR SESSÃO</button>
+          <span>PASSO 1 · RISCO, CAPACIDADE E DECISÃO</span>
+          <button onClick={onExit}>&larr; VOLTAR AO INÍCIO</button>
         </div>
       </header>
+
+      <div className="jarvis-command-strip"><span>PRÓXIMO COMANDO</span><strong>{nextCommand}</strong><small>Selecione uma linha para abrir evidências; nada nesta estação altera o Monday.</small></div>
 
       <div className="dashboard-grid">
         {/* COLUNA ESQUERDA - ALERTAS DIRETOS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
           <div className="data-panel animate-slide delay-1">
-            <div className="data-panel-title">OFENSORES DE CAPACIDADE (EQUIPE)</div>
+            <div className="data-panel-title">CONCENTRAÇÃO DE ATRASOS · EQUIPE</div>
             <ul className="data-list">
               {topBlame.length === 0 ? <li className="item-sub">Nenhum atraso interno mapeado.</li> : null}
-              {topBlame.map(person => (
+              {topBlame.slice(0, showAllOwners ? topBlame.length : 5).map(person => (
                 <li
                   key={person.id}
                   className="data-list-item"
@@ -210,11 +219,12 @@ function ManagerStation({ snapshot, onExit }) {
                 >
                   <div>
                     <div className="item-primary">{person.name}</div>
-                    <div className="item-sub">Represando fluxo operacional</div>
+                    <div className="item-sub">Atrasos associados · investigar causa</div>
                   </div>
                   <div className="item-meta critical">{person.count} ATRASOS</div>
                 </li>
               ))}
+              {topBlame.length > 5 && <button type="button" className="list-expand" onClick={() => setShowAllOwners(value => !value)}>{showAllOwners ? 'VER MENOS' : `VER MAIS (${topBlame.length - 5})`}</button>}
             </ul>
           </div>
 
@@ -253,7 +263,7 @@ function ManagerStation({ snapshot, onExit }) {
 
         {/* COLUNA DIREITA - VISÃO DE CARTEIRA */}
         <div className="data-panel animate-slide delay-3">
-          <div className="data-panel-title">CONTAS EM RISCO CRÍTICO (CHURN ALERT)</div>
+          <div className="data-panel-title">CLIENTES EM RISCO DE PREVISIBILIDADE</div>
           <div className="vybe-table-wrapper">
             <table className="vybe-table">
               <thead>
@@ -266,13 +276,13 @@ function ManagerStation({ snapshot, onExit }) {
                 </tr>
               </thead>
               <tbody>
-                {worstClients.map(c => (
+                {worstClients.slice(0, showAllClients ? worstClients.length : 5).map(c => (
                   <tr
                     key={c.client}
                     style={{ cursor: 'pointer' }}
                     {...clickable(
-                      () => setDetailPanel({ type: 'client', id: c.client, title: `Dossiê: ${c.client}` }),
-                      `Abrir dossiê de ${c.client}`
+                      () => setDetailPanel({ type: 'client', id: c.client, title: `Evidências: ${c.client}` }),
+                      `Abrir evidências de ${c.client}`
                     )}
                   >
                     <td className="item-primary" style={{ color: 'var(--vybe-orange)' }}>{c.client}</td>
@@ -281,8 +291,8 @@ function ManagerStation({ snapshot, onExit }) {
                         {c.riskPct ?? 0}% ({c.delayedItems}/{c.openItems})
                       </span>
                     </td>
-                    <td>{c.internalDelays} gargalos</td>
-                    <td>{c.publicationDelays} pendências</td>
+                    <td>{c.internalDelays} atraso(s)</td>
+                    <td>{c.publicationDelays} veiculação</td>
                     <td>
                       <span className="item-meta">{c.riskPct >= 40 ? 'CRÍTICO' : 'ATENÇÃO'}</span>
                     </td>
@@ -291,6 +301,7 @@ function ManagerStation({ snapshot, onExit }) {
               </tbody>
             </table>
           </div>
+          {worstClients.length > 5 && <button type="button" className="list-expand table-expand" onClick={() => setShowAllClients(value => !value)}>{showAllClients ? 'VER MENOS' : `VER MAIS (${worstClients.length - 5})`}</button>}
         </div>
       </div>
 
@@ -299,6 +310,62 @@ function ManagerStation({ snapshot, onExit }) {
   );
 }
 
+
+const getGreeting = (date = new Date()) => {
+  const hour = date.getHours();
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+};
+
+function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
+  const stability = Number.isFinite(snapshot?.portfolioStability?.score) ? snapshot.portfolioStability.score : null;
+  const stabilityLabel = snapshot?.portfolioStability?.label || (stability === null ? 'SEM SCORE' : 'LEITURA EXECUTIVA');
+  const overdue = snapshot?.quantitative?.overdueInternal ?? 0;
+  const stalled = snapshot?.portfolioExecution?.stalled?.length ?? 0;
+  const clientRisks = snapshot?.clientRanking?.filter(item => (item.delayedItems || 0) > 0).length ?? 0;
+  const decisions = snapshot?.summary?.decisionsNeeded ?? 0;
+  const firstPriority = stalled > 0
+    ? `${stalled} cliente(s) ativo(s) estão sem conteúdo em produção ou demanda aberta.`
+    : overdue > 0
+      ? `${overdue} atraso(s) interno(s) pedem investigação antes de adicionar mais pressão à produção.`
+      : clientRisks > 0
+        ? `${clientRisks} cliente(s) apresentam sinais de previsibilidade que merecem acompanhamento.`
+        : 'A carteira não apresenta um sinal crítico dominante nesta leitura.';
+
+  const priorityClass = stability === null ? 'attention' : stability < 50 ? 'critical' : stability < 75 ? 'attention' : 'stable';
+  const guidedSteps = [
+    { number: '01', title: 'Estado da carteira', text: `${stability === null ? 'N/D' : `${stability}%`} de estabilidade operacional · ${stabilityLabel.toLowerCase()}` },
+    { number: '02', title: 'O que mudou', text: `${overdue} atraso(s) interno(s), ${clientRisks} cliente(s) exposto(s) e ${decisions} decisão(ões) sugerida(s).` },
+    { number: '03', title: 'Próximo comando', text: stalled > 0 ? 'Investigar clientes sem sinal de execução.' : overdue > 0 ? 'Abrir a concentração de atrasos e decidir a resposta.' : 'Entrar no Analista para investigar a carteira.' }
+  ];
+
+  return (
+    <div className="jarvis-home splash-container animate-fade">
+      <HudHeader title="JARVIS / LIDERANÇA EXECUTIVA" subtitle="LINK ESTÁVEL // MONDAY.COM AO VIVO" />
+      <main className="jarvis-home-main">
+        <div className="jarvis-eyebrow"><Target size={15} /> COMANDO EXECUTIVO UNIFICADO <span>CMO / COO · UMA LIDERANÇA</span></div>
+        <h2>{getGreeting()}, liderança.</h2>
+        <h1>O que merece sua atenção agora?</h1>
+        <p className="jarvis-intro">Eu organizei a leitura da carteira para você. Primeiro mostramos o sinal mais importante; depois abrimos a evidência e a decisão recomendada.</p>
+        <section className={`jarvis-priority-card ${priorityClass}`}>
+          <div className="jarvis-priority-top"><span>PRIORIDADE SUGERIDA</span><strong>{stabilityLabel}</strong></div>
+          <h3>{firstPriority}</h3>
+          <p>Não é uma ordem automática nem altera o Monday. É a sequência mais útil para iniciar a conversa executiva.</p>
+        </section>
+        <div className="jarvis-actions">
+          <button type="button" className="jarvis-primary-action" onClick={onOpenJarvis}><Target size={18} /> ENTRAR NO JARVIS <span>GUIAR-ME</span></button>
+          <button type="button" className="jarvis-secondary-action" onClick={onOpenAnalyst}><Activity size={18} /> ABRIR ANALISTA <span>INVESTIGAR POR CONTA PRÓPRIA</span></button>
+        </div>
+        <section className="jarvis-guided-steps" aria-label="Roteiro de leitura do Jarvis">
+          {guidedSteps.map(step => <div className="jarvis-guided-step" key={step.number}><span>{step.number}</span><div><strong>{step.title}</strong><p>{step.text}</p></div></div>)}
+        </section>
+        <div className="jarvis-mode-note"><Info size={13} /> O JARVIS conduz. O ANALISTA investiga. Nenhum dos dois altera status, cria demanda ou substitui o Vybe Painel.</div>
+      </main>
+      <HudFooter snapshot={snapshot} contextLabel="JARVIS / GUIA EXECUTIVO" />
+    </div>
+  );
+}
 
 // --- MAIN APP ---
 
@@ -365,64 +432,7 @@ function App() {
     <>
       <div className="vybe-os-grid"></div>
 
-      {!appMode && (
-        <div className="splash-container animate-fade">
-          <HudHeader title="IDENTIFICAÇÃO DE ESTAÇÃO" subtitle="CENTRAL OPERACIONAL // PRONTA" />
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div className="splash-titles animate-slide delay-1">
-              <h2>VYBE OS</h2>
-              <h1>Qual estação você vai operar?</h1>
-              <p>// LINK ESTÁVEL<br />Seu contexto ajusta a fila, os comandos e a inteligência que entra em cena.</p>
-            </div>
-
-            <div className="stations-layout animate-slide delay-2">
-              <div className="station-card" {...clickable(() => setAppMode('manager'), 'Iniciar a estação Jarvis')}>
-                <div className="card-header">
-                  <span>01 / INTELIGÊNCIA EXECUTIVA</span>
-                  <span style={{ color: 'var(--vybe-gold)' }}>&#9679; ONLINE</span>
-                </div>
-                <Target className="card-icon" />
-                <h3>JARVIS</h3>
-                <p>Toda a operação em uma linha de visão. Prioriza risco, capacidade e decisões da equipe.</p>
-                
-                <div className="card-tags">
-                  <span className="tag">RISCO</span>
-                  <span className="tag">CAPACIDADE</span>
-                  <span className="tag">DECISÃO</span>
-                </div>
-
-                <div className="card-action">INICIAR JARVIS &rarr;</div>
-              </div>
-
-              <div className="core-link"></div>
-              <div className="core-sphere">V</div>
-              <div className="core-link"></div>
-
-              <div className="station-card analyst" {...clickable(() => setAppMode('analyst'), 'Iniciar a estação Analista')}>
-                <div className="card-header">
-                  <span>02 / OPERAÇÃO DE DADOS</span>
-                  <span style={{ color: 'var(--vybe-cyan)' }}>&#9679; ONLINE</span>
-                </div>
-                <Activity className="card-icon" />
-                <h3>ANALISTA</h3>
-                <p>Sua fila de execução completa, vazão do funil de produção e tabela crua de auditoria.</p>
-                
-                <div className="card-tags">
-                  <span className="tag">FUNIL</span>
-                  <span className="tag">PRAZOS</span>
-                  <span className="tag">RAW DATA</span>
-                </div>
-
-                <div className="card-action">INICIAR ANALISTA &rarr;</div>
-                <div className="card-cross-btm"></div>
-              </div>
-            </div>
-          </div>
-
-          <HudFooter snapshot={metrics.executiveSnapshot} />
-        </div>
-      )}
+      {!appMode && <JarvisHome snapshot={metrics.executiveSnapshot} onOpenJarvis={() => setAppMode('manager')} onOpenAnalyst={() => setAppMode('analyst')} />}
 
       {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode(null)} />}
       {appMode === 'analyst' && (

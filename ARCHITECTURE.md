@@ -28,6 +28,12 @@ O Nexus adota transparência por link: não há login, perfis ou autorização d
 
 As escritas administrativas e automações sensíveis continuam separadas da leitura pública e podem exigir `NEXUS_ADMIN_TOKEN`, que nunca deve ser exposto no frontend. Esse token é técnico, não é uma conta de usuário. `NEXUS_ALLOWED_ORIGINS` deve conter as origens autorizadas, separadas por vírgula, para chamadas cross-origin em produção.
 
+## Experiência JARVIS e ANALISTA
+
+A entrada pública oferece dois modos para a mesma liderança, não dois perfis ou cargos. O **JARVIS** é o guia executivo: cumprimenta conforme o horário, resume o estado da carteira, propõe uma prioridade e conduz a leitura por estado, mudança, evidência e decisão. O **ANALISTA** é a sala de investigação: permite explorar fluxo, causas, clientes, responsáveis, itens afetados e links do Monday com maior profundidade.
+
+Os dois modos são somente leitura operacional. Nenhum deles cria demanda, altera status, registra execução ou substitui o Vybe Painel. A estação Analista exibe evidência contextual e não uma fila completa de produção. Linguagem de churn, culpa individual ou produtividade pessoal só pode ser usada quando houver dados que sustentem essas conclusões; o contrato padrão usa risco de previsibilidade e concentração de atrasos.
+
 ## Histórico executivo
 
 O domínio `server/domain/executive-snapshots.js` registra snapshots do Cockpit e calcula tendência, delta e janelas de 7, 30 e 90 dias. O domínio `server/domain/health-snapshots.js` faz o mesmo por cliente para o Health Score, com deduplicação por minuto e tendência individual.
