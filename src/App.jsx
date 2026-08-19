@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Target, Activity, ShieldAlert, Crosshair, X, Info } from 'lucide-react';
+import { Target, Activity, ShieldAlert, Crosshair, X, Info, RefreshCw } from 'lucide-react';
 import { statusColorFor } from './data/status-colors.js';
 import { PeopleAvatars } from './components/PeopleAvatars.jsx';
 import { buildMissions, canonicalStage, clickable, delayUrgency, formatDate, formatNumber, formatPct, formatPoints, mondayItemUrl, riskTone, scoreComposition, splitOwners, statusTone } from './components/executive-helpers.js';
@@ -61,7 +61,7 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-function SourceFreshness({ snapshot }) {
+function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
   const quality = snapshot?.sourceQuality || {};
   const boards = quality.monday?.boards || {};
   const complete = quality.complete ?? quality.monday?.complete;
@@ -92,6 +92,11 @@ function SourceFreshness({ snapshot }) {
         <span className="source-freshness-dot" />
         <strong>{complete ? 'LEITURA COMPLETA' : 'LEITURA PARCIAL'}</strong>
         <span>Monday · capturado {capturedLabel}</span>
+        <button type="button" className="manual-refresh-button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing} title="Buscar novamente os dados do Monday e da Agenda agora">
+          <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'spin' : ''} />
+          {refreshing ? 'ATUALIZANDO DADOS…' : 'ATUALIZAR DADOS'}
+        </button>
+        {refreshError ? <span className="manual-refresh-error" role="alert">ATUALIZAÇÃO FALHOU · {refreshError}</span> : null}
       </div>
       <div className="source-freshness-stats">
         <span><b>{displaySourceCount(derivedRecordCount)}</b> {recordLabel}</span>
@@ -153,7 +158,7 @@ function SnapshotDeltaBand({ history }) {
   );
 }
 
-function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history }) {
+function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh, refreshing, refreshError }) {
   const quantitative = snapshot?.quantitative || {};
   const execution = snapshot?.portfolioExecution || {};
   const activeItems = Number(quantitative.activeItems) || 0;
@@ -181,7 +186,7 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history }) {
   return (
     <section className="executive-kpi-band" aria-label="KPIs executivos da carteira">
       <div className="executive-kpi-header"><div><span className="executive-section-kicker">LEITURA EXECUTIVA</span><h2>O estado da carteira em números</h2></div><span className={`data-live-badge ${snapshot?.sourceQuality?.monday?.complete === true ? 'complete' : ''}`}>MONDAY · {snapshot?.sourceQuality?.monday?.complete === true ? 'LEITURA COMPLETA' : 'DADOS AO VIVO'}</span></div>
-      <SourceFreshness snapshot={snapshot} />
+      <SourceFreshness snapshot={snapshot} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
       <SnapshotDeltaBand history={history} />
       <div className="executive-kpi-grid">
         {cards.map(card => (
@@ -707,7 +712,7 @@ function JarvisCopilot({ message, nextCommand }) {
   );
 }
 
-function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
+function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
@@ -787,7 +792,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
 
       <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
-      <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
+      <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
       <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
 
       <div className="executive-visual-grid">
@@ -1037,18 +1042,28 @@ function App() {
   const [wakeStage, setWakeStage] = useState(0);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [refreshError, setRefreshError] = useState('');
 
-  const loadMetrics = async () => {
-    setLoading(true);
-    setError('');
+  const loadMetrics = async ({ manual = false } = {}) => {
+    if (manual) {
+      setRefreshing(true);
+      setRefreshError('');
+    } else {
+      setLoading(true);
+      setError('');
+    }
 
     try {
-      // A resposta é cacheável na CDN de propósito, para que o time inteiro
-      // abrindo o painel não multiplique leituras no Monday. Mas o navegador
-      // precisa sempre perguntar: quem abre a tela tem que ver o estado atual,
-      // não uma cópia local de minutos atrás. Quem responde rápido é a CDN.
-      const metricsRes = await fetch('/api/dashboard/metrics', { cache: 'no-store' });
+      // A leitura normal preserva o cache curto da CDN para não multiplicar
+      // consultas ao Monday. A atualização manual usa uma chave de revalidação
+      // e recebe no-store no servidor para buscar o estado atual das fontes.
+      const refreshQuery = manual ? `?refresh=1&t=${Date.now()}` : '';
+      const metricsRes = await fetch(`/api/dashboard/metrics${refreshQuery}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const metricsData = await metricsRes.json().catch(() => ({}));
 
       if (!metricsRes.ok || !metricsData.success) {
@@ -1057,9 +1072,12 @@ function App() {
 
       setMetrics({ executiveSnapshot: metricsData.metrics.executiveSnapshot, history: metricsData.meta?.history || null });
     } catch (err) {
-      setError(err.message || 'Falha catastrófica de comunicação com o Monday.com.');
+      const message = err.message || 'Falha catastrófica de comunicação com o Monday.com.';
+      if (manual) setRefreshError(message);
+      else setError(message);
     } finally {
-      setLoading(false);
+      if (manual) setRefreshing(false);
+      else setLoading(false);
     }
   };
 
@@ -1110,7 +1128,7 @@ function App() {
 
       {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onRefresh={() => loadMetrics({ manual: true })} refreshing={refreshing} refreshError={refreshError} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">

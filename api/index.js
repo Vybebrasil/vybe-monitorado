@@ -500,6 +500,7 @@ app.post('/api/save/:id', requireAdminAccess, blockLegacyFilePersistence, expres
 // NOVO ENDPOINT: Command Center / Métricas Executivas do Monday
 app.get('/api/dashboard/metrics', async (req, res) => {
   console.log('[API] /api/dashboard/metrics called');
+  const forceRefresh = ['1', 'true'].includes(String(req.query.refresh || '').toLowerCase());
   try {
     console.log('[API] Fetching from Monday...');
     const [bottlenecks, posts, demands, calendar] = await Promise.all([
@@ -540,13 +541,11 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       };
     }
 
-    // A leitura custa três consultas ao Monday e alguns segundos. Sem cache, cada
-    // pessoa do time que abre o painel dispara tudo de novo e o consumo da API do
-    // Monday cresce com o número de espectadores. A CDN da Vercel guarda a resposta
-    // por um minuto e ainda serve a versão anterior enquanto revalida em segundo
-    // plano, então o painel abre instantâneo e o Monday vê no máximo uma leitura
-    // por minuto. Um minuto de defasagem é irrelevante para sinal executivo.
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+    // A leitura normal custa três consultas ao Monday e alguns segundos. A CDN
+    // guarda a resposta por um minuto para não multiplicar consultas para cada
+    // espectador. Quando o gestor pede atualização manual, a leitura recebe
+    // no-store para garantir que a resposta venha das fontes naquele momento.
+    res.set('Cache-Control', forceRefresh ? 'no-store, max-age=0' : 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
 
     res.json({
       success: true,

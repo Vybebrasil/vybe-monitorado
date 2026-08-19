@@ -1746,3 +1746,50 @@ button:focus-visible,a:focus-visible,select:focus-visible,[role="button"]:focus-
 @media (max-width:600px){.kpi-investigation-section-title{align-items:flex-start;flex-direction:column;gap:.25rem;}.evidence-penalty-chip{justify-self:start;}.score-ledger-summary strong{font-size:.62rem;}.score-ledger-row-top{display:grid;gap:.25rem;}.score-ledger button>b{font-size:.64rem;}}
 
 .kpi-evidence-subtotal{margin:-.25rem 0 .65rem;color:var(--vybe-text-muted);font:600 .52rem/1.4 var(--font-mono);letter-spacing:.03em;}
+
+
+/* Atualização manual das fontes — o gestor pode pedir uma leitura nova sem desmontar o cockpit. */
+.manual-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .42rem;
+  min-height: 2rem;
+  margin-left: auto;
+  padding: .42rem .68rem;
+  border: 1px solid rgba(0,243,255,.38);
+  background: rgba(0,243,255,.055);
+  color: var(--vybe-cyan);
+  cursor: pointer;
+  font: 800 .57rem var(--font-mono);
+  letter-spacing: .07em;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+.manual-refresh-button:hover,
+.manual-refresh-button:focus-visible {
+  border-color: var(--vybe-cyan);
+  background: rgba(0,243,255,.14);
+  color: #fff;
+  outline: 2px solid rgba(0,243,255,.35);
+  outline-offset: 2px;
+}
+.manual-refresh-button:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+.manual-refresh-button .spin {
+  animation: nexus-refresh-spin 900ms linear infinite;
+}
+.manual-refresh-error {
+  flex-basis: 100%;
+  color: #ff6b82;
+  font: 700 .56rem/1.35 var(--font-mono);
+  letter-spacing: .04em;
+}
+@keyframes nexus-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .manual-refresh-button .spin { animation: none; }
+}
+@media (max-width: 600px) {
+  .manual-refresh-button { width: 100%; margin-left: 0; }
+}

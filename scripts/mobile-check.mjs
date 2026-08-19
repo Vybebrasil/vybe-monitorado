@@ -25,6 +25,7 @@ const report = await page.evaluate(() => {
     missionCount,
     kpiCount: document.querySelectorAll('.executive-kpi-card').length,
     nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
+    manualRefreshButton: Boolean(document.querySelector('.manual-refresh-button')),
   };
 });
 
@@ -41,6 +42,15 @@ const selected = await page.evaluate(() => ({
     drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
   }));
 
+const refreshButton = page.locator('.manual-refresh-button');
+await refreshButton.click();
+await page.waitForTimeout(350);
+const refreshState = await page.evaluate(() => ({
+  buttonText: document.querySelector('.manual-refresh-button')?.textContent?.trim() || '',
+  disabled: document.querySelector('.manual-refresh-button')?.disabled ?? null,
+  error: document.querySelector('.manual-refresh-error')?.textContent?.trim() || ''
+}));
+
 await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();
 await page.waitForTimeout(350);
 const analystState = await page.evaluate(() => ({
@@ -48,8 +58,6 @@ const analystState = await page.evaluate(() => ({
   bodyWidth: document.body.scrollWidth,
   viewportWidth: window.innerWidth
 }));
-
-console.log(JSON.stringify({ ...report, afterTap: selected, analystState }, null, 2));
 
 const failures = [];
 if (report.viewport.width !== 390) failures.push(`viewport width esperado 390, obtido ${report.viewport.width}`);
@@ -64,10 +72,15 @@ if (selected.mondayLinks !== 2) failures.push(`links Monday esperados 2, obtidos
 if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado: ${selected.drawerCount}`);
 if (analystState.filterCount !== 4) failures.push(`filtros cruzados esperados 4 no ANALISTA, obtidos ${analystState.filterCount}`);
 if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);
-if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
-if (focusState.outlineStyle === 'none' || focusState.outlineWidth === '0px') failures.push(`foco visível ausente no seletor de responsável: ${JSON.stringify(focusState)}`);
+  if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
+  if (!report.manualRefreshButton) failures.push('botão ATUALIZAR DADOS não encontrado');
+  if (refreshState.disabled) failures.push('botão ATUALIZAR DADOS permaneceu bloqueado após a leitura');
+  if (refreshState.error) failures.push(`refresh apresentou erro: ${refreshState.error}`);
+  if (focusState.outlineStyle === 'none' || focusState.outlineWidth === '0px') failures.push(`foco visível ausente no seletor de responsável: ${JSON.stringify(focusState)}`);
 
-await browser.close();
+  console.log(JSON.stringify({ ...report, afterTap: selected, analystState, refreshState }, null, 2));
+
+  await browser.close();
 if (failures.length) {
   console.error(JSON.stringify({ failures }, null, 2));
   process.exit(1);
