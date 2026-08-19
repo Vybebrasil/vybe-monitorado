@@ -4,6 +4,8 @@ import { statusColorFor } from './data/status-colors.js';
 import { PeopleAvatars } from './components/PeopleAvatars.jsx';
 import { buildMissions, canonicalStage, clampPct, clickable, delayUrgency, formatDate, formatNumber, formatPct, formatPoints, mondayItemUrl, riskTone, scoreComposition, splitOwners, statusTone } from './components/executive-helpers.js';
 import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
+import { ReadinessKpiBand } from './components/ReadinessKpiBand.jsx';
+import { MissionBoard } from './components/MissionBoard.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -204,109 +206,9 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh,
   );
 }
 
-function ReadinessKpiBand({ snapshot, onSelect }) {
-  const [expanded, setExpanded] = useState(false);
-  const readiness = snapshot?.portfolioReadiness || {};
-  const kpis = readiness.kpis || {};
-  const eligible = Number(kpis.eligibleClients ?? readiness.eligibleClients) || 0;
-  const planning = kpis.planning || { withCount: eligible ? Math.max(0, eligible - (Number(readiness.missingPlanning) || 0)) : null, withoutCount: eligible ? Number(readiness.missingPlanning) || 0 : null, coveragePct: readiness.planningCoveragePct ?? null, withClients: [], withoutClients: [], source: 'Monday.com · Gestão de Clientes · Planejamento' };
-  const meetings = kpis.meetingsCurrentMonth || { withCount: null, withoutCount: null, coveragePct: null, withClients: [], withoutClients: [], month: null, source: 'Monday.com · Reuniões · data' };
-  const onboarding = kpis.onboarding || { withCount: Number(snapshot?.portfolioExecution?.onboarding?.length) || 0, withoutCount: eligible || null, coveragePct: null, withClients: [], withoutClients: [], windowDays: snapshot?.portfolioExecution?.onboardingWindowDays || 30, source: 'Monday.com · created_at + ausência de execução' };
-  const calendar = kpis.calendar3Months || { mapped: false, completeCount: null, missingCount: null, coveragePct: null, completeClients: null, missingClients: null, source: 'Monday.com · três colunas mensais de calendário', message: 'Três colunas mensais ainda não mapeadas.' };
-  const agenda = kpis.agendaNext30Days || { mapped: false, withCount: null, withoutCount: null, coveragePct: null, withClients: null, withoutClients: null, source: 'Google Calendar · iCal · próximos 30 dias', period: null, message: 'Agenda indisponível ou não configurada.' };
-  const monthLabel = meetings.month ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${meetings.month}-01T00:00:00Z`)) : 'mês atual';
-  const cards = [
-    { id: 'readiness-planning', label: 'PLANEJAMENTO', value: planning.withCount === null ? 'N/D' : formatNumber(planning.withCount), detail: planning.withCount === null ? 'campo não disponível' : `${formatNumber(planning.withoutCount)} sem planejamento · ${formatNumber(eligible)} ativos`, progress: planning.coveragePct, tone: 'warning', title: 'Clientes com planejamento identificado no Monday.', explanation: `${formatNumber(planning.withCount ?? 0)} clientes com planejamento e ${formatNumber(planning.withoutCount ?? 0)} sem planejamento. Fonte: ${planning.source}.`, action: 'Abrir clientes com e sem planejamento' },
-    { id: 'readiness-meetings', label: 'REUNIÕES NO MÊS ATUAL · MONDAY', value: meetings.withCount === null ? 'N/D' : formatNumber(meetings.withCount), detail: meetings.withCount === null ? 'board de reuniões indisponível' : `${formatNumber(meetings.withoutCount)} sem reunião · ${monthLabel}`, progress: meetings.coveragePct, tone: 'cyan', title: 'Clientes com reunião registrada no board Reuniões do Monday no mês atual.', explanation: meetings.withCount === null ? 'O board de Reuniões ainda não respondeu nesta leitura.' : `${formatNumber(meetings.withCount)} clientes têm pelo menos uma reunião no board Reuniões em ${monthLabel}; ${formatNumber(meetings.withoutCount)} não têm registro nesse board.`, action: 'Abrir clientes com e sem reunião no Monday' },
-    { id: 'readiness-agenda', label: 'AGENDA · PRÓXIMOS 30 DIAS', value: agenda.mapped ? formatNumber(agenda.withCount) : 'N/D', detail: agenda.mapped ? `${formatNumber(agenda.withoutCount)} sem reunião na Agenda` : 'iCal indisponível', progress: agenda.mapped ? agenda.coveragePct : null, tone: agenda.mapped ? 'cyan' : 'supporting', title: 'Clientes com evento correspondente no Google Calendar nos próximos 30 dias.', explanation: agenda.mapped ? `${formatNumber(agenda.withCount)} clientes têm evento correspondente na Agenda; ${formatNumber(agenda.withoutCount)} não têm evento correspondente no período.` : `${agenda.message || 'Google Calendar indisponível nesta leitura.'}`, action: 'Abrir clientes com e sem reunião na Agenda' },
-    { id: 'readiness-onboarding', label: 'FASE DE ENTRADA', value: formatNumber(onboarding.withCount), detail: `${formatNumber(onboarding.withoutCount)} fora da entrada · janela ${formatNumber(onboarding.windowDays)}D`, progress: eligible ? (onboarding.withCount / eligible) * 100 : null, tone: 'cyan', title: 'Clientes em implantação segundo a janela de entrada do Nexus.', explanation: `${formatNumber(onboarding.withCount)} clientes estão na janela de implantação de ${formatNumber(onboarding.windowDays)} dias e são separados do indicador de cliente sem execução.`, action: 'Abrir clientes em fase de entrada' },
-    { id: 'readiness-calendar', label: 'CALENDÁRIO · 3 MESES', value: calendar.mapped ? formatNumber(calendar.completeCount) : 'N/D', detail: calendar.mapped ? `${formatNumber(calendar.missingCount)} sem 3 meses · ${formatNumber(eligible)} ativos` : '3 colunas não mapeadas no Monday', progress: calendar.mapped ? calendar.coveragePct : null, tone: calendar.mapped ? 'warning' : 'supporting', title: 'Clientes com três meses de calendário preenchidos no Monday.', explanation: calendar.mapped ? `${formatNumber(calendar.completeCount)} clientes têm as três colunas mensais preenchidas e ${formatNumber(calendar.missingCount)} não têm cobertura completa.` : `${calendar.message || 'Mapeie três IDs de colunas mensais para ativar esta leitura.'}`, action: 'Abrir cobertura de calendário' }
-  ];
 
-  return (
-    <section className="readiness-kpi-band" aria-label="KPIs de prontidão e relacionamento da carteira">
-      <div className="readiness-kpi-header"><div><span className="executive-section-kicker">PRONTIDÃO · RELACIONAMENTO</span><h2>O que está preparado antes da execução?</h2></div><div className="readiness-kpi-header-actions"><span className="readiness-kpi-note">CLIENTES · FONTES EXECUTIVAS</span><button type="button" className="readiness-kpi-toggle" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'RECOLHER KPIs' : 'ABRIR KPIs DE PRONTIDÃO'} <span aria-hidden="true">{expanded ? '↑' : '↓'}</span></button></div></div>
-      {!expanded ? <div className="readiness-kpi-compact" aria-label="Resumo compacto de prontidão">
-        {cards.map(card => <button type="button" className={`readiness-kpi-chip ${card.tone}`} key={card.id} onClick={() => onSelect(card.id)}><span>{card.label}</span><strong>{card.value}</strong><small>{card.detail}</small></button>)}
-      </div> : <div className="readiness-kpi-grid">
-        {cards.map(card => <article className={`executive-kpi-card supporting ${card.tone}`} key={card.id} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
-          <span className="executive-kpi-label">{card.label}</span>
-          <strong className="executive-kpi-value">{card.value}</strong>
-          <span className="executive-kpi-detail">{card.detail}</span>
-          <ExecutiveMeter value={card.progress} tone={card.tone} label={card.title} />
-          <span className="executive-kpi-click">CLIQUE PARA INVESTIGAR ↗</span>
-          <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
-        </article>)}
-      </div>}
-    </section>
-  );
-}
 
-function MissionBoard({ snapshot, onSelect }) {
-  const missions = buildMissions(snapshot);
-  const score = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
-  const deductions = snapshot?.portfolioStability?.scoreDeductions || [];
-  const recoverable = Number(snapshot?.portfolioStability?.recoveryPointsAvailable) || missions.reduce((sum, mission) => sum + mission.recoverablePoints, 0);
-  const lostPoints = deductions.reduce((sum, deduction) => sum + (Number(deduction.points) || 0), 0);
-  const scoreBase = 100;
-  if (!missions.length && !deductions.length) return null;
-  const readinessIds = new Set(['planning-source-gap', 'missing-planning', 'dashboard-source-gap', 'missing-dashboard']);
-  const operationalDeductions = deductions.filter(deduction => !readinessIds.has(deduction.id));
-  const readinessDeductions = deductions.filter(deduction => readinessIds.has(deduction.id));
-  const openDeduction = (deduction) => {
-    const isReadiness = readinessIds.has(deduction.id);
-    const id = isReadiness ? 'readiness' : deduction.id === 'overdue-demands' ? 'health' : deduction.id === 'execution-gap' ? 'execution' : deduction.id === 'publication-risk' ? 'publication' : 'delays';
-    onSelect(id, isReadiness ? deduction.id : undefined);
-  };
-  const renderDeduction = deduction => {
-    const isSystemic = deduction.mode === 'source_gap';
-    const observedCount = Number(deduction.observedCount ?? deduction.count) || 0;
-    const penalizedCount = Number(deduction.penalizedCount ?? deduction.count) || 0;
-    const protectedCount = Number(deduction.protectedCount) || 0;
-    const populationLabel = isSystemic
-      ? `${formatNumber(observedCount)} clientes observados · 1 penalização sistêmica`
-      : `${formatNumber(observedCount)} observados · ${formatNumber(penalizedCount)} penalizados${protectedCount ? ` · ${formatNumber(protectedCount)} protegidos` : ''}`;
-    const ruleLabel = isSystemic ? '-5 pts no total · penalização única da fonte' : `${formatNumber(penalizedCount)} × -${formatNumber(deduction.pointsPerItem)} pts`;
-    return (
-      <button type="button" className={`score-ledger-row ${isSystemic ? 'systemic' : ''}`} key={deduction.id} onClick={() => openDeduction(deduction)}>
-        <span className="score-ledger-row-copy">
-          <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts perdidos</b></span>
-          <small><strong>{populationLabel}</strong> <i>·</i> {ruleLabel} <i>·</i> <b>-{formatNumber(deduction.points)} pts no total</b> <i>·</i> {deduction.source}</small>
-        </span>
-        <span className="score-ledger-row-action">ABRIR CAUSA ↗</span>
-      </button>
-    );
-  };
 
-  return (
-    <section className="mission-board data-panel" aria-label="Missões da carteira e placar executivo">
-      <div className="mission-board-header">
-        <div className="mission-board-copy"><span className="executive-section-kicker">VYBE OS · MISSÕES DA CARTEIRA</span><h2>Recupere o placar da operação</h2><p>Cada missão nasce de um sinal real do Monday. Não é competição entre pessoas: é recuperação do sistema.</p><div className="mission-objective"><span>OBJETIVO DA LEITURA</span><strong>Resolver sinais comprovados e devolver pontos ao placar.</strong></div></div>
-        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>PLACAR BRUTO ATUAL</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>Meta de recuperação: 100 pts</em></div>
-      </div>
-      <div className="mission-layout">
-        <div className="mission-list">
-          {missions.map((mission, index) => (
-            <button type="button" className={`mission-card ${mission.accent}`} key={mission.id} onClick={() => onSelect(mission.kpiId, mission.readinessId)} aria-label={`Abrir missão: ${mission.title}`}>
-              <div className="mission-card-top"><span>MISSÃO {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
-              <strong>{mission.title}</strong>
-              <div className="mission-card-meta"><span>{formatNumber(mission.current)} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)} recuperáveis</b></div>
-              <div className="mission-progress" aria-label="Progresso da missão"><i style={{ width: `${mission.progressPct}%` }} /></div>
-              <small>{mission.description}</small>
-              <em>ABRIR EVIDÊNCIAS ↗</em>
-            </button>
-          ))}
-        </div>
-        <div className="score-ledger">
-          <div className="score-ledger-header"><div><span>PLACAR · ORIGEM DOS DESCONTOS</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes · -{formatNumber(lostPoints)} pts perdidos</b></div>
-          <div className="score-ledger-summary"><span>FECHAMENTO DO PLACAR</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
-          <div className="score-ledger-group"><span className="score-ledger-group-title">EXECUÇÃO E ENTREGA</span>{operationalDeductions.map(renderDeduction)}</div>
-          <div className="score-ledger-group readiness"><span className="score-ledger-group-title">PRONTIDÃO DA CARTEIRA</span>{readinessDeductions.map(renderDeduction)}</div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function StageDistribution({ snapshot }) {
   const activeItems = Number(snapshot?.quantitative?.activeItems) || 0;
