@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Target, Activity, ShieldAlert, Crosshair, X, Info, RefreshCw } from 'lucide-react';
 import { statusColorFor } from './data/status-colors.js';
 import { PeopleAvatars } from './components/PeopleAvatars.jsx';
-import { buildMissions, canonicalStage, clickable, delayUrgency, formatDate, formatNumber, formatPct, formatPoints, mondayItemUrl, riskTone, scoreComposition, splitOwners, statusTone } from './components/executive-helpers.js';
+import { buildMissions, canonicalStage, clampPct, clickable, delayUrgency, formatDate, formatNumber, formatPct, formatPoints, mondayItemUrl, riskTone, scoreComposition, splitOwners, statusTone } from './components/executive-helpers.js';
 import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
@@ -1037,6 +1037,39 @@ function JarvisWakeScreen({ stage }) {
 
 // --- MAIN APP ---
 
+class RuntimeErrorBoundary extends React.Component {
+  state = { error: null };
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[NEXUS_RUNTIME_ERROR]', error, info?.componentStack || '');
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    const message = this.state.error?.message || 'Falha inesperada na interface.';
+    return (
+      <div className="runtime-error-screen" role="alert">
+        <div className="runtime-error-panel">
+          <ShieldAlert size={42} color="var(--vybe-red)" aria-hidden="true" />
+          <span className="runtime-error-kicker">VYBE NEXUS · RECUPERAÇÃO</span>
+          <h1>O JARVIS PRECISA REINICIAR ESTA LEITURA</h1>
+          <p>Uma interação encontrou um erro inesperado. Os dados do Monday não foram alterados.</p>
+          <code>{message}</code>
+          <button type="button" onClick={this.handleReload}>RECARREGAR LEITURA</button>
+        </div>
+      </div>
+    );
+  }
+}
+
 function App() {
   const [appMode, setAppMode] = useState('wake'); // wake -> manager by default; analyst is an explicit exit
   const [wakeStage, setWakeStage] = useState(0);
@@ -1143,4 +1176,10 @@ function App() {
   );
 }
 
-export default App;
+export default function NexusApp() {
+  return (
+    <RuntimeErrorBoundary>
+      <App />
+    </RuntimeErrorBoundary>
+  );
+}

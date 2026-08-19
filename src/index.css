@@ -1793,3 +1793,65 @@ button:focus-visible,a:focus-visible,select:focus-visible,[role="button"]:focus-
 @media (max-width: 600px) {
   .manual-refresh-button { width: 100%; margin-left: 0; }
 }
+
+
+/* Recuperação de runtime: erros de interação não podem virar uma tela preta sem diagnóstico. */
+.runtime-error-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: radial-gradient(circle at 50% 35%, rgba(255,0,51,.12), transparent 42%), var(--vybe-bg);
+}
+.runtime-error-panel {
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .85rem;
+  padding: clamp(1.35rem, 4vw, 2.5rem);
+  border: 1px solid rgba(255,0,51,.5);
+  border-left: 4px solid var(--vybe-red);
+  background: rgba(10,10,10,.92);
+  box-shadow: 0 0 45px rgba(255,0,51,.13);
+}
+.runtime-error-kicker {
+  color: var(--vybe-red);
+  font: 800 .62rem var(--font-mono);
+  letter-spacing: .12em;
+}
+.runtime-error-panel h1 {
+  color: #fff;
+  font: 700 clamp(1.65rem, 5vw, 2.8rem)/.98 var(--font-display);
+  letter-spacing: .02em;
+}
+.runtime-error-panel p {
+  color: var(--vybe-text-muted);
+  font: 500 .78rem/1.55 var(--font-mono);
+}
+.runtime-error-panel code {
+  width: 100%;
+  overflow-wrap: anywhere;
+  padding: .7rem;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.035);
+  color: #ffb4c0;
+  font: 500 .66rem/1.4 var(--font-mono);
+}
+.runtime-error-panel button {
+  margin-top: .35rem;
+  padding: .8rem 1rem;
+  border: 1px solid var(--vybe-red);
+  background: rgba(255,0,51,.12);
+  color: #fff;
+  cursor: pointer;
+  font: 800 .65rem var(--font-mono);
+  letter-spacing: .08em;
+}
+.runtime-error-panel button:hover,
+.runtime-error-panel button:focus-visible {
+  background: var(--vybe-red);
+  color: #080808;
+  outline: 2px solid rgba(255,0,51,.35);
+  outline-offset: 2px;
+}
