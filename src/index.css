@@ -1855,3 +1855,14 @@ button:focus-visible,a:focus-visible,select:focus-visible,[role="button"]:focus-
   outline: 2px solid rgba(255,0,51,.35);
   outline-offset: 2px;
 }
+
+
+/* Status do Monday como investigação filtrada */
+.kpi-status-grid-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:.4rem;width:100%;padding:.65rem .7rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.025);color:#ddd;text-align:left;cursor:pointer;font:500 .56rem var(--font-mono);transition:background .16s ease,border-color .16s ease,transform .16s ease;}
+.kpi-status-grid-item:hover,.kpi-status-grid-item:focus-visible{border-color:var(--vybe-cyan);background:rgba(0,243,255,.08);outline:2px solid rgba(0,243,255,.25);outline-offset:2px;transform:translateY(-1px);}
+.kpi-status-grid-item.selected{border-color:var(--vybe-orange);background:rgba(255,157,0,.09);box-shadow:0 0 16px rgba(255,157,0,.1);}
+.kpi-status-grid-item>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.kpi-status-grid-item strong{color:#fff;white-space:nowrap;}.kpi-status-grid-item small{color:var(--vybe-text-muted);white-space:nowrap;}.kpi-status-grid-item em{color:var(--vybe-cyan);font:700 .42rem var(--font-mono);font-style:normal;letter-spacing:.05em;white-space:nowrap;}
+.kpi-status-source-note{margin:-.1rem 0 .75rem;padding:.7rem .8rem;border-left:2px solid var(--vybe-cyan);background:rgba(0,243,255,.04);color:var(--vybe-text-muted);font:500 .58rem/1.45 var(--font-mono);}.kpi-status-source-note strong{color:#fff;}
+.kpi-status-item-list{display:grid;gap:.55rem;list-style:none;padding:0;margin:0;}.kpi-status-item-card{padding:.85rem;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.025);}.kpi-status-item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.7rem;}.kpi-status-item-head strong{min-width:0;color:#fff;font:700 .78rem/1.35 var(--font-display);}.kpi-status-item-meta{display:flex;flex-wrap:wrap;gap:.45rem .9rem;margin-top:.5rem;color:#aaa;font:500 .55rem/1.35 var(--font-mono);}.kpi-status-item-card .investigation-evidence-link{display:inline-block;margin-top:.55rem;}
+@media (max-width:520px){.kpi-status-grid-item{grid-template-columns:auto minmax(0,1fr) auto;}.kpi-status-grid-item em{grid-column:2 / -1;}.kpi-status-item-head{display:grid;gap:.45rem;}.kpi-status-item-meta{display:grid;gap:.3rem;}}

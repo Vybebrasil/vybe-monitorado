@@ -581,6 +581,10 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
   const exposedClients = (snapshot?.clientRanking || []).filter(item => (Number(item.delayedItems) || 0) > 0).sort((a, b) => b.riskPct - a.riskPct);
   const statusRows = Object.entries(quantitative.statusCounts || {}).sort((a, b) => b[1] - a[1]);
   const stageRows = Object.entries(quantitative.groupCounts || {}).sort((a, b) => b[1] - a[1]);
+  const activeItems = Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : [];
+  const selectedStatus = panel.statusFilter || '';
+  const statusItems = selectedStatus ? activeItems.filter(item => String(item.status || '') === selectedStatus) : [];
+  const visibleStatusItems = showAll ? statusItems : statusItems.slice(0, 5);
   const score = snapshot?.portfolioStability?.score;
   const delayedInternal = Number(quantitative.overdueInternal) || 0;
   const delayedPublication = Number(quantitative.overduePublication) || 0;
@@ -601,7 +605,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
 
   const configs = {
     health: { eyebrow: 'KPI · PLACAR EXECUTIVO', title: 'Qual é a pressão real sobre o placar?', subtitle: 'O score bruto pode ficar negativo. Ele mostra o quanto a operação está abaixo da linha de recuperação.', accent: 'critical' },
-    active: { eyebrow: 'KPI · CARTEIRA ATIVA', title: 'O que compõe os 155 itens ativos?', subtitle: 'A leitura mostra a carteira por status e etapa, usando o recorte ativo do Monday.', accent: 'cyan' },
+    active: { eyebrow: 'KPI · CARTEIRA ATIVA', title: `O que compõe os ${formatNumber(quantitative.activeItems || 0)} itens ativos?`, subtitle: 'Clique em qualquer status para abrir os itens exatos desse grupo no board Produção de Conteúdo.', accent: 'cyan' },
     delays: { eyebrow: 'KPI · PRODUÇÃO DE CONTEÚDO', title: `${delayedInternal} itens de Produção de Conteúdo com prazo interno vencido`, subtitle: 'Fonte: board Produção de Conteúdo · prazo usado: prazo interno. Cada item abaixo tem cliente, responsável, etapa, status, datas e link direto para o Monday.', accent: 'critical' },
     exposure: { eyebrow: 'KPI · RISCO DE PREVISIBILIDADE', title: `${exposedClients.length} clientes expostos`, subtitle: 'Um cliente entra aqui quando possui pelo menos um atraso interno ou de veiculação no recorte.', accent: 'warning' },
     execution: { eyebrow: 'KPI · GAP DE EXECUÇÃO', title: `${stalled} clientes sem execução`, subtitle: 'Clientes ativos sem item no board Produção de Conteúdo e sem Solicitação de Demanda aberta; onboarding é separado.', accent: 'critical' },
@@ -673,7 +677,16 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
 
         {panel.id === 'active' ? <>
           <div className="kpi-factor-grid"><div><strong>{formatNumber(quantitative.activeItems)}</strong><span>ITENS ATIVOS</span></div><div><strong>{formatPct(quantitative.activePct)}</strong><span>DA BASE HISTÓRICA</span></div><div><strong>{formatNumber(quantitative.completedItems)}</strong><span>CONCLUÍDOS FORA DO RECORTE</span></div></div>
-          <div className="kpi-investigation-section-title">STATUS DO MONDAY</div><div className="kpi-status-grid">{statusRows.map(([status, count]) => <div key={status}><span className="status-dot" style={{ backgroundColor: statusColorFor(status, quantitative.statusColors), boxShadow: `0 0 7px ${statusColorFor(status, quantitative.statusColors)}` }} /><span>{status}</span><strong>{formatNumber(count)}</strong><small>{formatPct((count / (quantitative.activeItems || 1)) * 100)}</small></div>)}</div>
+          <div className="kpi-investigation-section-title">STATUS DO MONDAY · CLIQUE PARA INVESTIGAR</div><div className="kpi-status-grid">{statusRows.map(([status, count]) => { const color = statusColorFor(status, quantitative.statusColors); const selected = selectedStatus === status; return <button type="button" className={`kpi-status-grid-item${selected ? ' selected' : ''}`} key={status} aria-pressed={selected} onClick={() => setPanel({ ...panel, statusFilter: selected ? '' : status })}><span className="status-dot" style={{ backgroundColor: color, boxShadow: `0 0 7px ${color}` }} /><span>{status}</span><strong>{formatNumber(count)}</strong><small>{formatPct((count / (quantitative.activeItems || 1)) * 100)}</small><em>ABRIR ↗</em></button>; })}</div>
+          {selectedStatus ? <>
+            <div className="kpi-investigation-section-title">ITENS COM STATUS · {selectedStatus} · {statusItems.length}</div>
+            <div className="kpi-status-source-note">Fonte: <strong>Produção de Conteúdo · Monday.com</strong> · {statusItems.length} itens ativos com este status. Itens Finalizado, Publicado e Cancelado ficam fora do recorte.</div>
+            <ul className="kpi-status-item-list">
+              {visibleStatusItems.map((item, index) => { const color = statusColorFor(item.status, quantitative.statusColors); return <li className="kpi-status-item-card" key={item.id || `${item.name}-${index}`}><div className="kpi-status-item-head"><strong>{item.name}</strong><span className="monday-status-badge" style={{ color, borderColor: color }}>{item.status}</span></div><div className="kpi-status-item-meta"><span>{item.client || 'Sem cliente'}</span><span>{item.stage || 'Etapa não informada'}</span><span className="people-field"><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div><div className="kpi-status-item-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span></div><a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a></li>; })}
+            </ul>
+            {statusItems.length === 0 ? <div className="investigation-callout"><span>ITENS NÃO DISPONÍVEIS NESTA LEITURA</span><p>O status foi recebido no agregado, mas os detalhes ainda não chegaram no snapshot. Use ATUALIZAR DADOS para reconsultar o Monday.</p></div> : null}
+            {statusItems.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${statusItems.length - 5})`}</button> : null}
+          </> : null}
           <div className="kpi-investigation-section-title">ETAPAS EXECUTIVAS</div><div className="kpi-status-grid">{stageRows.map(([stage, count]) => <div key={stage}><span className="status-dot" style={{ backgroundColor: 'var(--vybe-cyan)' }} /><span>{canonicalStage(stage)}</span><strong>{formatNumber(count)}</strong><small>{formatPct((count / (quantitative.activeItems || 1)) * 100)}</small></div>)}</div>
         </> : null}
 

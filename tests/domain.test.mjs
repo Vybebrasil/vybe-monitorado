@@ -188,6 +188,24 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'internal-delays').source, 'Monday.com · Produção de Conteúdo · prazo interno');
 });
 
+test('Snapshot expõe itens ativos detalhados para investigação por status', () => {
+  const snapshot = buildExecutiveSnapshot({
+    posts: {
+      activeItems: [
+        { id: '101', name: 'Item em Aguardo', status: 'Aguardo', client: 'Cliente A' },
+        { id: '102', name: 'Item em andamento', status: 'Em andamento', client: 'Cliente B' }
+      ],
+      ranking: [],
+      quantitative: { activeItems: 2, statusCounts: { Aguardo: 1, 'Em andamento': 1 } }
+    },
+    demands: Object.assign([], { clientsWithOpenDemand: [] }),
+    generatedAt: '2026-08-18T00:00:00.000Z'
+  });
+
+  assert.deepEqual(snapshot.activeItems.map(item => item.status), ['Aguardo', 'Em andamento']);
+  assert.equal(snapshot.activeItems.find(item => item.status === 'Aguardo').name, 'Item em Aguardo');
+});
+
 test('Snapshot expõe frescor da fonte e clientes em risco sem reunião futura', () => {
   const snapshot = buildExecutiveSnapshot({
     bottlenecks: {

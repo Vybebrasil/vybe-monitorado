@@ -563,6 +563,7 @@ class MondayIntegration {
 
     return {
       ranking,
+      activeItems: ranking.flatMap(row => row.details || []),
       totalDelayed,
       delayDetails,
       productivity,

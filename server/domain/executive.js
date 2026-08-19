@@ -367,6 +367,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       recoveryPointsAvailable: scoreDeductions.reduce((total, deduction) => total + deduction.points, 0)
     },
     portfolioExecution: executionGap,
+    activeItems: posts.activeItems || ranking.flatMap(row => row.details || []),
     calendarSignals,
     delayDetails: delayDetails,
     productivity,
