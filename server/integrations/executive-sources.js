@@ -18,6 +18,9 @@ export function buildExecutiveSourceMeta(operationalMirror) {
       capturedAt: operationalMirror.sync?.checkedAt || operationalMirror.updatedAt,
       complete: !stale,
       sync: operationalMirror.sync,
+      mirrorVersion: Number(operationalMirror.version || operationalMirror.sync?.version || 0),
+      versionScope: 'production-mirror',
+      versionMonitor: operationalMirror.sync?.versionMonitor || null,
       mirrorReady: true
     };
   }
@@ -28,6 +31,9 @@ export function buildExecutiveSourceMeta(operationalMirror) {
     freshness: 'fallback',
     capturedAt: new Date().toISOString(),
     complete: true,
+    mirrorVersion: null,
+    versionScope: 'fallback-direct',
+    versionMonitor: null,
     sync: {
       state: operationalMirror?.sync?.state || 'unavailable',
       fallback: true,
@@ -65,7 +71,20 @@ export async function getExecutiveSourceBundle({
   const effectiveSourceMeta = {
     ...sourceMeta,
     fieldCoverage,
-    complete: sourceMeta.complete !== false && fieldCoverage?.complete !== false
+    complete: sourceMeta.complete !== false && fieldCoverage?.complete !== false,
+    consistency: {
+      mode: 'mixed',
+      mirrorVersion: sourceMeta.mirrorVersion ?? null,
+      versionScope: sourceMeta.versionScope || null,
+      boards: {
+        production: { source: sourceMeta.name, version: sourceMeta.mirrorVersion ?? null, mode: sourceMeta.mirrorReady ? 'operational-mirror' : 'monday-fallback' },
+        clients: { source: 'Monday.com · direto', version: null, mode: 'direct' },
+        demands: { source: 'Monday.com · direto', version: null, mode: 'direct' },
+        calendar: { source: includeCalendar ? 'Google Calendar · iCal' : 'não consultado', version: null, mode: includeCalendar ? 'direct' : 'disabled' },
+        meetings: { source: includeMeetingLogs ? 'Monday.com · Reuniões · direto' : 'não consultado', version: null, mode: includeMeetingLogs ? 'direct' : 'disabled' }
+      },
+      note: 'A Produção de Conteúdo acompanha a versão do espelho do Vybe Painel; as demais fontes ainda são lidas diretamente pelo Nexus.'
+    }
   };
 
   return {

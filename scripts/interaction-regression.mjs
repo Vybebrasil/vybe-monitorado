@@ -62,7 +62,7 @@ try {
     viewportWidth: window.innerWidth,
   }));
   results.push({ name: 'analyst', ...analyst, pageErrors: pageErrors.length });
-  if (!analyst.rootChildren || analyst.filterCount !== 4) failures.push({ name: 'analyst', reason: `estado inesperado: ${JSON.stringify(analyst)}` });
+  if (!analyst.rootChildren || analyst.filterCount !== 5) failures.push({ name: 'analyst', reason: `estado inesperado: ${JSON.stringify(analyst)}` });
 } catch (error) {
   failures.push({ name: 'analyst', reason: error.message });
 }

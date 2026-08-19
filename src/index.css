@@ -1984,3 +1984,75 @@ button:focus-visible, a:focus-visible, select:focus-visible, [role="button"]:foc
   border-color: rgba(255, 157, 0, 0.65);
   color: var(--vybe-orange);
 }
+
+/* Briefing decisório do JARVIS: prioridade, causa, impacto e ação em uma única dobra. */
+.jarvis-decision-briefing {
+  margin: 14px 0 18px;
+  border: 1px solid rgba(0, 243, 255, 0.22);
+  background: linear-gradient(135deg, rgba(0, 243, 255, 0.07), rgba(10, 15, 23, 0.92) 48%, rgba(255, 157, 0, 0.06));
+}
+.jarvis-decision-briefing.stale,
+.jarvis-decision-briefing.fallback { border-color: rgba(255, 157, 0, 0.42); }
+.jarvis-decision-briefing-header,
+.jarvis-decision-briefing-grid,
+.jarvis-decision-metrics { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.jarvis-decision-briefing-header { padding: 13px 16px 0; }
+.jarvis-decision-briefing-kicker,
+.jarvis-decision-label,
+.jarvis-decision-detail > span { color: var(--vybe-cyan); font-size: 10px; letter-spacing: .16em; font-weight: 800; }
+.jarvis-decision-briefing-kicker { display: inline-flex; align-items: center; gap: 7px; }
+.jarvis-briefing-freshness { color: var(--vybe-cyan); font-size: 10px; letter-spacing: .12em; font-weight: 800; }
+.jarvis-briefing-freshness.stale,
+.jarvis-briefing-freshness.fallback { color: var(--vybe-orange); }
+.jarvis-decision-briefing-grid { align-items: stretch; padding: 12px 16px 16px; }
+.jarvis-decision-briefing-lead { flex: 1.15; min-width: 0; }
+.jarvis-decision-briefing-lead h2 { margin: 7px 0 8px; color: var(--vybe-text-main); font-size: clamp(19px, 2.2vw, 28px); line-height: 1.1; }
+.jarvis-decision-briefing-lead p { max-width: 650px; margin: 0; color: var(--vybe-text-muted); line-height: 1.5; }
+.jarvis-decision-action { display: inline-flex; align-items: center; gap: 7px; margin-top: 13px; padding: 9px 12px; border: 1px solid rgba(0, 243, 255, .42); background: rgba(0, 243, 255, .08); color: var(--vybe-cyan); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.jarvis-decision-action:hover { background: rgba(0, 243, 255, .16); }
+.jarvis-decision-briefing-details { display: grid; flex: 1; gap: 10px; min-width: 280px; }
+.jarvis-decision-detail { display: grid; gap: 3px; padding: 9px 11px; border-left: 2px solid rgba(0, 243, 255, .38); background: rgba(0, 0, 0, .18); }
+.jarvis-decision-detail strong { color: var(--vybe-text-main); font-size: 12px; line-height: 1.3; }
+.jarvis-decision-detail small { color: var(--vybe-text-muted); line-height: 1.35; }
+.jarvis-decision-metrics { justify-content: flex-start; flex-wrap: wrap; padding-top: 3px; color: var(--vybe-text-muted); font-size: 10px; }
+.jarvis-decision-metrics span { padding-right: 12px; border-right: 1px solid rgba(255,255,255,.12); }
+.jarvis-decision-metrics span:last-child { border-right: 0; }
+.jarvis-decision-metrics b { color: var(--vybe-text-main); margin-right: 4px; }
+@media (max-width: 760px) {
+  .jarvis-decision-briefing-grid { display: grid; }
+  .jarvis-decision-briefing-details { min-width: 0; }
+  .jarvis-decision-metrics { gap: 8px; }
+  .jarvis-decision-metrics span { border-right: 0; padding-right: 0; }
+}
+
+/* Contexto temporal e filtro cruzado do ANALISTA. */
+.analyst-investigation-context { border-color: rgba(0, 243, 255, .22); }
+.analyst-context-metrics { display: flex; flex-wrap: wrap; gap: 10px; }
+.analyst-context-metrics span { padding: 8px 10px; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.025); color: var(--vybe-text-muted); font-family: var(--font-mono); font-size: 10px; }
+.analyst-context-metrics b { color: var(--vybe-text-main); margin-right: 4px; font-size: 13px; }
+.analyst-change-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.analyst-change-chips span { border-left: 2px solid var(--vybe-text-muted); padding: 5px 8px; background: rgba(255,255,255,.025); color: var(--vybe-text-muted); font-size: 10px; }
+.analyst-change-chips span.improving { border-color: #00ff66; color: #00ff66; }
+.analyst-change-chips span.worsening { border-color: var(--vybe-red); color: var(--vybe-red); }
+.analyst-change-chips span.stable { border-color: var(--vybe-gold); color: var(--vybe-gold); }
+@media (max-width: 760px) {
+  .analyst-context-metrics span { flex: 1 1 45%; }
+}
+
+/* Barras executivas: comparação visual de pressão sem substituir o detalhe investigável. */
+.executive-pulse-bars { margin: 0 0 18px; }
+.executive-pulse-bars .data-panel-title { margin-bottom: 14px; }
+.executive-pulse-note { color: var(--vybe-text-muted); font-size: 9px; letter-spacing: .06em; }
+.executive-pulse-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.executive-pulse-item { display: grid; gap: 6px; min-width: 0; }
+.executive-pulse-label { display: flex; justify-content: space-between; gap: 8px; color: var(--vybe-text-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; }
+.executive-pulse-label b { color: var(--vybe-text-main); }
+.executive-pulse-track { height: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
+.executive-pulse-track i { display: block; height: 100%; background: var(--vybe-cyan); transition: width .45s ease; }
+.executive-pulse-track.attention i { background: var(--vybe-gold); }
+.executive-pulse-track.critical i { background: var(--vybe-red); box-shadow: 0 0 12px rgba(255,0,51,.35); }
+.executive-pulse-item small { color: var(--vybe-text-muted); font-size: 10px; line-height: 1.3; }
+@media (max-width: 760px) {
+  .executive-pulse-grid { grid-template-columns: 1fr; gap: 13px; }
+  .executive-pulse-note { display: none; }
+}

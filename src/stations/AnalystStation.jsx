@@ -19,7 +19,7 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-export default function AnalystStation({ snapshot, onExit }) {
+export default function AnalystStation({ snapshot, history, onExit }) {
   const statusCounts = snapshot.quantitative?.statusCounts || {};
   const delayDetails = snapshot.delayDetails || [];
   const [panelSnapshot, setPanelSnapshot] = useState(null);
@@ -27,7 +27,7 @@ export default function AnalystStation({ snapshot, onExit }) {
   const [panelPageError, setPanelPageError] = useState('');
   const [panelLoadingMore, setPanelLoadingMore] = useState(false);
   const [panelRefreshing, setPanelRefreshing] = useState(false);
-  const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '' });
+  const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '', source: '' });
 
   const fetchPanelSummary = async ({ wait = false, signal } = {}) => {
     const response = await fetch(`/api/executive/vybe-panel?limit=200${wait ? '&wait=1' : ''}`, { cache: 'no-store', signal });
@@ -131,13 +131,23 @@ export default function AnalystStation({ snapshot, onExit }) {
   }, [delayDetails]);
   const filteredDelays = useMemo(() => allDelaysSorted.filter(item => {
     const matches = (key, selected) => !selected || String(item?.[key] || '') === selected;
+    const sourceMatches = !filters.source
+      || (filters.source === 'panel' && panelItemsById.has(String(item.id)))
+      || (filters.source === 'monday' && !panelItemsById.has(String(item.id)));
     return matches('client', filters.client)
       && matches('responsavel', filters.responsible)
       && matches('stage', filters.stage)
-      && matches('status', filters.status);
-  }), [allDelaysSorted, filters]);
+      && matches('status', filters.status)
+      && sourceMatches;
+  }), [allDelaysSorted, filters, panelItemsById]);
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const updateFilter = (key, value) => setFilters(previous => ({ ...previous, [key]: value }));
+  const currentScore = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
+  const previousScore = Number(history?.score?.previous);
+  const scoreDelta = Number.isFinite(currentScore) && Number.isFinite(previousScore) ? currentScore - previousScore : null;
+  const sourceQuality = snapshot?.sourceQuality || {};
+  const sourceVersion = sourceQuality.mirrorVersion ?? sourceQuality.sync?.version ?? null;
+  const historicalChanges = history?.changes || [];
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
@@ -152,6 +162,18 @@ export default function AnalystStation({ snapshot, onExit }) {
       </header>
 
       <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit e cruza evidências com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
+
+      <section className="analyst-investigation-context data-panel animate-slide delay-1" aria-label="Contexto temporal da investigação">
+        <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>CONTEXTO DA INVESTIGAÇÃO · VERSÃO E MUDANÇAS</div>
+        <div className="analyst-context-metrics">
+          <span><b>{sourceVersion ?? 'N/D'}</b> versão do espelho</span>
+          <span><b>{Number.isFinite(currentScore) ? currentScore : 'N/D'}</b> placar atual</span>
+          <span><b>{scoreDelta === null ? 'N/D' : `${scoreDelta > 0 ? '+' : ''}${scoreDelta}`}</b> desde o snapshot anterior</span>
+          <span><b>{historicalChanges.length}</b> sinais comparados</span>
+        </div>
+        {historicalChanges.length > 0 ? <div className="analyst-change-chips">{historicalChanges.slice(0, 6).map(change => <span key={change.key} className={change.direction}>{change.label}: {change.previous} → {change.current}</span>)}</div> : <small className="analyst-source-hint">Histórico comparável indisponível ou sem datastore persistente nesta implantação.</small>}
+        {sourceQuality.consistency?.mode === 'mixed' ? <div className="analyst-source-warning" role="status">Coorte mista: Produção usa a versão do espelho; demais fontes seguem leitura direta.</div> : null}
+      </section>
 
       <section className="analyst-panel-sync data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
         <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · LEITURA COMPLETA</div>
@@ -191,8 +213,9 @@ export default function AnalystStation({ snapshot, onExit }) {
           <label>RESPONSÁVEL<select value={filters.responsible} onChange={event => updateFilter('responsible', event.target.value)}><option value="">Todos os responsáveis</option>{filterOptions.responsible.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label>ETAPA<select value={filters.stage} onChange={event => updateFilter('stage', event.target.value)}><option value="">Todas as etapas</option>{filterOptions.stages.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label>STATUS MONDAY<select value={filters.status} onChange={event => updateFilter('status', event.target.value)}><option value="">Todos os status</option>{filterOptions.statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>FONTE DE EVIDÊNCIA<select value={filters.source} onChange={event => updateFilter('source', event.target.value)}><option value="">Monday + Painel</option><option value="panel">Com contexto do Painel</option><option value="monday">Somente Monday</option></select></label>
         </div>
-        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button> : null}
+        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '', source: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button> : null}
       </section>
 
       <div className="dashboard-grid full">

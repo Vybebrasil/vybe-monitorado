@@ -20,6 +20,7 @@ import { createRecordStore, describeRecordStore } from '../server/persistence/re
 import mondayIntegration from '../server/integrations/monday.js';
 import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
 import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, resetOperationalMirrorCacheForTests } from '../server/integrations/operational-mirror.js';
+import { buildExecutiveSourceMeta } from '../server/integrations/executive-sources.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 
@@ -159,6 +160,26 @@ test('KPIs de prontidão distinguem planejamento, reunião mensal, entrada e cal
   assert.deepEqual(result.meetingsCurrentMonth.withoutClients, ['Cliente B', 'Cliente C']);
   assert.deepEqual(result.onboarding.withClients, ['Cliente C']);
   assert.equal(result.calendar3Months.completeCount, 1);
+});
+
+test('Fonte executiva propaga versão e monitor de estabilidade do espelho', () => {
+  const meta = buildExecutiveSourceMeta({
+    source: 'Vybe Painel · espelho operacional',
+    ready: true,
+    version: 42,
+    items: [],
+    sync: {
+      state: 'fresh',
+      version: 42,
+      checkedAt: '2026-08-19T12:00:00.000Z',
+      versionMonitor: { pollsWithoutVersionChange: 3, observation: 'stable' }
+    }
+  });
+
+  assert.equal(meta.mirrorVersion, 42);
+  assert.equal(meta.versionScope, 'production-mirror');
+  assert.equal(meta.versionMonitor.pollsWithoutVersionChange, 3);
+  assert.equal(meta.freshness, 'live');
 });
 
 test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => {

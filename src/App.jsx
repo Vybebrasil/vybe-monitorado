@@ -6,6 +6,8 @@ import { buildMissions, canonicalStage, clampPct, clickable, delayUrgency, forma
 import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
 import { ReadinessKpiBand } from './components/ReadinessKpiBand.jsx';
 import { MissionBoard } from './components/MissionBoard.jsx';
+import { JarvisDecisionBriefing } from './components/JarvisDecisionBriefing.jsx';
+import { ExecutivePulseBars } from './components/ExecutivePulseBars.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -70,6 +72,7 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
   const freshness = quality.freshness || 'live';
   const sync = quality.sync || null;
   const fieldCoverage = quality.fieldCoverage || null;
+  const mixedConsistency = quality.consistency?.mode === 'mixed';
   const capturedAt = quality.capturedAt || snapshot?.generatedAt;
   const capturedLabel = capturedAt
     ? new Date(capturedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -100,13 +103,15 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
         : 'LEITURA PARCIAL';
   const sourceLabel = quality.source || 'Monday.com';
   const syncLabel = sync?.version ? `versão ${sync.version}${sync.ageSeconds !== null && sync.ageSeconds !== undefined ? ` · ${sync.ageSeconds}s` : ''}` : null;
+  const stableCycles = Number(sync?.versionMonitor?.pollsWithoutVersionChange) || 0;
+  const monitorLabel = stableCycles >= 2 ? ` · estável há ${stableCycles} ciclos` : '';
 
   return (
     <div className={`source-freshness-strip ${complete ? 'complete' : 'partial'} ${freshness}`} aria-label="Qualidade e frescor das fontes">
       <div className="source-freshness-main">
         <span className="source-freshness-dot" />
         <strong>{statusLabel}</strong>
-        <span>{sourceLabel} · capturado {capturedLabel}{syncLabel ? ` · ${syncLabel}` : ''}</span>
+        <span>{sourceLabel} · capturado {capturedLabel}{syncLabel ? ` · ${syncLabel}` : ''}{monitorLabel}</span>
         <button type="button" className="manual-refresh-button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing} title="Buscar novamente os dados do Monday e da Agenda agora">
           <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'spin' : ''} />
           {refreshing ? 'ATUALIZANDO DADOS…' : freshness === 'stale' || freshness === 'fallback' ? 'ATUALIZAR AGORA' : 'ATUALIZAR DADOS'}
@@ -118,6 +123,7 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
         <span><b>{quality.pages === null || quality.pages === undefined ? 'N/D' : formatNumber(quality.pages)}</b> páginas confirmadas</span>
         {boardLabels.map(([key, label]) => displayBoard(boards[key], label))}
         {fieldCoverage && !fieldCoverage.complete ? <span className="source-board-warning"><b>Campos</b> faltando: {fieldCoverage.missing.join(', ')}</span> : null}
+        {mixedConsistency ? <span className="source-board-warning" title={quality.consistency.note}><b>Coorte mista</b> Produção versionada · demais fontes diretas</span> : null}
         {calendarSignals ? <span className={calendarAvailable ? 'source-board-ok' : 'source-board-warning'}><b>Agenda</b> {calendarAvailable ? `${formatNumber(calendarSignals.next7Count)} em 7d · ${formatNumber(calendarSignals.riskClientsWithoutMeeting?.length)} riscos sem reunião` : 'indisponível'}</span> : null}
       </div>
     </div>
@@ -823,9 +829,11 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
       </header>
 
       <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
+      <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
 
       <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
       <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
+      <ExecutivePulseBars snapshot={snapshot} />
       <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
 
       <div className="executive-visual-grid">
@@ -1251,7 +1259,7 @@ function App() {
             <div className="loading-bar"></div>
           </div>
         )}>
-          <AnalystStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode('manager')} />
+          <AnalystStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('manager')} />
         </Suspense>
       )}
     </>

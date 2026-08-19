@@ -11,7 +11,9 @@ const mirrorCache = {
   checkedAt: 0,
   expiresAt: 0,
   promise: null,
-  lastError: null
+  lastError: null,
+  lastVersionChangeAt: 0,
+  pollsWithoutVersionChange: 0
 };
 
 function getMirrorUrl() {
@@ -131,16 +133,22 @@ function normalizeSnapshot(payload) {
 function syncMeta({ state, snapshot, error = null, pending = false, fallback = false } = {}) {
   const checkedAt = mirrorCache.checkedAt ? new Date(mirrorCache.checkedAt).toISOString() : null;
   const ageMs = mirrorCache.checkedAt ? Math.max(0, Date.now() - mirrorCache.checkedAt) : null;
+  const version = Number(snapshot?.version || mirrorCache.version || 0);
   return {
     state,
     pending,
     fallback,
-    version: Number(snapshot?.version || mirrorCache.version || 0),
+    version,
     checkedAt,
     ageSeconds: ageMs === null ? null : Math.floor(ageMs / 1000),
     cacheExpiresAt: mirrorCache.expiresAt ? new Date(mirrorCache.expiresAt).toISOString() : null,
     itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
-    error: error?.message || mirrorCache.lastError?.message || null
+    error: error?.message || mirrorCache.lastError?.message || null,
+    versionMonitor: {
+      lastVersionChangeAt: mirrorCache.lastVersionChangeAt ? new Date(mirrorCache.lastVersionChangeAt).toISOString() : null,
+      pollsWithoutVersionChange: mirrorCache.pollsWithoutVersionChange,
+      observation: mirrorCache.pollsWithoutVersionChange > 0 ? 'stable' : 'changed'
+    }
   };
 }
 
@@ -148,6 +156,7 @@ async function refreshMirror() {
   if (!mirrorCache.promise) {
     mirrorCache.promise = (async () => {
       try {
+        const previousVersion = Number(mirrorCache.version) || 0;
         const shared = await readSharedOperationalMirror().catch(error => {
           console.warn('[Mirror] Cache compartilhado indisponível:', error.message);
           return null;
@@ -160,6 +169,12 @@ async function refreshMirror() {
           mirrorCache.checkedAt = Number(shared.checkedAt) || Date.now();
           mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
           mirrorCache.lastError = null;
+          if (mirrorCache.version > previousVersion || !mirrorCache.lastVersionChangeAt) {
+            mirrorCache.lastVersionChangeAt = mirrorCache.checkedAt;
+            mirrorCache.pollsWithoutVersionChange = 0;
+          } else {
+            mirrorCache.pollsWithoutVersionChange += 1;
+          }
           return mirrorCache.snapshot;
         }
 
@@ -174,6 +189,12 @@ async function refreshMirror() {
         mirrorCache.snapshot = nextSnapshot;
         mirrorCache.version = Number(nextSnapshot.version) || mirrorCache.version;
         mirrorCache.checkedAt = Date.now();
+        if (mirrorCache.version > previousVersion || !mirrorCache.lastVersionChangeAt) {
+          mirrorCache.lastVersionChangeAt = mirrorCache.checkedAt;
+          mirrorCache.pollsWithoutVersionChange = 0;
+        } else {
+          mirrorCache.pollsWithoutVersionChange += 1;
+        }
         mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
         mirrorCache.lastError = null;
         await writeSharedOperationalMirror(nextSnapshot, mirrorCache.checkedAt).catch(error => {
@@ -243,4 +264,6 @@ export function resetOperationalMirrorCacheForTests() {
   mirrorCache.expiresAt = 0;
   mirrorCache.promise = null;
   mirrorCache.lastError = null;
+  mirrorCache.lastVersionChangeAt = 0;
+  mirrorCache.pollsWithoutVersionChange = 0;
 }

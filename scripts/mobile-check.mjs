@@ -76,7 +76,7 @@ if (selected.selectedOwner !== firstOwnerName) failures.push(`seleção touch n�
 if (!selected.popoverTitle.includes(firstOwnerName)) failures.push(`popover não identificou o responsável selecionado: ${selected.popoverTitle}`);
 if (selected.mondayLinks === 0) failures.push('popover não apresentou links válidos do Monday');
 if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado: ${selected.drawerCount}`);
-if (analystState.filterCount !== 4) failures.push(`filtros cruzados esperados 4 no ANALISTA, obtidos ${analystState.filterCount}`);
+if (analystState.filterCount !== 5) failures.push(`filtros cruzados esperados 5 no ANALISTA, obtidos ${analystState.filterCount}`);
 if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);
   if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
   if (!report.manualRefreshButton) failures.push('botão ATUALIZAR DADOS não encontrado');
