@@ -452,7 +452,8 @@ class MondayIntegration {
           responsavelRefs,
           editorDesignerRefs,
           isDelayedPrazo,
-          isDelayedVeiculacao
+          isDelayedVeiculacao,
+          daysOverdue: Math.max(daysOverdue(prazoStr, today), daysOverdue(veiculacaoStr, today))
         });
       }
     });
@@ -563,7 +564,7 @@ class MondayIntegration {
 
     return {
       ranking,
-      activeItems: ranking.flatMap(row => row.details || []),
+      activeItems: ranking.flatMap(row => (row.details || []).map(item => ({ ...item, client: row.name }))),
       totalDelayed,
       delayDetails,
       productivity,

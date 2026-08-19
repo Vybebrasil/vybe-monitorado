@@ -436,30 +436,33 @@ const buildInvestigation = (panel, list) => {
   }
 
   const client = panel?.id || 'este cliente';
+  const delayed = list.filter(item => item.isDelayedPrazo || item.isDelayedVeiculacao || item.delayType);
+  const onTime = list.length - delayed.length;
   return {
     eyebrow: 'JARVIS · INVESTIGAÇÃO DE PREVISIBILIDADE',
-    title: `${client} exige uma leitura de causa`,
-    narrative: `${list.length} item(s) atrasado(s) foram encontrados para este cliente. A pergunta executiva é se o risco está no prazo interno, na veiculação ou em uma dependência que precisa ser destravada.`,
-    why: `${internal.length} atraso(s) interno(s)${publication.length ? ` e ${publication.length} de veiculação` : ''}. ${stages.length ? `O fluxo atravessa ${stages.length} etapa(s), com maior concentração em “${dominantStage?.[0] || stages[0]}”.` : 'A etapa do fluxo não está preenchida.'}`,
-    recommendation: 'Abrir os itens mais antigos, confirmar o próximo marco com a equipe e preparar a conversa executiva com o cliente se a data de veiculação estiver comprometida.',
+    title: `${client}: ${delayed.length} atrasados em ${list.length} itens abertos`,
+    narrative: `${client} possui ${list.length} item(s) abertos no board Produção de Conteúdo. ${delayed.length} estão atrasados e ${onTime} ainda não venceram. A investigação separa os dois grupos para não confundir risco com volume de carteira.`,
+    why: `${internal.length} atraso(s) de prazo interno${publication.length ? ` e ${publication.length} de veiculação` : ''}. ${stages.length ? `O fluxo atravessa ${stages.length} etapa(s), com maior concentração em “${dominantStage?.[0] || stages[0]}”.` : 'A etapa do fluxo não está preenchida.'}`,
+    recommendation: delayed.length > 0 ? 'Abrir primeiro os itens atrasados, confirmar o próximo marco com a equipe e preparar a conversa executiva com o cliente se a data de veiculação estiver comprometida.' : 'Nenhum item está atrasado nesta leitura; acompanhar os próximos prazos sem tratar volume aberto como risco por si só.',
     metrics: [
-      { label: 'ITENS AFETADOS', value: list.length },
-      { label: 'ATRASOS INTERNOS', value: internal.length },
-      { label: 'VEICULAÇÕES', value: publication.length },
+      { label: 'ITENS ABERTOS', value: list.length },
+      { label: 'ATRASADOS', value: delayed.length },
+      { label: 'DENTRO DO PRAZO', value: onTime },
       { label: 'DIAS ACUMULADOS', value: totalDays }
     ],
-    footer: 'O risco é uma leitura de previsibilidade baseada nos itens encontrados no Monday.'
+    footer: 'O risco é uma leitura de previsibilidade baseada nos itens abertos encontrados no Monday; itens concluídos ficam fora.'
   };
 };
 
 function InvestigationVisualSummary({ panel, list, delayDetails, snapshot }) {
-  const internal = list.filter(item => item.delayType?.includes('prazo interno'));
-  const publication = list.filter(item => item.delayType?.includes('veiculação'));
-  const totalDays = list.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
+  const delayedList = panel.type === 'client' ? list.filter(item => item.isDelayedPrazo || item.isDelayedVeiculacao || item.delayType) : list;
+  const internal = delayedList.filter(item => item.isDelayedPrazo || item.delayType?.includes('prazo interno'));
+  const publication = delayedList.filter(item => item.isDelayedVeiculacao || item.delayType?.includes('veiculação'));
+  const totalDays = delayedList.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
   const clientRow = snapshot?.clientRanking?.find(row => row.client === panel.id);
   const ownerBase = delayDetails.filter(item => item.delayType?.includes('prazo interno')).length || list.length;
-  const numerator = panel.type === 'owner' ? list.length : (clientRow?.delayedItems ?? list.length);
-  const denominator = panel.type === 'owner' ? ownerBase : (clientRow?.openItems ?? null);
+  const numerator = panel.type === 'owner' ? list.length : (clientRow?.delayedItems ?? delayedList.length);
+  const denominator = panel.type === 'owner' ? ownerBase : (clientRow?.openItems ?? list.length);
   const pct = panel.type === 'owner' ? (denominator ? (numerator / denominator) * 100 : null) : (clientRow?.riskPct ?? null);
   const stageCounts = Object.entries(list.reduce((acc, item) => {
     const stage = canonicalStage(item.stage);
@@ -491,6 +494,7 @@ function InvestigationVisualSummary({ panel, list, delayDetails, snapshot }) {
 }
 
 const DetailDrawer = ({ panel, setPanel, delayDetails, snapshot }) => {
+  const [showAllClientItems, setShowAllClientItems] = useState(false);
   useEffect(() => {
     if (!panel) return undefined;
     const onKeyDown = (event) => { if (event.key === 'Escape') setPanel(null); };
@@ -500,14 +504,45 @@ const DetailDrawer = ({ panel, setPanel, delayDetails, snapshot }) => {
 
   if (!panel || panel.type === 'kpi') return null;
 
+  const activeItems = Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : [];
   let list = [];
   if (panel.type === 'owner') {
     list = delayDetails.filter(d => splitOwners(d.responsavel).includes(panel.id));
   } else if (panel.type === 'client') {
-    list = delayDetails.filter(d => d.client === panel.id);
+    const clientItems = activeItems.filter(item => String(item.client || '') === String(panel.id));
+    list = clientItems.length ? clientItems : delayDetails.filter(d => d.client === panel.id);
   }
-  list = list.slice().sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
+  list = list.slice().sort((a, b) => {
+    const delayedA = a.isDelayedPrazo || a.isDelayedVeiculacao || a.delayType ? 1 : 0;
+    const delayedB = b.isDelayedPrazo || b.isDelayedVeiculacao || b.delayType ? 1 : 0;
+    return delayedB - delayedA || (b.daysOverdue || 0) - (a.daysOverdue || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+  });
+  const delayedClientItems = list.filter(item => item.isDelayedPrazo || item.isDelayedVeiculacao || item.delayType);
+  const onTimeClientItems = list.filter(item => !(item.isDelayedPrazo || item.isDelayedVeiculacao || item.delayType));
   const investigation = buildInvestigation(panel, list);
+  const renderEvidenceGroup = (items, label, expandable = false) => {
+    const visibleItems = expandable && !showAllClientItems ? items.slice(0, 5) : items;
+    return <>
+      <div className="investigation-section-title">{label} · {items.length} ITEM(S)</div>
+      <ul className="data-list investigation-evidence-list">
+        {visibleItems.map((item, i) => {
+          const link = mondayItemUrl(item.id);
+          const delayed = Boolean(item.isDelayedPrazo || item.isDelayedVeiculacao || item.delayType);
+          const urgency = delayed ? delayUrgency(item.daysOverdue) : { tone: 'stable', label: 'DENTRO DO PRAZO', description: 'O prazo ainda não foi ultrapassado nesta leitura.' };
+          return (
+            <li key={item.id || `${item.name}-${i}`} className={`investigation-evidence-item urgency-${urgency.tone}`}>
+              <div className="investigation-evidence-top"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`} title={urgency.description}>{delayed ? `ATRASO: ${item.daysOverdue || 0}D · ${urgency.label}` : 'DENTRO DO PRAZO'}</span></div>
+              <div className="investigation-evidence-meta"><span>{item.client}</span><span>{item.stage || 'Etapa não informada'}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot?.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot?.quantitative?.statusColors) }}>{item.status}</span> : null}<span>{item.delayType || (delayed ? 'Atraso não classificado' : 'Item aberto dentro do prazo')}</span></div>
+              <div className="investigation-evidence-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span className="people-field"><b>Resp.</b><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div>
+              {item.editorDesigner && <div className="investigation-evidence-meta"><span className="people-field"><b>Editor/Designer</b><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span></div>}
+              {link ? <a className="investigation-evidence-link" href={link} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {expandable && items.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAllClientItems(value => !value)}>{showAllClientItems ? 'VER MENOS' : `VER MAIS (${items.length - 5})`}</button> : null}
+    </>;
+  };
 
   return (
     <div className="drawer-overlay" onClick={() => setPanel(null)}>
@@ -541,22 +576,11 @@ const DetailDrawer = ({ panel, setPanel, delayDetails, snapshot }) => {
                 <span>RECOMENDAÇÃO DO JARVIS</span>
                 <p>{investigation.recommendation}</p>
               </section>
-              <div className="investigation-section-title">EVIDÊNCIAS · {list.length} ITEM(S)</div>
-              <ul className="data-list investigation-evidence-list">
-                {list.map((item, i) => {
-                  const link = mondayItemUrl(item.id);
-                  const urgency = delayUrgency(item.daysOverdue);
-                  return (
-                    <li key={item.id || i} className={`investigation-evidence-item urgency-${urgency.tone}`}>
-                      <div className="investigation-evidence-top"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`} title={urgency.description}>{item.daysOverdue ? `ATRASO: ${item.daysOverdue}D · ${urgency.label}` : 'EM ANDAMENTO'}</span></div>
-                      <div className="investigation-evidence-meta"><span>{item.client}</span><span>{item.stage || 'Etapa não informada'}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot?.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot?.quantitative?.statusColors) }}>{item.status}</span> : null}<span>{item.delayType || 'Atraso não classificado'}</span></div>
-                      <div className="investigation-evidence-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span className="people-field"><b>Resp.</b><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div>
-                      {item.editorDesigner && <div className="investigation-evidence-meta"><span className="people-field"><b>Editor/Designer</b><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span></div>}
-                      {link ? <a className="investigation-evidence-link" href={link} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="client-investigation-total">{panel.type === 'client' ? `${delayedClientItems.length} atrasados · ${list.length} itens abertos no total` : `${list.length} evidências de atraso`}</div>
+              {panel.type === 'client' ? <>
+                {renderEvidenceGroup(delayedClientItems, 'ATRASADOS · PRODUÇÃO DE CONTEÚDO')}
+                {renderEvidenceGroup(onTimeClientItems, 'ABERTOS DENTRO DO PRAZO', onTimeClientItems.length > 5)}
+              </> : renderEvidenceGroup(list, 'EVIDÊNCIAS · ITENS ATRASADOS')}
               <p className="investigation-footnote">{investigation.footer}</p>
             </>
           )}
