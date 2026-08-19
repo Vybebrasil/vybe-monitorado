@@ -211,6 +211,11 @@ class MondayIntegration {
 
     const missingPlanning = [];
     const missingDashboard = [];
+    const calendarMonthColumnIds = (process.env.MONDAY_CALENDAR_MONTH_COLUMN_IDS || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+      .slice(0, 3);
     // Carteira ativa com a data de entrada de cada cliente: é o que permite
     // separar quem parou de quem acabou de chegar.
     const activePortfolio = [];
@@ -232,7 +237,11 @@ class MondayIntegration {
       // Se o cliente não estiver "Inativo" ou "Pausado" (ajuste conforme o status real de vocês)
       if (status && !status.toLowerCase().includes('inativo')) {
         eligibleClients += 1;
-        activePortfolio.push({ name: item.name, since: item.created_at || null });
+        activePortfolio.push({
+          name: item.name,
+          since: item.created_at || null,
+          calendarMonths: calendarMonthColumnIds.map(columnId => ({ columnId, value: item.column_values.find(column => column.id === columnId)?.text || '' }))
+        });
         // Planejamento: se estiver vazio ou se tiver o texto padrão de "Fazer planejamento"
         const planningMissing = !planejamento || planejamento.toLowerCase().includes('fazer planejamento');
         if (planningMissing) {
@@ -263,6 +272,11 @@ class MondayIntegration {
         clientsWithDashboard,
         dashboardCoveragePct: percent(clientsWithDashboard, eligibleClients)
       },
+      calendar3MonthCoverage: calendarMonthColumnIds.length === 3 ? (() => {
+        const completeClients = activePortfolio.filter(client => client.calendarMonths.every(month => month.value && !['-', 'n/a', 'não'].includes(month.value.trim().toLowerCase()))).map(client => client.name);
+        const missingClients = activePortfolio.filter(client => !completeClients.includes(client.name)).map(client => client.name);
+        return { mapped: true, columnIds: calendarMonthColumnIds, completeClients, missingClients, completeCount: completeClients.length, missingCount: missingClients.length, coveragePct: percent(completeClients.length, eligibleClients) };
+      })() : { mapped: false, columnIds: calendarMonthColumnIds, completeClients: null, missingClients: null, completeCount: null, missingCount: null, coveragePct: null, message: 'Mapeie MONDAY_CALENDAR_MONTH_COLUMN_IDS com três IDs de colunas mensais do Monday para ativar esta leitura.' },
       readinessQuality: {
         planning: {
           columnId: 'link_mkzdvjjs',

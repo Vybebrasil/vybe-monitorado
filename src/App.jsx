@@ -204,6 +204,39 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh,
   );
 }
 
+function ReadinessKpiBand({ snapshot, onSelect }) {
+  const readiness = snapshot?.portfolioReadiness || {};
+  const kpis = readiness.kpis || {};
+  const eligible = Number(kpis.eligibleClients ?? readiness.eligibleClients) || 0;
+  const planning = kpis.planning || { withCount: eligible ? Math.max(0, eligible - (Number(readiness.missingPlanning) || 0)) : null, withoutCount: eligible ? Number(readiness.missingPlanning) || 0 : null, coveragePct: readiness.planningCoveragePct ?? null, withClients: [], withoutClients: [], source: 'Monday.com · Gestão de Clientes · Planejamento' };
+  const meetings = kpis.meetingsCurrentMonth || { withCount: null, withoutCount: null, coveragePct: null, withClients: [], withoutClients: [], month: null, source: 'Monday.com · Reuniões · data' };
+  const onboarding = kpis.onboarding || { withCount: Number(snapshot?.portfolioExecution?.onboarding?.length) || 0, withoutCount: eligible || null, coveragePct: null, withClients: [], withoutClients: [], windowDays: snapshot?.portfolioExecution?.onboardingWindowDays || 30, source: 'Monday.com · created_at + ausência de execução' };
+  const calendar = kpis.calendar3Months || { mapped: false, completeCount: null, missingCount: null, coveragePct: null, completeClients: null, missingClients: null, source: 'Monday.com · três colunas mensais de calendário', message: 'Três colunas mensais ainda não mapeadas.' };
+  const monthLabel = meetings.month ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${meetings.month}-01T00:00:00Z`)) : 'mês atual';
+  const cards = [
+    { id: 'readiness-planning', label: 'PLANEJAMENTO', value: planning.withCount === null ? 'N/D' : formatNumber(planning.withCount), detail: planning.withCount === null ? 'campo não disponível' : `${formatNumber(planning.withoutCount)} sem planejamento · ${formatNumber(eligible)} ativos`, progress: planning.coveragePct, tone: 'warning', title: 'Clientes com planejamento identificado no Monday.', explanation: `${formatNumber(planning.withCount ?? 0)} clientes com planejamento e ${formatNumber(planning.withoutCount ?? 0)} sem planejamento. Fonte: ${planning.source}.`, action: 'Abrir clientes com e sem planejamento' },
+    { id: 'readiness-meetings', label: 'REUNIÕES NO MÊS ATUAL', value: meetings.withCount === null ? 'N/D' : formatNumber(meetings.withCount), detail: meetings.withCount === null ? 'histórico de reuniões indisponível' : `${formatNumber(meetings.withoutCount)} sem reunião · ${monthLabel}`, progress: meetings.coveragePct, tone: 'cyan', title: 'Clientes com reunião registrada no mês atual.', explanation: meetings.withCount === null ? 'O board de Reuniões ainda não respondeu nesta leitura.' : `${formatNumber(meetings.withCount)} clientes têm pelo menos uma reunião em ${monthLabel}; ${formatNumber(meetings.withoutCount)} não têm reunião registrada.`, action: 'Abrir clientes com e sem reunião' },
+    { id: 'readiness-onboarding', label: 'FASE DE ENTRADA', value: formatNumber(onboarding.withCount), detail: `${formatNumber(onboarding.withoutCount)} fora da entrada · janela ${formatNumber(onboarding.windowDays)}D`, progress: eligible ? (onboarding.withCount / eligible) * 100 : null, tone: 'cyan', title: 'Clientes em implantação segundo a janela de entrada do Nexus.', explanation: `${formatNumber(onboarding.withCount)} clientes estão na janela de implantação de ${formatNumber(onboarding.windowDays)} dias e são separados do indicador de cliente sem execução.`, action: 'Abrir clientes em fase de entrada' },
+    { id: 'readiness-calendar', label: 'CALENDÁRIO · 3 MESES', value: calendar.mapped ? formatNumber(calendar.completeCount) : 'N/D', detail: calendar.mapped ? `${formatNumber(calendar.missingCount)} sem 3 meses · ${formatNumber(eligible)} ativos` : '3 colunas não mapeadas no Monday', progress: calendar.mapped ? calendar.coveragePct : null, tone: calendar.mapped ? 'warning' : 'supporting', title: 'Clientes com três meses de calendário preenchidos no Monday.', explanation: calendar.mapped ? `${formatNumber(calendar.completeCount)} clientes têm as três colunas mensais preenchidas e ${formatNumber(calendar.missingCount)} não têm cobertura completa.` : `${calendar.message || 'Mapeie três IDs de colunas mensais para ativar esta leitura.'}`, action: 'Abrir cobertura de calendário' }
+  ];
+
+  return (
+    <section className="readiness-kpi-band" aria-label="KPIs de prontidão e relacionamento da carteira">
+      <div className="readiness-kpi-header"><div><span className="executive-section-kicker">PRONTIDÃO · RELACIONAMENTO</span><h2>O que está preparado antes da execução?</h2></div><span className="readiness-kpi-note">CLIENTES · FONTES EXECUTIVAS</span></div>
+      <div className="readiness-kpi-grid">
+        {cards.map(card => <article className={`executive-kpi-card supporting ${card.tone}`} key={card.id} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
+          <span className="executive-kpi-label">{card.label}</span>
+          <strong className="executive-kpi-value">{card.value}</strong>
+          <span className="executive-kpi-detail">{card.detail}</span>
+          <ExecutiveMeter value={card.progress} tone={card.tone} label={card.title} />
+          <span className="executive-kpi-click">CLIQUE PARA INVESTIGAR ↗</span>
+          <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
+        </article>)}
+      </div>
+    </section>
+  );
+}
+
 function MissionBoard({ snapshot, onSelect }) {
   const missions = buildMissions(snapshot);
   const score = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
@@ -626,6 +659,16 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         : 'QUALIDADE NÃO INFORMADA';
   const readinessClients = readinessDeduction?.affectedClients || [];
   const visibleReadinessClients = showAll ? readinessClients : readinessClients.slice(0, 5);
+  const readinessKpis = readiness.kpis || {};
+  const readinessKpi = {
+    'readiness-planning': readinessKpis.planning,
+    'readiness-meetings': readinessKpis.meetingsCurrentMonth,
+    'readiness-onboarding': readinessKpis.onboarding,
+    'readiness-calendar': readinessKpis.calendar3Months
+  }[panel.id];
+  const readinessKpiWithClients = readinessKpi?.withClients || [];
+  const readinessKpiWithoutClients = readinessKpi?.withoutClients || [];
+  const readinessKpiClients = showAll ? [...readinessKpiWithClients, ...readinessKpiWithoutClients] : [...readinessKpiWithClients, ...readinessKpiWithoutClients].slice(0, 5);
 
   const configs = {
     health: { eyebrow: 'KPI · PLACAR EXECUTIVO', title: 'Qual é a pressão real sobre o placar?', subtitle: 'O score bruto pode ficar negativo. Ele mostra o quanto a operação está abaixo da linha de recuperação.', accent: 'critical' },
@@ -634,7 +677,11 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
     exposure: { eyebrow: 'KPI · RISCO DE PREVISIBILIDADE', title: `${exposedClients.length} clientes expostos`, subtitle: 'Um cliente entra aqui quando possui pelo menos um atraso interno ou de veiculação no recorte.', accent: 'warning' },
     execution: { eyebrow: 'KPI · GAP DE EXECUÇÃO', title: `${stalled} clientes sem execução`, subtitle: 'Clientes ativos sem item no board Produção de Conteúdo e sem Solicitação de Demanda aberta; onboarding é separado.', accent: 'critical' },
     publication: { eyebrow: 'KPI · PRODUÇÃO DE CONTEÚDO', title: `${publicationDelays.length} veiculações vencidas`, subtitle: 'Fonte: board Produção de Conteúdo · prazo usado: data de veiculação. São itens que ultrapassaram a data prevista no Monday.', accent: 'warning' },
-    readiness: { eyebrow: 'KPI · PRONTIDÃO EXECUTIVA', title: readinessDeduction?.label || 'Lacuna de prontidão', subtitle: 'A investigação mostra se o problema está na fonte inteira ou em clientes específicos, sem contar o mesmo cliente duas vezes.', accent: readinessDeduction?.kind === 'dashboard' ? 'cyan' : 'warning' }
+    readiness: { eyebrow: 'KPI · PRONTIDÃO EXECUTIVA', title: readinessDeduction?.label || 'Lacuna de prontidão', subtitle: 'A investigação mostra se o problema está na fonte inteira ou em clientes específicos, sem contar o mesmo cliente duas vezes.', accent: readinessDeduction?.kind === 'dashboard' ? 'cyan' : 'warning' },
+    'readiness-planning': { eyebrow: 'KPI · PLANEJAMENTO', title: 'Quais clientes têm ou não têm planejamento?', subtitle: 'Fonte: Monday.com · Gestão de Clientes · Planejamento.', accent: 'warning' },
+    'readiness-meetings': { eyebrow: 'KPI · REUNIÕES', title: 'Quais clientes tiveram reunião no mês atual?', subtitle: 'Fonte: Monday.com · Reuniões · coluna data. A leitura usa o mês da captura atual.', accent: 'cyan' },
+    'readiness-onboarding': { eyebrow: 'KPI · FASE DE ENTRADA', title: 'Quais clientes estão em fase de entrada?', subtitle: 'A fase de entrada usa a janela de implantação do Nexus e separa clientes novos do risco de inatividade.', accent: 'cyan' },
+    'readiness-calendar': { eyebrow: 'KPI · CALENDÁRIO', title: 'Quais clientes têm três meses de calendário?', subtitle: readinessKpi?.mapped ? 'Fonte: três colunas mensais configuradas no Monday.' : 'A leitura fica N/D até que três IDs de colunas mensais sejam mapeados no Monday.', accent: readinessKpi?.mapped ? 'warning' : 'cyan' }
   }[panel.id] || { eyebrow: 'KPI · INVESTIGAÇÃO', title: 'Detalhamento do KPI', subtitle: 'Leitura executiva baseada no snapshot atual.', accent: 'cyan' };
 
   const visibleDelays = showAll ? delays : delays.slice(0, 5);
@@ -682,6 +729,18 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
       <div className="drawer-header"><div><h3>{configs.title}</h3><p>INVESTIGAÇÃO DO KPI · SOMENTE LEITURA</p></div><button className="drawer-close" aria-label="Fechar investigação" onClick={() => setPanel(null)}><X size={32} /></button></div>
       <div className="drawer-content">
         <section className="investigation-hero"><span className="investigation-eyebrow">{configs.eyebrow}</span><h4>{configs.title}</h4><p>{configs.subtitle}</p></section>
+
+        {readinessKpi ? <>
+          <div className="kpi-score-explanation"><div><span>COM O SINAL</span><strong>{readinessKpi.withCount == null ? 'N/D' : formatNumber(readinessKpi.withCount)}</strong></div><div><span>SEM O SINAL</span><strong>{readinessKpi.withoutCount == null ? 'N/D' : formatNumber(readinessKpi.withoutCount)}</strong></div><div><span>COBERTURA</span><strong>{formatPct(readinessKpi.coveragePct)}</strong></div></div>
+          <div className="readiness-quality-callout"><div><span>FONTE</span><strong>{readinessKpi.source || 'N/D'}</strong></div><div><span>PERÍODO/CAMPO</span><strong>{readinessKpi.month || readinessKpi.columnIds?.join(', ') || 'N/D'}</strong></div><div><span>CLIENTES LISTADOS</span><strong>{readinessKpi.mapped === false ? 'N/D' : formatNumber(readinessKpiClients.length)}</strong></div></div>
+          {readinessKpi.mapped === false ? <div className="investigation-callout"><span>QUALIDADE DA FONTE</span><p>{readinessKpi.message || 'A cobertura de três meses ainda não está mapeada no Monday. O Nexus não converte ausência de coluna em falso zero.'}</p></div> : <>
+            <div className="kpi-investigation-section-title">CLIENTES COM O SINAL · {formatNumber(readinessKpiWithClients.length)}</div>
+            <div className="kpi-client-grid">{readinessKpiWithClients.map(client => <div className="kpi-client-card" key={`with-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Em fase de entrada' : 'Campo/reunião identificado'}</span></div></div>)}</div>
+            <div className="kpi-investigation-section-title">CLIENTES SEM O SINAL · {formatNumber(readinessKpiWithoutClients.length)}</div>
+            <div className="kpi-client-grid">{readinessKpiWithoutClients.slice(0, showAll ? readinessKpiWithoutClients.length : 5).map(client => <div className="kpi-client-card" key={`without-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Fora da janela de entrada' : 'Sem evidência no período/campo'}</span></div></div>)}</div>
+            {readinessKpiWithoutClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessKpiWithoutClients.length - 5})`}</button> : null}
+          </>}
+        </> : null}
 
         {panel.id === 'readiness' ? <>
            <div className="kpi-score-explanation"><div><span>CLIENTES SINALIZADOS</span><strong>{formatNumber(readinessDeduction?.count || readinessClients.length)}</strong></div><div><span>DESCONTO NO PLACAR</span><strong>-{formatNumber(readinessDeduction?.points || 0)} pts</strong></div></div>
@@ -830,6 +889,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
       <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
       <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
+      <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
       <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
 
       <div className="executive-visual-grid">

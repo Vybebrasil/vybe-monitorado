@@ -12,7 +12,7 @@ import {
   transitionExecutiveAlert
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
-import { buildCalendarSignals, buildExecutiveSnapshot } from '../server/domain/executive.js';
+import { buildCalendarSignals, buildExecutiveSnapshot, buildReadinessKpis } from '../server/domain/executive.js';
 import { summarizeExecutiveDelta } from '../server/domain/executive-snapshots.js';
 import { buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
 import { buildReleaseMetadata } from '../server/release.js';
@@ -137,6 +137,27 @@ test('Aprendizado declara associação e lacunas de evidência', () => {
   assert.equal(result.counts.improved, 1);
   assert.equal(result.learnings.find(item => item.id === 'evidence-gaps').summary, '1 decisão(ões) ainda sem avaliação de impacto.');
   assert.match(result.note, /não conclusões causais/i);
+});
+
+test('KPIs de prontidão distinguem planejamento, reunião mensal, entrada e calendário', () => {
+  const result = buildReadinessKpis({
+    activePortfolio: [{ name: 'Cliente A' }, { name: 'Cliente B' }, { name: 'Cliente C' }],
+    missingPlanning: ['Cliente B'],
+    executionGap: { onboarding: [{ client: 'Cliente C' }], onboardingWindowDays: 30 },
+    meetingLogs: [
+      { name: 'Cliente A', meetings: [{ date: '2026-08-18' }] },
+      { name: 'Cliente B', meetings: [{ date: '2026-07-18' }] }
+    ],
+    calendar3MonthCoverage: { mapped: true, columnIds: ['m1', 'm2', 'm3'], completeClients: ['Cliente A'], missingClients: ['Cliente B', 'Cliente C'], completeCount: 1, missingCount: 2, coveragePct: 33.3 },
+    generatedAt: '2026-08-19T12:00:00.000Z'
+  });
+
+  assert.deepEqual(result.planning.withClients, ['Cliente A', 'Cliente C']);
+  assert.deepEqual(result.planning.withoutClients, ['Cliente B']);
+  assert.deepEqual(result.meetingsCurrentMonth.withClients, ['Cliente A']);
+  assert.deepEqual(result.meetingsCurrentMonth.withoutClients, ['Cliente B', 'Cliente C']);
+  assert.deepEqual(result.onboarding.withClients, ['Cliente C']);
+  assert.equal(result.calendar3Months.completeCount, 1);
 });
 
 test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => {

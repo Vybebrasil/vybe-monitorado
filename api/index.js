@@ -503,11 +503,15 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   const forceRefresh = ['1', 'true'].includes(String(req.query.refresh || '').toLowerCase());
   try {
     console.log('[API] Fetching from Monday...');
-    const [bottlenecks, posts, demands, calendar] = await Promise.all([
+    const [bottlenecks, posts, demands, calendar, meetingLogs] = await Promise.all([
       mondayIntegration.getClientBottlenecks(),
       mondayIntegration.getOpenPosts(),
       mondayIntegration.getDelayedDemands(),
-      getCalendarSnapshot()
+      getCalendarSnapshot(),
+      mondayIntegration.getClientLogs().catch(error => {
+        console.warn('[API] Histórico de reuniões indisponível para os KPIs:', error.message);
+        return [];
+      })
     ]);
     console.log('[API] Fetched from Monday successfully');
     const executiveSnapshot = buildExecutiveSnapshot({
@@ -515,6 +519,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       posts,
       demands,
       calendar,
+      meetingLogs,
       generatedAt: new Date().toISOString()
     });
     let snapshotSaved = false;

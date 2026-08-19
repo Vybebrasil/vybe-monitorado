@@ -104,6 +104,67 @@ export function buildCalendarSignals({ events = [], quality = null, activeClient
   };
 }
 
+export function buildReadinessKpis({ activePortfolio = [], missingPlanning = [], executionGap = {}, meetingLogs = [], calendar3MonthCoverage = null, generatedAt = new Date().toISOString() }) {
+  const activeNames = activePortfolio.map(client => client.name).filter(Boolean);
+  const missingPlanningSet = new Set(missingPlanning);
+  const clientsWithPlanning = activeNames.filter(name => !missingPlanningSet.has(name));
+  const planningWithout = activeNames.filter(name => missingPlanningSet.has(name));
+  const capturedAt = new Date(generatedAt);
+  const monthStart = new Date(capturedAt.getFullYear(), capturedAt.getMonth(), 1);
+  const nextMonthStart = new Date(capturedAt.getFullYear(), capturedAt.getMonth() + 1, 1);
+  const normalize = value => normalizeMatchLabel(value);
+  const findLog = clientName => meetingLogs.find(log => {
+    const logName = normalize(log?.name);
+    const activeName = normalize(clientName);
+    return logName && activeName && (logName === activeName || logName.includes(activeName) || activeName.includes(logName));
+  });
+  const clientsWithMeetingCurrentMonth = activeNames.filter(clientName => {
+    const log = findLog(clientName);
+    return Boolean(log?.meetings?.some(meeting => {
+      const date = new Date(meeting.date);
+      return Number.isFinite(date.getTime()) && date >= monthStart && date < nextMonthStart;
+    }));
+  });
+  const clientsWithoutMeetingCurrentMonth = activeNames.filter(name => !clientsWithMeetingCurrentMonth.includes(name));
+  const onboardingClients = (executionGap.onboarding || []).map(client => client.client).filter(Boolean);
+  const onboardingSet = new Set(onboardingClients);
+  const clientsNotInOnboarding = activeNames.filter(name => !onboardingSet.has(name));
+  const calendar = calendar3MonthCoverage || { mapped: false, completeClients: null, missingClients: null, completeCount: null, missingCount: null, coveragePct: null, columnIds: [], message: 'Cobertura de três meses não mapeada no Monday.' };
+
+  return {
+    eligibleClients: activeNames.length,
+    planning: {
+      withCount: clientsWithPlanning.length,
+      withoutCount: planningWithout.length,
+      withClients: clientsWithPlanning,
+      withoutClients: planningWithout,
+      coveragePct: percent(clientsWithPlanning.length, activeNames.length),
+      source: 'Monday.com · Gestão de Clientes · Planejamento'
+    },
+    meetingsCurrentMonth: {
+      month: `${capturedAt.getFullYear()}-${String(capturedAt.getMonth() + 1).padStart(2, '0')}`,
+      withCount: clientsWithMeetingCurrentMonth.length,
+      withoutCount: clientsWithoutMeetingCurrentMonth.length,
+      withClients: clientsWithMeetingCurrentMonth,
+      withoutClients: clientsWithoutMeetingCurrentMonth,
+      coveragePct: percent(clientsWithMeetingCurrentMonth.length, activeNames.length),
+      source: 'Monday.com · Reuniões · data'
+    },
+    onboarding: {
+      withCount: onboardingClients.length,
+      withoutCount: clientsNotInOnboarding.length,
+      withClients: onboardingClients,
+      withoutClients: clientsNotInOnboarding,
+      windowDays: executionGap.onboardingWindowDays || ONBOARDING_DAYS,
+      source: 'Monday.com · Gestão de Clientes · created_at + ausência de execução'
+    },
+    calendar3Months: {
+      ...calendar,
+      source: 'Monday.com · três colunas mensais de calendário'
+    }
+  };
+}
+
 function buildClientRisks(ranking) {
   return (ranking || [])
     .map(row => {
@@ -135,7 +196,7 @@ function buildClientRisks(ranking) {
     .sort((a, b) => ({ critical: 3, high: 2, medium: 1 }[b.severity] - ({ critical: 3, high: 2, medium: 1 }[a.severity])));
 }
 
-export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], calendar = null, generatedAt = new Date().toISOString() }) {
+export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], calendar = null, meetingLogs = [], generatedAt = new Date().toISOString() }) {
   const ranking = posts.ranking || [];
   const boardPagination = {
     production: posts.pagination || null,
@@ -192,6 +253,14 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     quality: calendar?.quality || null,
     activeClients: bottlenecks.activePortfolio || [],
     ranking,
+    generatedAt
+  });
+  const readinessKpis = buildReadinessKpis({
+    activePortfolio: bottlenecks.activePortfolio || [],
+    missingPlanning,
+    executionGap,
+    meetingLogs,
+    calendar3MonthCoverage: bottlenecks.calendar3MonthCoverage,
     generatedAt
   });
   const stalledClients = new Set(executionGap.stalled.map(client => client.client));
@@ -386,6 +455,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       eligibleClients: Number(readiness.eligibleClients) || 0,
       planningCoveragePct: readiness.planningCoveragePct ?? null,
       dashboardCoveragePct: readiness.dashboardCoveragePct ?? null,
+      kpis: readinessKpis,
       missingPlanning: missingPlanning.length,
       missingDashboard: missingDashboard.length,
       clientsWithoutPlanning: missingPlanning,

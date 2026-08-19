@@ -65,7 +65,7 @@ if (report.bodyWidth !== 390 || report.overflow !== 0) failures.push(`overflow h
 if (report.ownerRows[0]?.name !== 'Deivid Oliveira Ribeiro') failures.push(`primeiro responsável inesperado: ${report.ownerRows[0]?.name}`);
 if (!report.ownerRows[0]?.urgency.includes('19D') || !report.ownerRows[0]?.urgency.includes('CRÍTICO MÁXIMO')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
 if (report.ownerRows.length !== 5) failures.push(`responsáveis visíveis esperado 5, obtido ${report.ownerRows.length}`);
-if (report.kpiCount !== 6) failures.push(`KPIs esperados 6, obtidos ${report.kpiCount}`);
+if (report.kpiCount !== 10) failures.push(`KPIs esperados 10, obtido ${report.kpiCount}`);
 if (selected.selectedOwner !== 'Deivid Oliveira Ribeiro') failures.push(`seleção touch não fixou Deivid: ${selected.selectedOwner}`);
 if (!selected.popoverTitle.includes('2 DEMANDAS EM RISCO')) failures.push(`popover esperado com 2 demandas, obtido: ${selected.popoverTitle}`);
 if (selected.mondayLinks !== 2) failures.push(`links Monday esperados 2, obtidos ${selected.mondayLinks}`);
