@@ -1,5 +1,6 @@
 const baseUrl = (process.argv[2] || process.env.NEXUS_DEPLOYMENT_URL || '').replace(/\/$/, '');
 const expectedRepository = process.env.NEXUS_EXPECTED_GIT_REPOSITORY || 'Vybebrasil/vybe-monitorado';
+const requireHistory = process.argv.includes('--require-history') || process.env.NEXUS_RELEASE_REQUIRE_HISTORY === 'true';
 
 if (!baseUrl) {
   console.error('Uso: npm run verify:release -- https://seu-deploy.vercel.app');
@@ -57,6 +58,8 @@ if (!commitResponse.ok) {
 
 const persistence = health.persistence || {};
 const persistenceReady = Object.values(persistence).every(store => store.ready);
+const liveReadReady = health.readiness?.liveReadReady === true || health.ready === true;
+const historicalReady = health.readiness?.historicalReady === true && persistenceReady;
 console.log(JSON.stringify({
   ok: true,
   healthUrl,
@@ -65,7 +68,10 @@ console.log(JSON.stringify({
   branch: release.branch || null,
   deploymentId: release.deploymentId || null,
   ready: health.ready === true,
-  persistenceReady
+  liveReadReady,
+  historicalReady,
+  persistenceReady,
+  historyRequired: requireHistory
 }, null, 2));
 
-if (health.ready !== true || !persistenceReady) process.exitCode = 1;
+if (!liveReadReady || (requireHistory && !historicalReady)) process.exitCode = 1;

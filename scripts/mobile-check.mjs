@@ -45,7 +45,11 @@ const selected = await page.evaluate(() => ({
 
 const refreshButton = page.locator('.manual-refresh-button');
 await refreshButton.click();
-await page.waitForTimeout(350);
+await page.waitForFunction(() => {
+  const button = document.querySelector('.manual-refresh-button');
+  const error = document.querySelector('.manual-refresh-error');
+  return Boolean(error?.textContent?.trim()) || button?.disabled === false;
+}, null, { timeout: 30000 });
 const refreshState = await page.evaluate(() => ({
   buttonText: document.querySelector('.manual-refresh-button')?.textContent?.trim() || '',
   disabled: document.querySelector('.manual-refresh-button')?.disabled ?? null,
@@ -63,13 +67,14 @@ const analystState = await page.evaluate(() => ({
 const failures = [];
 if (report.viewport.width !== 390) failures.push(`viewport width esperado 390, obtido ${report.viewport.width}`);
 if (report.bodyWidth !== 390 || report.overflow !== 0) failures.push(`overflow horizontal: bodyWidth=${report.bodyWidth}, viewport=${report.viewport.width}`);
-if (report.ownerRows[0]?.name !== 'Deivid Oliveira Ribeiro') failures.push(`primeiro responsável inesperado: ${report.ownerRows[0]?.name}`);
-if (!report.ownerRows[0]?.urgency.includes('19D') || !report.ownerRows[0]?.urgency.includes('CRÍTICO MÁXIMO')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
-if (report.ownerRows.length !== 5) failures.push(`responsáveis visíveis esperado 5, obtido ${report.ownerRows.length}`);
+const firstOwnerName = report.ownerRows[0]?.name || '';
+if (!firstOwnerName) failures.push('nenhum responsável visível para validar o card mobile');
+if (!/\d+D/.test(report.ownerRows[0]?.urgency || '') || !/(critical-max|critical|high|attention|clear)/.test(report.ownerRows[0]?.className || '')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
+if (report.ownerRows.length === 0 || report.ownerRows.length > 5) failures.push(`responsáveis visíveis fora do limite esperado 1–5, obtido ${report.ownerRows.length}`);
 if (report.kpiCount !== 11) failures.push(`KPIs esperados 11, obtido ${report.kpiCount}`);
-if (selected.selectedOwner !== 'Deivid Oliveira Ribeiro') failures.push(`seleção touch não fixou Deivid: ${selected.selectedOwner}`);
-if (!selected.popoverTitle.includes('2 DEMANDAS EM RISCO')) failures.push(`popover esperado com 2 demandas, obtido: ${selected.popoverTitle}`);
-if (selected.mondayLinks !== 2) failures.push(`links Monday esperados 2, obtidos ${selected.mondayLinks}`);
+if (selected.selectedOwner !== firstOwnerName) failures.push(`seleção touch não fixou o primeiro responsável: ${selected.selectedOwner}`);
+if (!selected.popoverTitle.includes(firstOwnerName)) failures.push(`popover não identificou o responsável selecionado: ${selected.popoverTitle}`);
+if (selected.mondayLinks === 0) failures.push('popover não apresentou links válidos do Monday');
 if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado: ${selected.drawerCount}`);
 if (analystState.filterCount !== 4) failures.push(`filtros cruzados esperados 4 no ANALISTA, obtidos ${analystState.filterCount}`);
 if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);

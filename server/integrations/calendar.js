@@ -7,6 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 function getICalUrl() {
+  const configuredUrl = String(process.env.GOOGLE_CALENDAR_ICAL_URL || '').trim();
+  if (configuredUrl) return configuredUrl;
+  if (process.env.NODE_ENV === 'production') return '';
   try {
     const envPath = join(__dirname, '..', '..', '.env');
     const envContent = readFileSync(envPath, 'utf8');
@@ -15,7 +18,7 @@ function getICalUrl() {
   } catch (error) {
     console.warn('Não foi possível ler GOOGLE_CALENDAR_ICAL_URL do .env:', error.message);
   }
-  return process.env.GOOGLE_CALENDAR_ICAL_URL || '';
+  return '';
 }
 
 function emptyCalendarQuality({ configured = false, status = 'unavailable', error = null, fetchedAt }) {

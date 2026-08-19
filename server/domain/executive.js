@@ -588,6 +588,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       freshness: sourceMeta.freshness || sourceMeta.status || 'live',
       source: sourceMeta.name || 'Monday.com',
       sync: sourceMeta.sync || null,
+      fieldCoverage: sourceMeta.fieldCoverage || posts?.quantitative?.fieldCoverage || null,
       complete: sourcesComplete && sourceMeta.complete !== false,
       records: sourceRecords || null,
       pages: sourcePages,

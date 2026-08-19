@@ -1,3 +1,5 @@
+import { describeOperationalMirrorStore, readSharedOperationalMirror, writeSharedOperationalMirror } from '../persistence/operational-mirror-store.js';
+
 const DEFAULT_MIRROR_API_URL = 'https://vybepainel-v2.vercel.app/api/operational-mirror';
 const REQUEST_TIMEOUT_MS = Number(process.env.VYBE_OPERATIONAL_MIRROR_TIMEOUT_MS) || 8_000;
 const CACHE_TTL_MS = Number(process.env.VYBE_OPERATIONAL_MIRROR_CACHE_MS) || 12_000;
@@ -71,15 +73,31 @@ export function applyOperationalMirrorDelta(currentSnapshot = null, delta = {}) 
   }
 
   const items = new Map((currentSnapshot.items || []).map(item => [String(item.id), item]));
+  let invalidChange = false;
   delta.changes.forEach(change => {
     const itemId = String(change?.item_id || change?.id || '');
-    if (!itemId) return;
-    if (change.operation === 'delete' || change.deleted === true) items.delete(itemId);
-    else if (change.raw) {
-      const normalized = normalizeItem(change.raw);
-      if (normalized) items.set(itemId, normalized);
+    if (!itemId) {
+      invalidChange = true;
+      return;
     }
+    if (change.operation === 'delete' || change.deleted === true) {
+      items.delete(itemId);
+      return;
+    }
+    if (change.operation && change.operation !== 'upsert' && change.operation !== 'update' && change.operation !== 'create') {
+      invalidChange = true;
+      return;
+    }
+    if (!change.raw) {
+      invalidChange = true;
+      return;
+    }
+    const normalized = normalizeItem(change.raw);
+    if (!normalized) invalidChange = true;
+    else items.set(itemId, normalized);
   });
+
+  if (invalidChange) return { snapshot: null, requiresSnapshot: true };
 
   return {
     requiresSnapshot: false,
@@ -130,6 +148,21 @@ async function refreshMirror() {
   if (!mirrorCache.promise) {
     mirrorCache.promise = (async () => {
       try {
+        const shared = await readSharedOperationalMirror().catch(error => {
+          console.warn('[Mirror] Cache compartilhado indisponível:', error.message);
+          return null;
+        });
+        const sharedCheckedAt = Number(shared?.checkedAt) || 0;
+        const sharedAgeMs = sharedCheckedAt ? Date.now() - sharedCheckedAt : Infinity;
+        if (shared?.snapshot && sharedAgeMs >= 0 && sharedAgeMs <= CACHE_TTL_MS && Number(shared.snapshot.version) >= Number(mirrorCache.version || 0)) {
+          mirrorCache.snapshot = shared.snapshot;
+          mirrorCache.version = Number(shared.snapshot.version) || 0;
+          mirrorCache.checkedAt = Number(shared.checkedAt) || Date.now();
+          mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
+          mirrorCache.lastError = null;
+          return mirrorCache.snapshot;
+        }
+
         let nextSnapshot;
         if (!mirrorCache.snapshot || !mirrorCache.version) {
           nextSnapshot = normalizeSnapshot(await requestMirror());
@@ -143,6 +176,9 @@ async function refreshMirror() {
         mirrorCache.checkedAt = Date.now();
         mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
         mirrorCache.lastError = null;
+        await writeSharedOperationalMirror(nextSnapshot, mirrorCache.checkedAt).catch(error => {
+          console.warn('[Mirror] Não foi possível persistir o cache compartilhado:', error.message);
+        });
         return nextSnapshot;
       } catch (error) {
         mirrorCache.lastError = error;
@@ -165,7 +201,8 @@ export function describeOperationalMirrorSource() {
     mode: 'versioned-operational-mirror',
     boardId: '7829537690',
     pollSeconds: 15,
-    cacheSeconds: Math.round(CACHE_TTL_MS / 1000)
+    cacheSeconds: Math.round(CACHE_TTL_MS / 1000),
+    sharedCache: describeOperationalMirrorStore()
   };
 }
 

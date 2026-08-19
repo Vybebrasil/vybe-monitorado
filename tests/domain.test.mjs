@@ -187,6 +187,7 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
         overduePublication: 1,
         overduePublicationPctOfActive: 6.7,
         priorityCoveragePct: 40,
+        fieldCoverage: { complete: false, missing: ['priority'] },
         statusCounts: { 'Finalizado': 5, 'Em andamento': 10, 'A Fazer': 5 },
         statusColors: { 'Finalizado': '#9cd326', 'Em andamento': '#fdab3d', 'A Fazer': '#c4c4c4' }
       }
@@ -204,6 +205,7 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.delayDetails[0].delayType, 'prazo interno');
   assert.equal(snapshot.productivity.readyToSchedule, 4);
   assert.equal(snapshot.quantitative.statusColors['Em andamento'], '#fdab3d');
+  assert.deepEqual(snapshot.sourceQuality.fieldCoverage, { complete: false, missing: ['priority'] });
   assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');
   assert.equal(snapshot.methodology.source, 'Monday.com · Produção de Conteúdo');
   assert.equal(snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'internal-delays').label, 'Atrasos em Produção de Conteúdo');
@@ -553,6 +555,44 @@ test('Espelho operacional aplica somente mudanças e exclusões desde a versão 
 test('Espelho operacional solicita snapshot quando a versão local está ausente ou o delta é grande', () => {
   assert.equal(applyOperationalMirrorDelta(null, { version: 1 }).requiresSnapshot, true);
   assert.equal(applyOperationalMirrorDelta({ version: 1, items: [] }, { version: 2, requires_snapshot: true }).requiresSnapshot, true);
+});
+
+test('Espelho operacional rejeita operação desconhecida ou mudança sem payload', () => {
+  const unknown = applyOperationalMirrorDelta({ version: 5, items: [{ id: '1', name: 'Atual' }] }, {
+    version: 6,
+    changes: [{ item_id: '1', operation: 'rename' }]
+  });
+  const missingRaw = applyOperationalMirrorDelta({ version: 5, items: [{ id: '1', name: 'Atual' }] }, {
+    version: 6,
+    changes: [{ item_id: '1', operation: 'update' }]
+  });
+  assert.equal(unknown.requiresSnapshot, true);
+  assert.equal(missingRaw.requiresSnapshot, true);
+});
+
+test('Produção sinaliza cobertura parcial quando o espelho não entrega campos opcionais', async () => {
+  const result = await mondayIntegration.getOpenPosts({
+    mirrorSnapshot: {
+      version: 7,
+      items: [{
+        id: '1',
+        name: 'Conteúdo sem campos opcionais',
+        group: { title: 'Produção' },
+        column_values: [
+          { id: 'lista_suspensa_mkmqnjbv', text: 'Cliente', value: '' },
+          { id: 'person', text: '', value: '' },
+          { id: 'status', text: 'Em andamento', value: '' },
+          { id: 'data', text: '', value: '{"date":"2026-08-18"}' },
+          { id: 'data__1', text: '', value: '{"date":"2026-08-20"}' },
+          { id: 'lista_suspensa0__1', text: 'Carrossel', value: '' }
+        ]
+      }]
+    }
+  });
+  assert.equal(result.pagination.source, 'Vybe Painel · espelho operacional');
+  assert.equal(result.quantitative.fieldCoverage.priority.available, false);
+  assert.equal(result.quantitative.fieldCoverage.editorDesigner.available, false);
+  assert.equal(result.quantitative.fieldCoverage.complete, false);
 });
 
 test('Cliente do espelho busca snapshot inicial e depois somente o delta da versão', async () => {

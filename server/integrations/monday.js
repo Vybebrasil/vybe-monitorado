@@ -66,6 +66,8 @@ const PAGE_LIMIT = 500;
 // É o único status concluído existente lá hoje; Publicado e Cancelado seguem
 // tratados por texto em `isDone`, caso passem a existir.
 const DONE_STATUS_INDEX = 3;
+const PRIORITY_COLUMN_ID = process.env.MONDAY_PRODUCTION_PRIORITY_COLUMN_ID || 'color_mm164yv8';
+const EDITOR_DESIGNER_COLUMN_ID = process.env.MONDAY_PRODUCTION_EDITOR_DESIGNER_COLUMN_ID || 'multiple_person_mm18b2p0';
 
 function isBeforeToday(dateString, today) {
   return Boolean(dateString) && new Date(`${dateString}T23:59:59Z`) < today;
@@ -353,6 +355,13 @@ class MondayIntegration {
     const priorityCounts = {};
     const formatCounts = {};
     const personIds = new Set();
+    const availableColumnIds = new Set(items.flatMap(item => (item.column_values || []).map(column => column?.id).filter(Boolean)));
+    const fieldCoverage = {
+      priority: { columnId: PRIORITY_COLUMN_ID, available: availableColumnIds.has(PRIORITY_COLUMN_ID) },
+      editorDesigner: { columnId: EDITOR_DESIGNER_COLUMN_ID, available: availableColumnIds.has(EDITOR_DESIGNER_COLUMN_ID) }
+    };
+    fieldCoverage.missing = Object.entries(fieldCoverage).filter(([, value]) => value && value.available === false).map(([field]) => field);
+    fieldCoverage.complete = fieldCoverage.missing.length === 0;
     let totalItems = 0;
     // Concluídos filtrados na origem: o board inteiro menos o que a query devolveu.
     // Antes isto contava apenas os concluídos que coubessem na página lida.
@@ -384,7 +393,7 @@ class MondayIntegration {
           responsavelRefs = parsePeopleColumn(c);
           responsavelRefs.forEach(person => personIds.add(person.id));
         }
-        if (c.id === 'multiple_person_mm18b2p0') {
+        if (c.id === EDITOR_DESIGNER_COLUMN_ID) {
           editorDesigner = c.text || '';
           editorDesignerRefs = parsePeopleColumn(c);
           editorDesignerRefs.forEach(person => personIds.add(person.id));
@@ -410,7 +419,7 @@ class MondayIntegration {
       const normalizedStatus = status.trim() || 'Sem status';
       const normalizedClient = normalizeClientName(cliente);
       const groupName = item.group ? item.group.title : 'Sem Quadro';
-      const priority = item.column_values.find(column => column.id === 'color_mm164yv8')?.text || '';
+      const priority = item.column_values.find(column => column.id === PRIORITY_COLUMN_ID)?.text || '';
       const format = item.column_values.find(column => column.id === 'lista_suspensa0__1')?.text || '';
       const statusLower = status.toLowerCase();
       const isDone = statusLower.includes('finalizado') || statusLower.includes('publicado') || statusLower.includes('cancelado');
@@ -624,7 +633,8 @@ class MondayIntegration {
         clientCounts,
         groupCounts,
         priorityCounts,
-        formatCounts
+        formatCounts,
+        fieldCoverage
       },
       pagination
     };

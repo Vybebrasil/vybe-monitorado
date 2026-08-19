@@ -6,9 +6,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
-import { getFutureMeetings, getCalendarSnapshot } from '../server/integrations/calendar.js';
 import { describeVybePanelSource, getVybePanelExecutiveSnapshot, getVybePanelPage } from '../server/integrations/vybe-panel.js';
 import { describeOperationalMirrorSource, getOperationalMirrorSnapshot } from '../server/integrations/operational-mirror.js';
+import { getExecutiveSourceBundle } from '../server/integrations/executive-sources.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -545,41 +545,9 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   console.log('[API] /api/dashboard/metrics called');
   const forceRefresh = ['1', 'true'].includes(String(req.query.refresh || '').toLowerCase());
   try {
-    console.log('[API] Fetching operational mirror and remaining sources...');
-    const operationalMirror = await getOperationalMirrorSnapshot({ waitForFresh: true, force: forceRefresh });
-    const mirrorReady = operationalMirror.ready === true && Array.isArray(operationalMirror.items) && operationalMirror.items.length > 0;
-    const sourceMeta = mirrorReady
-      ? {
-          name: operationalMirror.source,
-          status: operationalMirror.sync?.state === 'stale' ? 'stale' : 'live',
-          freshness: operationalMirror.sync?.state === 'stale' ? 'stale' : 'live',
-          capturedAt: operationalMirror.sync?.checkedAt || operationalMirror.updatedAt,
-          complete: operationalMirror.sync?.state === 'fresh',
-          sync: operationalMirror.sync
-        }
-      : {
-          name: 'Monday.com · fallback direto',
-          status: 'fallback',
-          freshness: 'fallback',
-          capturedAt: new Date().toISOString(),
-          complete: true,
-          sync: {
-            state: operationalMirror.sync?.state || 'unavailable',
-            fallback: true,
-            error: operationalMirror.sync?.error || 'Espelho operacional indisponível; leitura direta utilizada.'
-          }
-        };
-    const [bottlenecks, posts, demands, calendar, meetingLogs] = await Promise.all([
-      mondayIntegration.getClientBottlenecks(),
-      mondayIntegration.getOpenPosts({ mirrorSnapshot: mirrorReady ? operationalMirror : null }),
-      mondayIntegration.getDelayedDemands(),
-      getCalendarSnapshot(),
-      mondayIntegration.getClientLogs().catch(error => {
-        console.warn('[API] Histórico de reuniões indisponível para os KPIs:', error.message);
-        return [];
-      })
-    ]);
-    console.log(`[API] Sources read successfully (${mirrorReady ? 'operational mirror' : 'Monday fallback'})`);
+    console.log('[API] Fetching executive source bundle...');
+    const { sourceMeta, bottlenecks, posts, demands, calendar, meetingLogs } = await getExecutiveSourceBundle({ forceRefresh });
+    console.log(`[API] Sources read successfully (${sourceMeta.mirrorReady ? 'operational mirror' : 'Monday fallback'})`);
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
       posts,
@@ -779,12 +747,8 @@ app.get('/api/executive/analytics', async (req, res) => {
     ]);
     let snapshot = {};
     try {
-      const [bottlenecks, posts, demands] = await Promise.all([
-        mondayIntegration.getClientBottlenecks(),
-        mondayIntegration.getOpenPosts(),
-        mondayIntegration.getDelayedDemands()
-      ]);
-      snapshot = buildExecutiveSnapshot({ bottlenecks, posts, demands, generatedAt: new Date().toISOString() });
+      const { bottlenecks, posts, demands, sourceMeta } = await getExecutiveSourceBundle({ includeCalendar: false, includeMeetingLogs: false });
+      snapshot = buildExecutiveSnapshot({ bottlenecks, posts, demands, sourceMeta, generatedAt: new Date().toISOString() });
     } catch (sourceError) {
       console.warn('[API] Briefing sem snapshot vivo:', sourceError.message);
     }
@@ -793,9 +757,9 @@ app.get('/api/executive/analytics', async (req, res) => {
     const patterns = summarizePortfolioPatterns({ decisions, impacts, healthSnapshots });
     const briefing = buildExecutiveBriefing({ snapshot, effectiveness, risks: persistentRisks, patterns });
     const briefingDocument = buildExecutiveBriefingDocument({ analytics: { effectiveness, persistentRisks, patterns, briefing } });
-    const alerts = buildExecutiveAlerts({ risks: persistentRisks, effectiveness, freshness: 'live' });
+    const alerts = buildExecutiveAlerts({ risks: persistentRisks, effectiveness, freshness: snapshot.sourceQuality?.freshness || 'live' });
     const learning = buildOutcomeLearning({ decisions, impacts, persistentRisks });
-    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing, briefingDocument, alerts, learning }, meta: { source: 'Nexus Executive Analytics', storage: storageMode('decisions', 'impacts', 'health') } });
+    res.json({ success: true, analytics: { effectiveness, persistentRisks, patterns, briefing, briefingDocument, alerts, learning }, meta: { source: 'Nexus Executive Analytics', sourceQuality: snapshot.sourceQuality || null, storage: storageMode('decisions', 'impacts', 'health') } });
   } catch (error) {
     const status = ['PERSISTENCE_NOT_CONFIGURED', 'IMPACT_PERSISTENCE_NOT_CONFIGURED', 'HEALTH_SNAPSHOT_STORE_NOT_CONFIGURED'].includes(error.code) ? 503 : 500;
     res.status(status).json({ error: error.message });
@@ -811,13 +775,8 @@ app.get('/api/executive/analytics', async (req, res) => {
 // Fica atrás da barreira administrativa até que alguma superfície a consuma.
 app.get('/api/dashboard/clients-logs', requireAdminAccess, async (req, res) => {
   try {
-    const [logs, futureMeetings, posts, demands, bottlenecks] = await Promise.all([
-      mondayIntegration.getClientLogs(),
-      getFutureMeetings(),
-      mondayIntegration.getOpenPosts(),
-      mondayIntegration.getDelayedDemands(),
-      mondayIntegration.getClientBottlenecks()
-    ]);
+    const { meetingLogs: logs, calendar, posts, demands, bottlenecks, sourceMeta } = await getExecutiveSourceBundle({ includeCalendar: true, includeMeetingLogs: true });
+    const futureMeetings = calendar?.events || [];
 
     const findClientPosts = clientName => (posts.ranking || []).find(row => {
       const rowName = row.name.toLowerCase();
@@ -882,7 +841,7 @@ app.get('/api/dashboard/clients-logs', requireAdminAccess, async (req, res) => {
     res.json({
       success: true,
       logs,
-      meta: { source: 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: 'live', healthModel: 'client-health-v2' }
+      meta: { source: sourceMeta?.name || 'Monday.com + Google Calendar', generatedAt: new Date().toISOString(), freshness: sourceMeta?.freshness || 'live', sync: sourceMeta?.sync || null, healthModel: 'client-health-v2' }
     });
   } catch (error) {
     console.error("[API] Erro ao buscar logs de clientes:", error);

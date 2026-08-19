@@ -69,6 +69,7 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
   const complete = quality.complete ?? quality.monday?.complete;
   const freshness = quality.freshness || 'live';
   const sync = quality.sync || null;
+  const fieldCoverage = quality.fieldCoverage || null;
   const capturedAt = quality.capturedAt || snapshot?.generatedAt;
   const capturedLabel = capturedAt
     ? new Date(capturedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -116,6 +117,7 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
         <span><b>{displaySourceCount(derivedRecordCount)}</b> {recordLabel}</span>
         <span><b>{quality.pages === null || quality.pages === undefined ? 'N/D' : formatNumber(quality.pages)}</b> páginas confirmadas</span>
         {boardLabels.map(([key, label]) => displayBoard(boards[key], label))}
+        {fieldCoverage && !fieldCoverage.complete ? <span className="source-board-warning"><b>Campos</b> faltando: {fieldCoverage.missing.join(', ')}</span> : null}
         {calendarSignals ? <span className={calendarAvailable ? 'source-board-ok' : 'source-board-warning'}><b>Agenda</b> {calendarAvailable ? `${formatNumber(calendarSignals.next7Count)} em 7d · ${formatNumber(calendarSignals.riskClientsWithoutMeeting?.length)} riscos sem reunião` : 'indisponível'}</span> : null}
       </div>
     </div>
@@ -199,7 +201,7 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh,
 
   return (
     <section className="executive-kpi-band" aria-label="KPIs executivos da carteira">
-      <div className="executive-kpi-header"><div><span className="executive-section-kicker">LEITURA EXECUTIVA</span><h2>O estado da carteira em números</h2></div><span className={`data-live-badge ${snapshot?.sourceQuality?.monday?.complete === true ? 'complete' : ''}`}>MONDAY · {snapshot?.sourceQuality?.monday?.complete === true ? 'LEITURA COMPLETA' : 'DADOS AO VIVO'}</span></div>
+      <div className="executive-kpi-header"><div><span className="executive-section-kicker">LEITURA EXECUTIVA</span><h2>O estado da carteira em números</h2></div><span className={`data-live-badge ${snapshot?.sourceQuality?.complete === true ? 'complete' : ''}`}>{snapshot?.sourceQuality?.source || 'Monday.com'} · {snapshot?.sourceQuality?.complete === true ? 'LEITURA COMPLETA' : snapshot?.sourceQuality?.freshness === 'fallback' ? 'FALLBACK DIRETO' : 'LEITURA PARCIAL'}</span></div>
       <SourceFreshness snapshot={snapshot} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
       <SnapshotDeltaBand history={history} />
       <div className="executive-kpi-grid">
@@ -1110,8 +1112,19 @@ function App() {
   const [error, setError] = useState('');
   const [refreshError, setRefreshError] = useState('');
   const mirrorVersionRef = useRef(0);
+  const metricsRequestRef = useRef(null);
+  const metricsRequestSequenceRef = useRef(0);
+  const mirrorPollInFlightRef = useRef(false);
 
   const loadMetrics = async ({ manual = false, background = false } = {}) => {
+    const currentRequest = metricsRequestRef.current;
+    if (currentRequest) {
+      if (manual && currentRequest.kind === 'background') currentRequest.controller.abort();
+      else return;
+    }
+    const requestId = ++metricsRequestSequenceRef.current;
+    const controller = new AbortController();
+    metricsRequestRef.current = { controller, kind: manual ? 'manual' : background ? 'background' : 'initial' };
     if (manual || background) {
       setRefreshing(true);
       if (manual) setRefreshError('');
@@ -1127,7 +1140,8 @@ function App() {
       const refreshQuery = manual || background ? `?refresh=1&t=${Date.now()}` : '';
       const metricsRes = await fetch(`/api/dashboard/metrics${refreshQuery}`, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: controller.signal
       });
       const metricsData = await metricsRes.json().catch(() => ({}));
 
@@ -1135,17 +1149,22 @@ function App() {
         throw new Error(`Command Center: ${metricsData.error || 'não foi possível carregar as métricas.'}`);
       }
 
+      if (requestId !== metricsRequestSequenceRef.current) return;
       const nextSnapshot = metricsData.metrics.executiveSnapshot;
       const nextMirrorVersion = Number(metricsData.meta?.sync?.version || nextSnapshot?.sourceQuality?.sync?.version || 0);
       if (nextMirrorVersion > 0) mirrorVersionRef.current = nextMirrorVersion;
       setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null });
     } catch (err) {
+      if (err.name === 'AbortError') return;
       const message = err.message || 'Falha catastrófica de comunicação com o Monday.com.';
       if (manual || background) setRefreshError(message);
       else setError(message);
     } finally {
-      if (manual || background) setRefreshing(false);
-      else setLoading(false);
+      if (metricsRequestRef.current?.controller === controller) {
+        metricsRequestRef.current = null;
+        if (manual || background) setRefreshing(false);
+        else setLoading(false);
+      }
     }
   };
 
@@ -1156,7 +1175,8 @@ function App() {
   useEffect(() => {
     if (loading || !metrics) return undefined;
     const pollMirrorVersion = async () => {
-      if (document.visibilityState === 'hidden') return;
+      if (document.visibilityState === 'hidden' || mirrorPollInFlightRef.current) return;
+      mirrorPollInFlightRef.current = true;
       try {
         const response = await fetch('/api/executive/operational-mirror?wait=0', { cache: 'no-store', headers: { Accept: 'application/json' } });
         const payload = await response.json().catch(() => ({}));
@@ -1170,7 +1190,9 @@ function App() {
           setRefreshError(payload.sync?.error || 'A confirmação do espelho operacional está atrasada.');
         }
       } catch (pollError) {
-        setRefreshError(pollError.message || 'Não foi possível conferir o espelho operacional.');
+        if (pollError.name !== 'AbortError') setRefreshError(pollError.message || 'Não foi possível conferir o espelho operacional.');
+      } finally {
+        mirrorPollInFlightRef.current = false;
       }
     };
     void pollMirrorVersion();
