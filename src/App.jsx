@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Target, Activity, ShieldAlert, Crosshair, X, Info, RefreshCw } from 'lucide-react';
 import { statusColorFor } from './data/status-colors.js';
 import { PeopleAvatars } from './components/PeopleAvatars.jsx';
@@ -67,6 +67,8 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
   const quality = snapshot?.sourceQuality || {};
   const boards = quality.monday?.boards || {};
   const complete = quality.complete ?? quality.monday?.complete;
+  const freshness = quality.freshness || 'live';
+  const sync = quality.sync || null;
   const capturedAt = quality.capturedAt || snapshot?.generatedAt;
   const capturedLabel = capturedAt
     ? new Date(capturedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -88,15 +90,25 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
     return <span key={label} className={board.complete ? 'source-board-ok' : 'source-board-warning'}><b>{label}</b> {displaySourceCount(board.count)} reg. · {pages} · {status}</span>;
   };
 
+  const statusLabel = freshness === 'fallback'
+    ? 'FALLBACK DIRETO'
+    : freshness === 'stale'
+      ? 'DADOS DESATUALIZADOS'
+      : complete
+        ? 'LEITURA COMPLETA'
+        : 'LEITURA PARCIAL';
+  const sourceLabel = quality.source || 'Monday.com';
+  const syncLabel = sync?.version ? `versão ${sync.version}${sync.ageSeconds !== null && sync.ageSeconds !== undefined ? ` · ${sync.ageSeconds}s` : ''}` : null;
+
   return (
-    <div className={`source-freshness-strip ${complete ? 'complete' : 'partial'}`} aria-label="Qualidade e frescor das fontes">
+    <div className={`source-freshness-strip ${complete ? 'complete' : 'partial'} ${freshness}`} aria-label="Qualidade e frescor das fontes">
       <div className="source-freshness-main">
         <span className="source-freshness-dot" />
-        <strong>{complete ? 'LEITURA COMPLETA' : 'LEITURA PARCIAL'}</strong>
-        <span>Monday · capturado {capturedLabel}</span>
+        <strong>{statusLabel}</strong>
+        <span>{sourceLabel} · capturado {capturedLabel}{syncLabel ? ` · ${syncLabel}` : ''}</span>
         <button type="button" className="manual-refresh-button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing} title="Buscar novamente os dados do Monday e da Agenda agora">
           <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'spin' : ''} />
-          {refreshing ? 'ATUALIZANDO DADOS…' : 'ATUALIZAR DADOS'}
+          {refreshing ? 'ATUALIZANDO DADOS…' : freshness === 'stale' || freshness === 'fallback' ? 'ATUALIZAR AGORA' : 'ATUALIZAR DADOS'}
         </button>
         {refreshError ? <span className="manual-refresh-error" role="alert">ATUALIZAÇÃO FALHOU · {refreshError}</span> : null}
       </div>
@@ -1097,11 +1109,12 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [refreshError, setRefreshError] = useState('');
+  const mirrorVersionRef = useRef(0);
 
-  const loadMetrics = async ({ manual = false } = {}) => {
-    if (manual) {
+  const loadMetrics = async ({ manual = false, background = false } = {}) => {
+    if (manual || background) {
       setRefreshing(true);
-      setRefreshError('');
+      if (manual) setRefreshError('');
     } else {
       setLoading(true);
       setError('');
@@ -1111,7 +1124,7 @@ function App() {
       // A leitura normal preserva o cache curto da CDN para não multiplicar
       // consultas ao Monday. A atualização manual usa uma chave de revalidação
       // e recebe no-store no servidor para buscar o estado atual das fontes.
-      const refreshQuery = manual ? `?refresh=1&t=${Date.now()}` : '';
+      const refreshQuery = manual || background ? `?refresh=1&t=${Date.now()}` : '';
       const metricsRes = await fetch(`/api/dashboard/metrics${refreshQuery}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
@@ -1122,13 +1135,16 @@ function App() {
         throw new Error(`Command Center: ${metricsData.error || 'não foi possível carregar as métricas.'}`);
       }
 
-      setMetrics({ executiveSnapshot: metricsData.metrics.executiveSnapshot, history: metricsData.meta?.history || null });
+      const nextSnapshot = metricsData.metrics.executiveSnapshot;
+      const nextMirrorVersion = Number(metricsData.meta?.sync?.version || nextSnapshot?.sourceQuality?.sync?.version || 0);
+      if (nextMirrorVersion > 0) mirrorVersionRef.current = nextMirrorVersion;
+      setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null });
     } catch (err) {
       const message = err.message || 'Falha catastrófica de comunicação com o Monday.com.';
-      if (manual) setRefreshError(message);
+      if (manual || background) setRefreshError(message);
       else setError(message);
     } finally {
-      if (manual) setRefreshing(false);
+      if (manual || background) setRefreshing(false);
       else setLoading(false);
     }
   };
@@ -1136,6 +1152,31 @@ function App() {
   useEffect(() => {
     loadMetrics();
   }, []);
+
+  useEffect(() => {
+    if (loading || !metrics) return undefined;
+    const pollMirrorVersion = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const response = await fetch('/api/executive/operational-mirror?wait=0', { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message || 'Espelho operacional indisponível.');
+        const nextVersion = Number(payload.version || 0);
+        const previousVersion = mirrorVersionRef.current;
+        if (nextVersion > previousVersion) {
+          mirrorVersionRef.current = nextVersion;
+          await loadMetrics({ background: true });
+        } else if (payload.sync?.state === 'unavailable' || payload.sync?.state === 'stale') {
+          setRefreshError(payload.sync?.error || 'A confirmação do espelho operacional está atrasada.');
+        }
+      } catch (pollError) {
+        setRefreshError(pollError.message || 'Não foi possível conferir o espelho operacional.');
+      }
+    };
+    void pollMirrorVersion();
+    const timer = window.setInterval(pollMirrorVersion, 15000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   useEffect(() => {
     if (loading || !metrics) return undefined;

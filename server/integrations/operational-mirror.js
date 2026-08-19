@@ -1,0 +1,209 @@
+const DEFAULT_MIRROR_API_URL = 'https://vybepainel-v2.vercel.app/api/operational-mirror';
+const REQUEST_TIMEOUT_MS = Number(process.env.VYBE_OPERATIONAL_MIRROR_TIMEOUT_MS) || 8_000;
+const CACHE_TTL_MS = Number(process.env.VYBE_OPERATIONAL_MIRROR_CACHE_MS) || 12_000;
+const MAX_DELTA_CHANGES = Number(process.env.VYBE_OPERATIONAL_MIRROR_MAX_DELTA_CHANGES) || 250;
+
+const mirrorCache = {
+  snapshot: null,
+  version: 0,
+  checkedAt: 0,
+  expiresAt: 0,
+  promise: null,
+  lastError: null
+};
+
+function getMirrorUrl() {
+  return (process.env.VYBE_OPERATIONAL_MIRROR_API_URL || DEFAULT_MIRROR_API_URL).trim();
+}
+
+function safeUrl() {
+  try {
+    return new URL(getMirrorUrl());
+  } catch {
+    throw new Error('URL do espelho operacional do Vybe Painel inválida.');
+  }
+}
+
+async function requestMirror(path = '') {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(500, REQUEST_TIMEOUT_MS));
+  try {
+    const response = await fetch(`${getMirrorUrl()}${path}`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(`Espelho operacional respondeu com HTTP ${response.status}.`);
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error(`A leitura do espelho operacional excedeu ${Math.ceil(REQUEST_TIMEOUT_MS / 1000)} segundos.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeItem(item) {
+  if (!item?.id) return null;
+  return {
+    ...item,
+    id: String(item.id),
+    name: item.name || '',
+    group: item.group || null,
+    updated_at: item.updated_at || null,
+    column_values: Array.isArray(item.column_values) ? item.column_values : []
+  };
+}
+
+export function applyOperationalMirrorDelta(currentSnapshot = null, delta = {}) {
+  if (!currentSnapshot || delta?.requires_snapshot) return { snapshot: null, requiresSnapshot: true };
+  const currentVersion = Number(currentSnapshot.version) || 0;
+  const nextVersion = Number(delta.version) || currentVersion;
+  if (nextVersion <= currentVersion) return { snapshot: currentSnapshot, requiresSnapshot: false, changed: false };
+  if (!Array.isArray(delta.changes) || delta.changes.length > MAX_DELTA_CHANGES) {
+    return { snapshot: null, requiresSnapshot: true };
+  }
+
+  const items = new Map((currentSnapshot.items || []).map(item => [String(item.id), item]));
+  delta.changes.forEach(change => {
+    const itemId = String(change?.item_id || change?.id || '');
+    if (!itemId) return;
+    if (change.operation === 'delete' || change.deleted === true) items.delete(itemId);
+    else if (change.raw) {
+      const normalized = normalizeItem(change.raw);
+      if (normalized) items.set(itemId, normalized);
+    }
+  });
+
+  return {
+    requiresSnapshot: false,
+    changed: true,
+    snapshot: {
+      ...currentSnapshot,
+      version: nextVersion,
+      items: [...items.values()],
+      updatedAt: new Date().toISOString()
+    }
+  };
+}
+
+function normalizeSnapshot(payload) {
+  if (!payload?.ready || !Array.isArray(payload.items)) {
+    throw new Error('O espelho operacional não retornou uma base pronta.');
+  }
+  const items = payload.items.map(normalizeItem).filter(Boolean);
+  return {
+    source: 'Vybe Painel · espelho operacional',
+    boardId: String(payload.board_id || 7829537690),
+    ready: true,
+    version: Number(payload.version) || 0,
+    items,
+    statusOptions: Array.isArray(payload.status_options) ? payload.status_options : [],
+    bootstrappedAt: payload.bootstrapped_at || null,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function syncMeta({ state, snapshot, error = null, pending = false, fallback = false } = {}) {
+  const checkedAt = mirrorCache.checkedAt ? new Date(mirrorCache.checkedAt).toISOString() : null;
+  const ageMs = mirrorCache.checkedAt ? Math.max(0, Date.now() - mirrorCache.checkedAt) : null;
+  return {
+    state,
+    pending,
+    fallback,
+    version: Number(snapshot?.version || mirrorCache.version || 0),
+    checkedAt,
+    ageSeconds: ageMs === null ? null : Math.floor(ageMs / 1000),
+    cacheExpiresAt: mirrorCache.expiresAt ? new Date(mirrorCache.expiresAt).toISOString() : null,
+    itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+    error: error?.message || mirrorCache.lastError?.message || null
+  };
+}
+
+async function refreshMirror() {
+  if (!mirrorCache.promise) {
+    mirrorCache.promise = (async () => {
+      try {
+        let nextSnapshot;
+        if (!mirrorCache.snapshot || !mirrorCache.version) {
+          nextSnapshot = normalizeSnapshot(await requestMirror());
+        } else {
+          const delta = await requestMirror(`?action=delta&since=${encodeURIComponent(mirrorCache.version)}`);
+          const applied = applyOperationalMirrorDelta(mirrorCache.snapshot, delta);
+          nextSnapshot = applied.requiresSnapshot ? normalizeSnapshot(await requestMirror()) : (applied.snapshot || mirrorCache.snapshot);
+        }
+        mirrorCache.snapshot = nextSnapshot;
+        mirrorCache.version = Number(nextSnapshot.version) || mirrorCache.version;
+        mirrorCache.checkedAt = Date.now();
+        mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
+        mirrorCache.lastError = null;
+        return nextSnapshot;
+      } catch (error) {
+        mirrorCache.lastError = error;
+        if (mirrorCache.snapshot) return mirrorCache.snapshot;
+        throw error;
+      } finally {
+        mirrorCache.promise = null;
+      }
+    })();
+  }
+  return mirrorCache.promise;
+}
+
+export function describeOperationalMirrorSource() {
+  const url = safeUrl();
+  return {
+    configured: true,
+    host: url.host,
+    path: url.pathname,
+    mode: 'versioned-operational-mirror',
+    boardId: '7829537690',
+    pollSeconds: 15,
+    cacheSeconds: Math.round(CACHE_TTL_MS / 1000)
+  };
+}
+
+export async function getOperationalMirrorSnapshot({ waitForFresh = true, force = false } = {}) {
+  const now = Date.now();
+  const hasUsableCache = mirrorCache.snapshot && !force && mirrorCache.expiresAt > now;
+  if (hasUsableCache) {
+    return {
+      ...mirrorCache.snapshot,
+      sync: syncMeta({ state: 'fresh', snapshot: mirrorCache.snapshot })
+    };
+  }
+
+  const refresh = refreshMirror();
+  if (!waitForFresh) {
+    refresh.catch(() => null);
+    return {
+      ...(mirrorCache.snapshot || { source: 'Vybe Painel · espelho operacional', boardId: '7829537690', ready: false, version: 0, items: [], statusOptions: [] }),
+      sync: syncMeta({ state: mirrorCache.snapshot ? 'refreshing' : 'pending', snapshot: mirrorCache.snapshot, pending: true })
+    };
+  }
+
+  try {
+    const snapshot = await refresh;
+    return { ...snapshot, sync: syncMeta({ state: mirrorCache.lastError ? 'stale' : 'fresh', snapshot }) };
+  } catch (error) {
+    return {
+      ...(mirrorCache.snapshot || { source: 'Vybe Painel · espelho operacional', boardId: '7829537690', ready: false, version: 0, items: [], statusOptions: [] }),
+      sync: syncMeta({ state: mirrorCache.snapshot ? 'stale' : 'unavailable', snapshot: mirrorCache.snapshot, error })
+    };
+  }
+}
+
+export function resetOperationalMirrorCacheForTests() {
+  mirrorCache.snapshot = null;
+  mirrorCache.version = 0;
+  mirrorCache.checkedAt = 0;
+  mirrorCache.expiresAt = 0;
+  mirrorCache.promise = null;
+  mirrorCache.lastError = null;
+}

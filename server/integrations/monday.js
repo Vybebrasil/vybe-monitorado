@@ -300,31 +300,48 @@ class MondayIntegration {
   }
 
   // 2. Posts Atrasados / Acumulados
-  async getOpenPosts() {
+  async getOpenPosts({ mirrorSnapshot = null } = {}) {
     // Board: 7829537690 (Produção de Conteúdo)
     //
-    // O board acumula todo o histórico (milhares de itens) e o grupo Finalizados
-    // responde pela maior parte. Pedir a página inteira e descartar os concluídos
-    // em memória esbarraria no limite de 500 itens por página: bastaria a operação
-    // ativa crescer para que itens sumissem em silêncio, sem erro nenhum.
-    // Por isso o corte é feito na origem, filtrando o status concluído. O total
-    // do board vem por items_count, que é o denominador correto de conclusão.
-    const { items, pagination } = await this.getAllBoardItems({
-      boardId: 7829537690,
-      limit: PAGE_LIMIT,
-      queryParams: `, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }`,
-      selection: `
-        id
-        name
-        group { title }
-        column_values { id text value }
-      `
-    });
+    // Quando o espelho operacional do Vybe Painel está pronto, ele entrega o
+    // board completo e versionado. O Nexus processa essa mesma base sem fazer
+    // uma segunda consulta ao Monday. O caminho direto permanece como fallback
+    // controlado para não interromper a leitura executiva quando o espelho estiver
+    // indisponível.
+    const mirrorItems = Array.isArray(mirrorSnapshot?.items) ? mirrorSnapshot.items : null;
+    let items;
+    let pagination;
+    if (mirrorItems) {
+      items = mirrorItems;
+      pagination = {
+        pages: null,
+        count: null,
+        rawCount: items.length,
+        complete: true,
+        source: 'Vybe Painel · espelho operacional',
+        version: Number(mirrorSnapshot.version) || null
+      };
+    } else {
+      const result = await this.getAllBoardItems({
+        boardId: 7829537690,
+        limit: PAGE_LIMIT,
+        queryParams: `, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }`,
+        selection: `
+          id
+          name
+          group { title }
+          column_values { id text value }
+        `
+      });
+      items = result.items;
+      pagination = result.pagination;
+    }
 
-    const countResult = await this.query(`query {
-      boards(ids: [7829537690]) { items_count }
-    }`);
-    const boardItemsCount = Number(countResult.boards?.[0]?.items_count) || items.length;
+    const boardItemsCount = mirrorItems
+      ? items.length
+      : Number((await this.query(`query {
+        boards(ids: [7829537690]) { items_count }
+      }`)).boards?.[0]?.items_count) || items.length;
 
     const postsByClient = {};
     let totalDelayed = 0;

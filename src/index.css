@@ -1963,3 +1963,24 @@ button:focus-visible, a:focus-visible, select:focus-visible, [role="button"]:foc
   outline: 2px solid var(--vybe-cyan);
   outline-offset: 3px;
 }
+
+/* Espelho operacional do Vybe Painel: origem e frescor permanecem explícitos. */
+.source-freshness-strip.fallback,
+.source-freshness-strip.stale {
+  border-color: rgba(255, 157, 0, 0.62);
+  background: linear-gradient(90deg, rgba(255, 157, 0, 0.12), rgba(255, 255, 255, 0.015));
+}
+.source-freshness-strip.fallback .source-freshness-main strong,
+.source-freshness-strip.stale .source-freshness-main strong {
+  color: var(--vybe-orange);
+}
+.source-freshness-strip.fallback .source-freshness-dot,
+.source-freshness-strip.stale .source-freshness-dot {
+  background: var(--vybe-orange);
+  box-shadow: 0 0 10px var(--vybe-orange);
+}
+.source-freshness-strip.fallback .manual-refresh-button,
+.source-freshness-strip.stale .manual-refresh-button {
+  border-color: rgba(255, 157, 0, 0.65);
+  color: var(--vybe-orange);
+}

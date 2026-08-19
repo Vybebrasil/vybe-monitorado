@@ -8,6 +8,7 @@ import { auditProfile } from '../server/scraper-module.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getFutureMeetings, getCalendarSnapshot } from '../server/integrations/calendar.js';
 import { describeVybePanelSource, getVybePanelExecutiveSnapshot, getVybePanelPage } from '../server/integrations/vybe-panel.js';
+import { describeOperationalMirrorSource, getOperationalMirrorSnapshot } from '../server/integrations/operational-mirror.js';
 import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -156,6 +157,28 @@ app.get('/api/executive/vybe-panel', async (req, res) => {
       error: 'VYBE_PANEL_UNAVAILABLE',
       message: 'O contexto do Vybe Painel está temporariamente indisponível; as evidências do Monday continuam disponíveis.'
     });
+  }
+});
+
+app.get('/api/executive/operational-mirror', async (req, res) => {
+  try {
+    const snapshot = await getOperationalMirrorSnapshot({
+      waitForFresh: req.query.wait !== '0',
+      force: req.query.refresh === '1' || req.query.fresh === '1'
+    });
+    const pending = snapshot.sync?.pending;
+    res.set('Cache-Control', pending ? 'public, max-age=0, s-maxage=3, stale-while-revalidate=10' : 'public, max-age=0, s-maxage=5, stale-while-revalidate=15');
+    res.json({
+      success: true,
+      ready: snapshot.ready === true,
+      version: snapshot.version || 0,
+      sync: snapshot.sync,
+      meta: { source: describeOperationalMirrorSource(), readOnly: true, generatedAt: new Date().toISOString() }
+    });
+  } catch (error) {
+    console.error('[API] Erro ao consultar a versão do espelho operacional:', error);
+    res.set('Cache-Control', 'no-store');
+    res.status(502).json({ error: 'OPERATIONAL_MIRROR_UNAVAILABLE', message: 'O espelho operacional do Vybe Painel está temporariamente indisponível.' });
   }
 });
 
@@ -522,10 +545,33 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   console.log('[API] /api/dashboard/metrics called');
   const forceRefresh = ['1', 'true'].includes(String(req.query.refresh || '').toLowerCase());
   try {
-    console.log('[API] Fetching from Monday...');
+    console.log('[API] Fetching operational mirror and remaining sources...');
+    const operationalMirror = await getOperationalMirrorSnapshot({ waitForFresh: true, force: forceRefresh });
+    const mirrorReady = operationalMirror.ready === true && Array.isArray(operationalMirror.items) && operationalMirror.items.length > 0;
+    const sourceMeta = mirrorReady
+      ? {
+          name: operationalMirror.source,
+          status: operationalMirror.sync?.state === 'stale' ? 'stale' : 'live',
+          freshness: operationalMirror.sync?.state === 'stale' ? 'stale' : 'live',
+          capturedAt: operationalMirror.sync?.checkedAt || operationalMirror.updatedAt,
+          complete: operationalMirror.sync?.state === 'fresh',
+          sync: operationalMirror.sync
+        }
+      : {
+          name: 'Monday.com · fallback direto',
+          status: 'fallback',
+          freshness: 'fallback',
+          capturedAt: new Date().toISOString(),
+          complete: true,
+          sync: {
+            state: operationalMirror.sync?.state || 'unavailable',
+            fallback: true,
+            error: operationalMirror.sync?.error || 'Espelho operacional indisponível; leitura direta utilizada.'
+          }
+        };
     const [bottlenecks, posts, demands, calendar, meetingLogs] = await Promise.all([
       mondayIntegration.getClientBottlenecks(),
-      mondayIntegration.getOpenPosts(),
+      mondayIntegration.getOpenPosts({ mirrorSnapshot: mirrorReady ? operationalMirror : null }),
       mondayIntegration.getDelayedDemands(),
       getCalendarSnapshot(),
       mondayIntegration.getClientLogs().catch(error => {
@@ -533,13 +579,14 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         return [];
       })
     ]);
-    console.log('[API] Fetched from Monday successfully');
+    console.log(`[API] Sources read successfully (${mirrorReady ? 'operational mirror' : 'Monday fallback'})`);
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
       posts,
       demands,
       calendar,
       meetingLogs,
+      sourceMeta,
       generatedAt: new Date().toISOString()
     });
     let snapshotSaved = false;
@@ -567,11 +614,10 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       };
     }
 
-    // A leitura normal custa três consultas ao Monday e alguns segundos. A CDN
-    // guarda a resposta por um minuto para não multiplicar consultas para cada
-    // espectador. Quando o gestor pede atualização manual, a leitura recebe
-    // no-store para garantir que a resposta venha das fontes naquele momento.
-    res.set('Cache-Control', forceRefresh ? 'no-store, max-age=0' : 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+    // O espelho operacional trabalha com deltas a cada 15 segundos. A CDN do
+    // Nexus não pode manter uma resposta por um minuto, caso contrário o gestor
+    // continuaria vendo uma geração antiga mesmo com o espelho atualizado.
+    res.set('Cache-Control', forceRefresh ? 'no-store, max-age=0' : 'public, max-age=0, s-maxage=10, stale-while-revalidate=30');
 
     res.json({
       success: true,
@@ -579,9 +625,10 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         executiveSnapshot
       },
       meta: {
-        source: 'Monday.com',
+        source: executiveSnapshot.source,
         generatedAt: executiveSnapshot.generatedAt,
-        freshness: 'live',
+        freshness: executiveSnapshot.sourceQuality?.freshness || 'live',
+        sync: executiveSnapshot.sourceQuality?.sync || null,
         snapshotSaved,
         snapshotAutosave,
         history,

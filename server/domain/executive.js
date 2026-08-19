@@ -218,7 +218,7 @@ function buildClientRisks(ranking) {
     .sort((a, b) => ({ critical: 3, high: 2, medium: 1 }[b.severity] - ({ critical: 3, high: 2, medium: 1 }[a.severity])));
 }
 
-export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], calendar = null, meetingLogs = [], generatedAt = new Date().toISOString() }) {
+export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands = [], calendar = null, meetingLogs = [], generatedAt = new Date().toISOString(), sourceMeta = {} }) {
   const ranking = posts.ranking || [];
   const boardPagination = {
     production: posts.pagination || null,
@@ -498,8 +498,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
 
   return {
     generatedAt,
-    sourceStatus: 'live',
-    source: 'Monday.com',
+    sourceStatus: sourceMeta.status || 'live',
+    source: sourceMeta.name || 'Monday.com',
     model: 'executive-signal-v1',
     portfolioStability: {
       score: stabilityScore,
@@ -584,16 +584,18 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
       focus: ['Previsibilidade da carteira', 'Risco de entrega e relacionamento', 'Capacidade e prontidão estratégica']
     },
     sourceQuality: {
-      capturedAt: generatedAt,
-      freshness: 'live',
-      complete: sourcesComplete,
+      capturedAt: sourceMeta.capturedAt || generatedAt,
+      freshness: sourceMeta.freshness || sourceMeta.status || 'live',
+      source: sourceMeta.name || 'Monday.com',
+      sync: sourceMeta.sync || null,
+      complete: sourcesComplete && sourceMeta.complete !== false,
       records: sourceRecords || null,
       pages: sourcePages,
       monday: {
         complete: sourcesComplete,
         boards: sourceBoardQuality,
         note: sourcesComplete
-          ? 'Todos os boards consultados foram percorridos por cursor.'
+          ? (sourceMeta.name ? `Produção de Conteúdo veio do ${sourceMeta.name}; os demais boards seguem a leitura configurada no Nexus.` : 'Todos os boards consultados foram percorridos por cursor.')
           : 'A completude da leitura ainda não foi confirmada para todos os boards.'
       },
       calendar: calendarSignals.quality

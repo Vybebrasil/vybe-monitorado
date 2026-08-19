@@ -19,6 +19,7 @@ import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
+import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, resetOperationalMirrorCacheForTests } from '../server/integrations/operational-mirror.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 
@@ -526,6 +527,57 @@ test('Score executivo preserva a dedução de prontidão no resumo e na composi�
   assert.equal(snapshot.portfolioStability.recoveryPointsAvailable, 15);
 });
 
+
+test('Espelho operacional aplica somente mudanças e exclusões desde a versão anterior', () => {
+  const result = applyOperationalMirrorDelta({
+    ready: true,
+    version: 5,
+    items: [
+      { id: '1', name: 'Antigo' },
+      { id: '2', name: 'Remover' }
+    ]
+  }, {
+    version: 6,
+    changes: [
+      { item_id: '1', operation: 'update', raw: { id: '1', name: 'Atualizado' } },
+      { item_id: '2', operation: 'delete' },
+      { item_id: '3', operation: 'update', raw: { id: '3', name: 'Novo' } }
+    ]
+  });
+
+  assert.equal(result.requiresSnapshot, false);
+  assert.equal(result.snapshot.version, 6);
+  assert.deepEqual(result.snapshot.items.map(item => item.name), ['Atualizado', 'Novo']);
+});
+
+test('Espelho operacional solicita snapshot quando a versão local está ausente ou o delta é grande', () => {
+  assert.equal(applyOperationalMirrorDelta(null, { version: 1 }).requiresSnapshot, true);
+  assert.equal(applyOperationalMirrorDelta({ version: 1, items: [] }, { version: 2, requires_snapshot: true }).requiresSnapshot, true);
+});
+
+test('Cliente do espelho busca snapshot inicial e depois somente o delta da versão', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  resetOperationalMirrorCacheForTests();
+  globalThis.fetch = async url => {
+    requests.push(String(url));
+    if (requests.length === 1) return new Response(JSON.stringify({ ready: true, board_id: 7829537690, version: 5, items: [{ id: '1', name: 'Inicial', column_values: [] }] }), { status: 200 });
+    return new Response(JSON.stringify({ version: 6, requires_snapshot: false, changes: [{ item_id: '1', operation: 'update', raw: { id: '1', name: 'Atualizado', column_values: [] } }] }), { status: 200 });
+  };
+
+  try {
+    const first = await getOperationalMirrorSnapshot({ force: true });
+    const second = await getOperationalMirrorSnapshot({ force: true });
+    assert.equal(first.version, 5);
+    assert.equal(second.version, 6);
+    assert.equal(second.items[0].name, 'Atualizado');
+    assert.match(requests[1], /action=delta&since=5/);
+    assert.equal(second.sync.state, 'fresh');
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetOperationalMirrorCacheForTests();
+  }
+});
 
 test('Vybe Painel oferece resumo executivo cacheável com seleção enxuta', async () => {
   const originalFetch = globalThis.fetch;
