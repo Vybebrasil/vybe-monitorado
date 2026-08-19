@@ -40,6 +40,13 @@ const storageMode = (...storeNames) => {
   return modes.length === 1 ? modes[0] : 'mixed';
 };
 
+const autosaveEnabled = (envName, storeName) => {
+  const explicit = String(process.env[envName] || '').toLowerCase();
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+  return isProduction && describeRecordStore(storeName).ready;
+};
+
 const adminTokenMatches = req => {
   const expected = process.env.NEXUS_ADMIN_TOKEN || '';
   const received = req.get('x-nexus-admin-token') || req.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
@@ -87,7 +94,13 @@ app.get('/api/healthz', async (req, res) => {
   const release = buildReleaseMetadata();
   const persistence = await getPersistenceHealth({ probe: req.query.probe !== 'false' });
   const storesReady = Object.values(persistence).every(store => store.ready);
-  const ready = (!production || release.trackable) && storesReady;
+  const liveReadReady = !production || release.trackable;
+  const historicalReady = storesReady;
+  const ready = liveReadReady && historicalReady;
+  const autosave = {
+    snapshots: autosaveEnabled('NEXUS_SNAPSHOT_AUTOSAVE', 'snapshots'),
+    health: autosaveEnabled('NEXUS_HEALTH_AUTOSAVE', 'health')
+  };
 
   res.json({
     ok: true,
@@ -104,6 +117,12 @@ app.get('/api/healthz', async (req, res) => {
       instagram: Boolean(process.env.INSTAGRAM_COOKIES_JSON || process.env.INSTAGRAM_COOKIES_PATH)
     },
     persistence,
+    readiness: {
+      liveReadReady,
+      historicalReady,
+      message: historicalReady ? 'Leitura live e histórico executivo disponíveis.' : 'Leitura live disponível; histórico executivo aguarda datastore configurado.',
+      autosave
+    },
     generatedAt: new Date().toISOString()
   });
 });
@@ -115,9 +134,10 @@ app.get('/api/executive/vybe-panel', async (req, res) => {
     const snapshot = await getVybePanelExecutiveSnapshot({
       limit: Math.min(Number(req.query.limit) || 200, 200),
       maxPages: Math.min(Number(req.query.maxPages) || 10, 10),
-      budgetMs: Math.min(Number(req.query.budgetMs) || 12000, 15000)
+      budgetMs: Math.min(Number(req.query.budgetMs) || 12000, 15000),
+      waitForFresh: req.query.wait === '1' || req.query.fresh === '1'
     });
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', snapshot.cache?.pending ? 'public, max-age=0, s-maxage=5, stale-while-revalidate=30' : 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
     res.json({
       success: true,
       ...snapshot,
@@ -523,7 +543,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       generatedAt: new Date().toISOString()
     });
     let snapshotSaved = false;
-    if (process.env.NEXUS_SNAPSHOT_AUTOSAVE === 'true') {
+    const snapshotAutosave = autosaveEnabled('NEXUS_SNAPSHOT_AUTOSAVE', 'snapshots');
+    if (snapshotAutosave) {
       try {
         await saveExecutiveSnapshot(executiveSnapshot);
         snapshotSaved = true;
@@ -562,7 +583,13 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         generatedAt: executiveSnapshot.generatedAt,
         freshness: 'live',
         snapshotSaved,
+        snapshotAutosave,
         history,
+        persistence: {
+          liveReadReady: true,
+          historicalReady: history.available || history.status === 'stable' || history.status === 'improving' || history.status === 'worsening',
+          message: history.available ? 'Histórico executivo disponível.' : 'Leitura live disponível; histórico executivo aguarda datastore configurado.'
+        },
         sourceQuality: executiveSnapshot.sourceQuality
       }
     });
@@ -796,7 +823,7 @@ app.get('/api/dashboard/clients-logs', requireAdminAccess, async (req, res) => {
         missingDashboard,
         auditStatus: client.auditStatus || 'not_integrated'
       });
-      if (process.env.NEXUS_HEALTH_AUTOSAVE === 'true') {
+      if (autosaveEnabled('NEXUS_HEALTH_AUTOSAVE', 'health')) {
         try {
           await saveHealthSnapshot({ clientId: client.id || client.name, clientName: client.name, healthScore: client.healthScore });
         } catch (healthError) {

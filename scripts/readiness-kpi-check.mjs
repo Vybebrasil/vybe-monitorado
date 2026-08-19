@@ -8,6 +8,7 @@ fixture.metrics.executiveSnapshot.portfolioReadiness.kpis = {
   planning: { withCount: 2, withoutCount: 2, withClients: ['Cliente A', 'Cliente B'], withoutClients: ['Cliente C', 'Cliente D'], coveragePct: 50, source: 'Monday.com · Gestão de Clientes · Planejamento' },
   meetingsCurrentMonth: { month: '2026-08', withCount: 2, withoutCount: 2, withClients: ['Cliente A', 'Cliente C'], withoutClients: ['Cliente B', 'Cliente D'], coveragePct: 50, source: 'Monday.com · Reuniões · data' },
   onboarding: { withCount: 1, withoutCount: 3, withClients: ['Cliente D'], withoutClients: ['Cliente A', 'Cliente B', 'Cliente C'], windowDays: 30, source: 'Monday.com · created_at + ausência de execução' },
+  agendaNext30Days: { mapped: true, withCount: 2, withoutCount: 2, withClients: ['Cliente B', 'Cliente D'], withoutClients: ['Cliente A', 'Cliente C'], coveragePct: 50, period: '2026-08-18 → 2026-09-17', source: 'Google Calendar · iCal · próximos 30 dias' },
   calendar3Months: { mapped: false, columnIds: [], completeCount: null, missingCount: null, completeClients: null, missingClients: null, coveragePct: null, message: 'Mapeie três IDs de colunas mensais.' }
 };
 
@@ -16,30 +17,34 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 1000
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
-await page.route('**/api/dashboard/metrics**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }));
-await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-await page.waitForTimeout(900);
-await page.waitForSelector('.readiness-kpi-band', { state: 'visible', timeout: 15000 });
+await page.route('**/api/dashboard/metrics**', async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }); });
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
+await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
+await page.waitForSelector('.readiness-kpi-band', { state: 'visible', timeout: 30000 });
+await page.waitForSelector('.readiness-kpi-chip, .readiness-kpi-grid .executive-kpi-card', { state: 'visible', timeout: 30000 });
 
 const ids = [
   ['PLANEJAMENTO', 'Quais clientes têm ou não têm planejamento?', '2'],
   ['REUNIÕES NO MÊS ATUAL', 'Quais clientes tiveram reunião no mês atual?', '2'],
+  ['AGENDA · PRÓXIMOS 30 DIAS', 'Quais clientes têm reunião na Agenda nos próximos 30 dias?', '2'],
   ['FASE DE ENTRADA', 'Quais clientes estão em fase de entrada?', '1'],
   ['CALENDÁRIO · 3 MESES', 'Quais clientes têm três meses de calendário?', 'N/D']
 ];
 const results = [];
 for (const [label, title, expectedWith] of ids) {
-  const card = page.locator('.readiness-kpi-grid .executive-kpi-card').filter({ hasText: label }).first();
+  const card = page.locator('.readiness-kpi-chip, .readiness-kpi-grid .executive-kpi-card').filter({ hasText: label }).first();
   if (!(await card.count())) throw new Error(`KPI não encontrado: ${label}`);
   await card.click();
-  await page.waitForTimeout(120);
+  await page.waitForSelector('.kpi-investigation-drawer .investigation-hero h4', { state: 'visible', timeout: 10000 });
   const drawerTitle = await page.locator('.kpi-investigation-drawer .investigation-hero h4').textContent();
   const withValue = await page.locator('.kpi-investigation-drawer .kpi-score-explanation > div').first().locator('strong').textContent();
   const source = await page.locator('.kpi-investigation-drawer .readiness-quality-callout strong').first().textContent();
-  const qualityMessage = await page.locator('.kpi-investigation-drawer .investigation-callout p').first().textContent().catch(() => '');
+  const qualityLocator = page.locator('.kpi-investigation-drawer .investigation-callout p').first();
+  const qualityMessage = await qualityLocator.count() ? await qualityLocator.textContent() : '';
   results.push({ label, drawerTitle: drawerTitle?.trim(), withValue: withValue?.trim(), source: source?.trim(), qualityMessage: qualityMessage?.trim() });
-  await page.getByRole('button', { name: 'Fechar investigação' }).click();
-  await page.waitForTimeout(80);
+  await page.locator('.kpi-investigation-drawer .drawer-close').click();
+  await page.waitForSelector('.kpi-investigation-drawer', { state: 'hidden', timeout: 5000 });
 }
 const failures = [];
 for (const [label, title, expectedWith] of ids) {

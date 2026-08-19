@@ -34,9 +34,14 @@ export const scoreComposition = (snapshot) => {
   if (!Number.isFinite(rawScore)) return 'Composição do score indisponível nesta leitura.';
   const terms = deductions
     .filter(deduction => Number(deduction?.points) > 0)
-    .map(deduction => deduction?.mode === 'source_gap'
-      ? `(${formatNumber(deduction.count)} afetados · -${formatNumber(deduction.points)} pts no total)`
-      : `(${formatNumber(deduction.count)} ${String(deduction.label || 'sinal').toLowerCase()} × -${formatNumber(deduction.pointsPerItem)} pts = -${formatNumber(deduction.points)} pts)`);
+    .map(deduction => {
+      const observed = Number(deduction?.observedCount ?? deduction?.count ?? 0);
+      const penalized = Number(deduction?.penalizedCount ?? deduction?.count ?? 0);
+      const protectedCount = Number(deduction?.protectedCount ?? Math.max(0, observed - penalized));
+      if (deduction?.mode === 'source_gap') return `(${formatNumber(observed)} observados · 1 penalização sistêmica · -${formatNumber(deduction.points)} pts no total)`;
+      const protection = protectedCount > 0 ? ` · ${formatNumber(protectedCount)} protegidos` : '';
+      return `(${formatNumber(observed)} observados · ${formatNumber(penalized)} penalizados${protection} · ${formatNumber(penalized)} × -${formatNumber(deduction.pointsPerItem)} pts = -${formatNumber(deduction.points)} pts)`;
+    });
   const formula = terms.length ? `100 pts − ${terms.join(' − ')}` : '100 pts';
   return `${formula} = ${formatPoints(rawScore)}. O score é bruto, pode ficar negativo e não representa percentual financeiro ou satisfação.`;
 };
@@ -58,11 +63,11 @@ export const buildMissions = (snapshot) => {
     kpiId: 'readiness',
     readinessId: deduction.id,
     title: deduction.kind === 'planning' ? (deduction.mode === 'source_gap' ? 'Preencher a fonte de planejamento' : 'Completar planejamentos da carteira') : (deduction.mode === 'source_gap' ? 'Preencher a fonte de calendário' : 'Completar calendários da carteira'),
-    current: deduction.count,
+    current: deduction.mode === 'source_gap' ? deduction.count : (deduction.penalizedCount ?? deduction.count),
     pointsPerItem: deduction.pointsPerItem,
-    unit: deduction.mode === 'source_gap' ? 'clientes afetados' : 'clientes',
+    unit: deduction.mode === 'source_gap' ? 'clientes observados' : 'clientes penalizados',
     accent: deduction.kind === 'planning' ? 'attention' : 'cyan',
-    description: deduction.mode === 'source_gap' ? `${deduction.count} clientes sinalizam uma lacuna sistêmica; a missão recupera a fonte inteira sem cobrar o mesmo cliente duas vezes.` : `Cada cliente regularizado devolve ${deduction.pointsPerItem} pontos.`,
+    description: deduction.mode === 'source_gap' ? `${deduction.count} clientes observados; a missão recupera a fonte inteira sem cobrar o mesmo cliente duas vezes.` : `${deduction.observedCount ?? deduction.count} clientes sem o campo; ${deduction.penalizedCount ?? deduction.count} entram no score${deduction.protectedCount ? ` e ${deduction.protectedCount} ficam protegidos` : ''}. Cada cliente penalizado regularizado devolve ${deduction.pointsPerItem} pontos.`,
     recoverablePoints: deduction.points
   }));
   const missions = [

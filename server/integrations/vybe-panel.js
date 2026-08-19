@@ -25,7 +25,7 @@ const PANEL_SUMMARY_SELECTION = `
   column_values { id text }
 `;
 
-const summaryCache = { value: null, expiresAt: 0, promise: null };
+const summaryCache = { value: null, expiresAt: 0, promise: null, lastError: null };
 
 function getApiUrl() {
   return (process.env.VYBE_PANEL_API_URL || DEFAULT_API_URL).trim();
@@ -177,12 +177,9 @@ export async function getVybePanelProductionSnapshot({ limit = PAGE_LIMIT, maxPa
   return collectPanelSnapshot({ limit, maxPages, budgetMs, selection: PRODUCTION_SELECTION });
 }
 
-export async function getVybePanelExecutiveSnapshot({ limit = SUMMARY_PAGE_LIMIT, maxPages = 10, budgetMs = SUMMARY_BUDGET_MS } = {}) {
-  const now = Date.now();
-  if (summaryCache.value && summaryCache.expiresAt > now) {
-    return { ...summaryCache.value, cache: { hit: true, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
-  }
+function startSummaryRefresh({ limit, maxPages, budgetMs }) {
   if (!summaryCache.promise) {
+    summaryCache.lastError = null;
     summaryCache.promise = collectPanelSnapshot({
       limit,
       maxPages,
@@ -191,13 +188,48 @@ export async function getVybePanelExecutiveSnapshot({ limit = SUMMARY_PAGE_LIMIT
     }).then(snapshot => {
       summaryCache.value = snapshot;
       summaryCache.expiresAt = Date.now() + SUMMARY_CACHE_MS;
+      summaryCache.lastError = null;
       return snapshot;
+    }).catch(error => {
+      summaryCache.lastError = error;
+      throw error;
     }).finally(() => {
       summaryCache.promise = null;
     });
   }
-  const snapshot = await summaryCache.promise;
-  return { ...snapshot, cache: { hit: false, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
+  return summaryCache.promise;
+}
+
+function pendingSummary({ limit, maxPages, budgetMs }) {
+  const stale = summaryCache.value;
+  return {
+    ...(stale || { source: 'Vybe Painel', boardId: String(BOARD_ID), items: [], pagination: { pages: 0, count: 0, complete: false, truncated: true, nextCursor: null, budgetMs: safeBudget(budgetMs), elapsedMs: 0 } }),
+    warning: stale ? 'O resumo anterior está sendo atualizado em segundo plano.' : 'O resumo do Vybe Painel está sendo carregado em segundo plano.',
+    cache: {
+      hit: false,
+      stale: Boolean(stale),
+      pending: true,
+      error: summaryCache.lastError?.message || null,
+      expiresAt: summaryCache.expiresAt ? new Date(summaryCache.expiresAt).toISOString() : null,
+      requested: { limit, maxPages, budgetMs: safeBudget(budgetMs) }
+    }
+  };
+}
+
+export async function getVybePanelExecutiveSnapshot({ limit = SUMMARY_PAGE_LIMIT, maxPages = 10, budgetMs = SUMMARY_BUDGET_MS, waitForFresh = true } = {}) {
+  const now = Date.now();
+  if (summaryCache.value && summaryCache.expiresAt > now) {
+    return { ...summaryCache.value, cache: { hit: true, pending: false, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
+  }
+
+  const refresh = startSummaryRefresh({ limit, maxPages, budgetMs });
+  if (!waitForFresh) {
+    refresh.catch(() => null);
+    return pendingSummary({ limit, maxPages, budgetMs });
+  }
+
+  const snapshot = await refresh;
+  return { ...snapshot, cache: { hit: false, pending: false, expiresAt: new Date(summaryCache.expiresAt).toISOString() } };
 }
 
 export async function getVybePanelPage({ cursor = null, limit = 50 } = {}) {

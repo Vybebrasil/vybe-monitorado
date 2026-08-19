@@ -7,8 +7,9 @@ const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
 
-await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-await page.waitForTimeout(3500);
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
+await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const state = async () => page.evaluate(() => ({
@@ -49,6 +50,7 @@ await runGroup('kpi', '.executive-kpi-card');
 await runGroup('mission', '.mission-card');
 await runGroup('ledger', '.score-ledger-row');
 await runGroup('owner-open', '.owner-bar-open');
+await runGroup('readiness-chip', '.readiness-kpi-chip');
 
 try {
   await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();

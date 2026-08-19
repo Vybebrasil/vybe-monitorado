@@ -609,3 +609,83 @@ test('Auditoria legada usa identidade determinística e exige validação humana
   assert.equal(record.confidence, 'unverified');
   assert.equal(record.history[0].status, 'legacy_unvalidated');
 });
+
+test('Score de prontidão expõe população observada, penalizada e protegida', () => {
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      missingPlanning: ['Cliente A', 'Cliente B', 'Cliente C', 'Cliente D'],
+      missingDashboard: ['Cliente A', 'Cliente B', 'Cliente C', 'Cliente D'],
+      quantitative: { eligibleClients: 5, planningCoveragePct: 20, dashboardCoveragePct: 20 },
+      activePortfolio: [
+        { name: 'Cliente A', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente B', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente C', since: '2026-08-16T00:00:00Z' },
+        { name: 'Cliente D', since: '2025-01-10T00:00:00Z' },
+        { name: 'Cliente E', since: '2025-01-10T00:00:00Z' }
+      ]
+    },
+    posts: {
+      ranking: [
+        { name: 'Cliente A', open: 2, delayedPrazo: 0, delayedVeiculacao: 0, details: [] },
+        { name: 'Cliente D', open: 2, delayedPrazo: 0, delayedVeiculacao: 0, details: [] },
+        { name: 'Cliente E', open: 2, delayedPrazo: 0, delayedVeiculacao: 0, details: [] }
+      ]
+    },
+    demands: Object.assign([], { clientsWithOpenDemand: [] }),
+    generatedAt: '2026-08-19T00:00:00.000Z'
+  });
+
+  const planning = snapshot.portfolioStability.scoreDeductions.find(item => item.id === 'missing-planning');
+  assert.equal(planning.observedCount, 4);
+  assert.equal(planning.penalizedCount, 2);
+  assert.equal(planning.protectedCount, 2);
+  assert.deepEqual(planning.protectedClients.map(item => item.client), ['Cliente B', 'Cliente C']);
+  assert.equal(planning.points, 6);
+});
+
+test('KPI de Agenda separa Google Calendar do board de Reuniões do Monday', () => {
+  const result = buildReadinessKpis({
+    activePortfolio: [{ name: 'Cliente Agenda' }, { name: 'Cliente Sem Agenda' }],
+    meetingLogs: [{ name: 'Cliente Agenda', meetings: [] }, { name: 'Cliente Sem Agenda', meetings: [{ date: '2026-08-05T10:00:00.000Z' }] }],
+    calendarEvents: [{ title: 'Call Cliente Agenda', date: '2026-08-20T10:00:00.000Z', client: 'Cliente Agenda', matchType: 'title' }],
+    calendarQuality: { configured: true, status: 'ok' },
+    generatedAt: '2026-08-18T12:00:00.000Z'
+  });
+
+  assert.deepEqual(result.meetingsCurrentMonth.withClients, ['Cliente Sem Agenda']);
+  assert.deepEqual(result.agendaNext30Days.withClients, ['Cliente Agenda']);
+  assert.deepEqual(result.agendaNext30Days.withoutClients, ['Cliente Sem Agenda']);
+  assert.equal(result.agendaNext30Days.windowDays, 30);
+  assert.equal(result.agendaNext30Days.source, 'Google Calendar · iCal · próximos 30 dias');
+});
+
+test('Relação entre fontes separa Produção, Solicitações e possível sobreposição', () => {
+  const demands = [];
+  demands.openDemandItems = [
+    { id: 'd-1', name: 'Demanda A', cliente: 'Cliente A', status: 'Aberto', prazo: '2026-08-20', isDelayed: false },
+    { id: 'd-2', name: 'Demanda B', cliente: 'Cliente B', status: 'Aberto', prazo: '2026-08-10', isDelayed: true }
+  ];
+  const snapshot = buildExecutiveSnapshot({
+    bottlenecks: {
+      activePortfolio: [{ name: 'Cliente A' }, { name: 'Cliente C' }],
+      missingPlanning: [],
+      missingDashboard: [],
+      quantitative: { eligibleClients: 2, planningCoveragePct: 100, dashboardCoveragePct: 100 }
+    },
+    posts: {
+      ranking: [
+        { name: 'Cliente A', open: 2, delayedPrazo: 1, delayedVeiculacao: 0, details: [{ id: 'p-1', name: 'Post A', isDelayedPrazo: true, isDelayedVeiculacao: false }] },
+        { name: 'Cliente C', open: 1, delayedPrazo: 0, delayedVeiculacao: 0, details: [{ id: 'p-2', name: 'Post C', isDelayedPrazo: false, isDelayedVeiculacao: false }] }
+      ],
+      quantitative: { activeItems: 3, totalItems: 3 },
+      pagination: { complete: true, count: 3, pages: 1 }
+    },
+    demands,
+    generatedAt: '2026-08-18T12:00:00.000Z'
+  });
+
+  assert.deepEqual(snapshot.sourceRelation.overlapClients, ['Cliente A']);
+  assert.deepEqual(snapshot.sourceRelation.productionOnlyClients, ['Cliente C']);
+  assert.deepEqual(snapshot.sourceRelation.demandOnlyClients, ['Cliente B']);
+  assert.equal(snapshot.sourceRelation.counts.overlapClients, 1);
+});

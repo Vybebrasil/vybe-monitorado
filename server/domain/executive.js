@@ -97,6 +97,7 @@ export function buildCalendarSignals({ events = [], quality = null, activeClient
     horizonDays: 7,
     next7Count: next7Meetings.length,
     next7Meetings: next7Meetings.slice(0, 20).map(event => ({ title: event.title, date: event.date, client: event.client, matchType: event.matchType })),
+    matchedEvents: meetings.slice(0, 200).map(event => ({ title: event.title, date: event.date, client: event.client, matchType: event.matchType })),
     riskClientsWithoutMeeting,
     matchedClientCount: clientsWithMeeting.size,
     unmatchedNext7Count: next7Meetings.filter(event => !event.client).length,
@@ -104,7 +105,7 @@ export function buildCalendarSignals({ events = [], quality = null, activeClient
   };
 }
 
-export function buildReadinessKpis({ activePortfolio = [], missingPlanning = [], executionGap = {}, meetingLogs = [], calendar3MonthCoverage = null, generatedAt = new Date().toISOString() }) {
+export function buildReadinessKpis({ activePortfolio = [], missingPlanning = [], executionGap = {}, meetingLogs = [], calendar3MonthCoverage = null, calendarEvents = [], calendarQuality = null, generatedAt = new Date().toISOString() }) {
   const activeNames = activePortfolio.map(client => client.name).filter(Boolean);
   const missingPlanningSet = new Set(missingPlanning);
   const clientsWithPlanning = activeNames.filter(name => !missingPlanningSet.has(name));
@@ -130,6 +131,15 @@ export function buildReadinessKpis({ activePortfolio = [], missingPlanning = [],
   const onboardingSet = new Set(onboardingClients);
   const clientsNotInOnboarding = activeNames.filter(name => !onboardingSet.has(name));
   const calendar = calendar3MonthCoverage || { mapped: false, completeClients: null, missingClients: null, completeCount: null, missingCount: null, coveragePct: null, columnIds: [], message: 'Cobertura de três meses não mapeada no Monday.' };
+  const agendaMapped = Boolean(calendarQuality?.configured && calendarQuality?.status === 'ok');
+  const agendaStartMs = capturedAt.getTime();
+  const agendaEndMs = agendaStartMs + 30 * 86400000;
+  const agendaClientsWithMeeting = agendaMapped
+    ? activeNames.filter(clientName => (calendarEvents || []).some(event => event.client === clientName && Number.isFinite(new Date(event.date).getTime()) && new Date(event.date).getTime() >= agendaStartMs && new Date(event.date).getTime() < agendaEndMs))
+    : null;
+  const agendaClientsWithoutMeeting = agendaMapped
+    ? activeNames.filter(clientName => !agendaClientsWithMeeting.includes(clientName))
+    : null;
 
   return {
     eligibleClients: activeNames.length,
@@ -149,6 +159,18 @@ export function buildReadinessKpis({ activePortfolio = [], missingPlanning = [],
       withoutClients: clientsWithoutMeetingCurrentMonth,
       coveragePct: percent(clientsWithMeetingCurrentMonth.length, activeNames.length),
       source: 'Monday.com · Reuniões · data'
+    },
+    agendaNext30Days: {
+      mapped: agendaMapped,
+      windowDays: 30,
+      withCount: agendaClientsWithMeeting?.length ?? null,
+      withoutCount: agendaClientsWithoutMeeting?.length ?? null,
+      withClients: agendaClientsWithMeeting,
+      withoutClients: agendaClientsWithoutMeeting,
+      coveragePct: agendaClientsWithMeeting ? percent(agendaClientsWithMeeting.length, activeNames.length) : null,
+      source: 'Google Calendar · iCal · próximos 30 dias',
+      period: `${capturedAt.toISOString().slice(0, 10)} → ${new Date(agendaEndMs).toISOString().slice(0, 10)}`,
+      message: agendaMapped ? null : `Agenda indisponível ou não configurada (${calendarQuality?.status || 'not-configured'}).`
     },
     onboarding: {
       withCount: onboardingClients.length,
@@ -242,6 +264,50 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
   const missingDashboard = bottlenecks.missingDashboard || [];
   const readiness = bottlenecks.quantitative || {};
   const delayedDemands = demands.length;
+  const openDemandItems = Array.isArray(demands.openDemandItems) ? demands.openDemandItems : [];
+  const productionByKey = new Map(ranking.filter(row => row?.name).map(row => [normalizeMatchLabel(row.name), row]));
+  const demandGroups = new Map();
+  openDemandItems.filter(item => item?.cliente).forEach(item => {
+    const key = normalizeMatchLabel(item.cliente);
+    if (!key) return;
+    if (!demandGroups.has(key)) demandGroups.set(key, { name: item.cliente, items: [] });
+    demandGroups.get(key).items.push(item);
+  });
+  const relationKeys = new Set([...productionByKey.keys(), ...demandGroups.keys()]);
+  const sourceRelationDetails = [...relationKeys].map(key => {
+    const production = productionByKey.get(key);
+    const demand = demandGroups.get(key);
+    const productionItems = production?.details || [];
+    const demandItems = demand?.items || [];
+    return {
+      client: production?.name || demand?.name || key,
+      productionOpen: production?.open || 0,
+      productionDelayed: (production?.delayedPrazo || 0) + (production?.delayedVeiculacao || 0),
+      productionItemIds: productionItems.map(item => item.id).filter(Boolean),
+      demandOpen: demandItems.length,
+      demandDelayed: demandItems.filter(item => item.isDelayed).length,
+      demandItemIds: demandItems.map(item => item.id).filter(Boolean),
+      inProduction: Boolean(production),
+      inDemand: Boolean(demand)
+    };
+  }).sort((a, b) => (b.productionDelayed + b.demandDelayed) - (a.productionDelayed + a.demandDelayed) || b.productionOpen + b.demandOpen - (a.productionOpen + a.demandOpen));
+  const overlapDetails = sourceRelationDetails.filter(item => item.inProduction && item.inDemand);
+  const sourceRelation = {
+    productionOpenClients: sourceRelationDetails.filter(item => item.inProduction).map(item => item.client),
+    demandOpenClients: sourceRelationDetails.filter(item => item.inDemand).map(item => item.client),
+    overlapClients: overlapDetails.map(item => item.client),
+    productionOnlyClients: sourceRelationDetails.filter(item => item.inProduction && !item.inDemand).map(item => item.client),
+    demandOnlyClients: sourceRelationDetails.filter(item => item.inDemand && !item.inProduction).map(item => item.client),
+    overlapDetails,
+    counts: {
+      productionOpenClients: sourceRelationDetails.filter(item => item.inProduction).length,
+      demandOpenClients: sourceRelationDetails.filter(item => item.inDemand).length,
+      overlapClients: overlapDetails.length,
+      productionOnlyClients: sourceRelationDetails.filter(item => item.inProduction && !item.inDemand).length,
+      demandOnlyClients: sourceRelationDetails.filter(item => item.inDemand && !item.inProduction).length
+    },
+    note: 'A interseção mostra clientes com itens abertos nas duas fontes. Ela não altera automaticamente o score; serve para separar sinais únicos de possível sobreposição.'
+  };
   const executionGap = buildExecutionGap({
     activePortfolio: bottlenecks.activePortfolio || [],
     clientsWithContent: ranking.map(row => row.name),
@@ -261,6 +327,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     executionGap,
     meetingLogs,
     calendar3MonthCoverage: bottlenecks.calendar3MonthCoverage,
+    calendarEvents: calendarSignals.matchedEvents || [],
+    calendarQuality: calendarSignals.quality || null,
     generatedAt
   });
   const stalledClients = new Set(executionGap.stalled.map(client => client.client));
@@ -270,18 +338,26 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
   const dashboardCoveragePct = readiness.dashboardCoveragePct ?? null;
   const planningSystemicGap = missingPlanning.length > 0 && eligibleForReadiness > 0 && (planningCoveragePct === 0 || missingPlanning.length >= eligibleForReadiness);
   const dashboardSystemicGap = missingDashboard.length > 0 && eligibleForReadiness > 0 && (dashboardCoveragePct === 0 || missingDashboard.length >= eligibleForReadiness);
+  const protectedClient = client => {
+    const reasons = [];
+    if (stalledClients.has(client)) reasons.push('cliente sem execução');
+    if (onboardingClients.has(client)) reasons.push('fase de entrada');
+    return { client, reason: reasons.join(' + ') || 'regra de não duplicação' };
+  };
+  const planningProtectedClients = missingPlanning.filter(client => stalledClients.has(client) || onboardingClients.has(client)).map(protectedClient);
+  const dashboardProtectedClients = missingDashboard.filter(client => stalledClients.has(client) || onboardingClients.has(client)).map(protectedClient);
   const planningClients = missingPlanning.filter(client => !stalledClients.has(client) && !onboardingClients.has(client));
   const dashboardClients = missingDashboard.filter(client => !stalledClients.has(client) && !onboardingClients.has(client));
   const readinessDeductions = [];
   if (planningSystemicGap) {
-    readinessDeductions.push({ id: 'planning-source-gap', kind: 'planning', label: 'Planejamento da carteira sem preenchimento', count: missingPlanning.length, penalizedCount: 1, pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: missingPlanning });
+    readinessDeductions.push({ id: 'planning-source-gap', kind: 'planning', label: 'Planejamento da carteira sem preenchimento', count: missingPlanning.length, observedCount: missingPlanning.length, penalizedCount: 1, protectedCount: 0, protectedClients: [], pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: missingPlanning, observedClients: missingPlanning, explanation: 'Uma penalização única pela lacuna sistêmica da fonte.' });
   } else if (planningClients.length > 0) {
-    readinessDeductions.push({ id: 'missing-planning', kind: 'planning', label: 'Clientes sem planejamento válido', count: planningClients.length, penalizedCount: planningClients.length, pointsPerItem: 3, points: planningClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: planningClients });
+    readinessDeductions.push({ id: 'missing-planning', kind: 'planning', label: 'Clientes sem planejamento válido', count: planningClients.length, observedCount: missingPlanning.length, penalizedCount: planningClients.length, protectedCount: planningProtectedClients.length, protectedClients: planningProtectedClients, pointsPerItem: 3, points: planningClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Planejamento', affectedClients: planningClients, observedClients: missingPlanning, explanation: 'Clientes em onboarding ou sem execução ficam protegidos para evitar dupla penalização.' });
   }
   if (dashboardSystemicGap) {
-    readinessDeductions.push({ id: 'dashboard-source-gap', kind: 'dashboard', label: 'Dashboard/calendário da carteira sem preenchimento', count: missingDashboard.length, penalizedCount: 1, pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: missingDashboard });
+    readinessDeductions.push({ id: 'dashboard-source-gap', kind: 'dashboard', label: 'Dashboard/calendário da carteira sem preenchimento', count: missingDashboard.length, observedCount: missingDashboard.length, penalizedCount: 1, protectedCount: 0, protectedClients: [], pointsPerItem: 5, points: 5, mode: 'source_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: missingDashboard, observedClients: missingDashboard, explanation: 'Uma penalização única pela lacuna sistêmica da fonte.' });
   } else if (dashboardClients.length > 0) {
-    readinessDeductions.push({ id: 'missing-dashboard', kind: 'dashboard', label: 'Clientes sem dashboard/calendário válido', count: dashboardClients.length, penalizedCount: dashboardClients.length, pointsPerItem: 3, points: dashboardClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: dashboardClients });
+    readinessDeductions.push({ id: 'missing-dashboard', kind: 'dashboard', label: 'Clientes sem dashboard/calendário válido', count: dashboardClients.length, observedCount: missingDashboard.length, penalizedCount: dashboardClients.length, protectedCount: dashboardProtectedClients.length, protectedClients: dashboardProtectedClients, pointsPerItem: 3, points: dashboardClients.length * 3, mode: 'client_gap', source: 'Monday.com · Gestão de Clientes · Dashboard/calendário', affectedClients: dashboardClients, observedClients: missingDashboard, explanation: 'Clientes em onboarding ou sem execução ficam protegidos para evitar dupla penalização.' });
   }
   const clientRisks = buildClientRisks(ranking);
   const totalOpen = sum(ranking, 'open');
@@ -437,6 +513,7 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     },
     portfolioExecution: executionGap,
     activeItems: posts.activeItems || ranking.flatMap(row => (row.details || []).map(item => ({ ...item, client: row.name }))),
+    sourceRelation,
     calendarSignals,
     delayDetails: delayDetails,
     productivity,

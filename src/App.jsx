@@ -205,6 +205,7 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh,
 }
 
 function ReadinessKpiBand({ snapshot, onSelect }) {
+  const [expanded, setExpanded] = useState(false);
   const readiness = snapshot?.portfolioReadiness || {};
   const kpis = readiness.kpis || {};
   const eligible = Number(kpis.eligibleClients ?? readiness.eligibleClients) || 0;
@@ -212,18 +213,22 @@ function ReadinessKpiBand({ snapshot, onSelect }) {
   const meetings = kpis.meetingsCurrentMonth || { withCount: null, withoutCount: null, coveragePct: null, withClients: [], withoutClients: [], month: null, source: 'Monday.com · Reuniões · data' };
   const onboarding = kpis.onboarding || { withCount: Number(snapshot?.portfolioExecution?.onboarding?.length) || 0, withoutCount: eligible || null, coveragePct: null, withClients: [], withoutClients: [], windowDays: snapshot?.portfolioExecution?.onboardingWindowDays || 30, source: 'Monday.com · created_at + ausência de execução' };
   const calendar = kpis.calendar3Months || { mapped: false, completeCount: null, missingCount: null, coveragePct: null, completeClients: null, missingClients: null, source: 'Monday.com · três colunas mensais de calendário', message: 'Três colunas mensais ainda não mapeadas.' };
+  const agenda = kpis.agendaNext30Days || { mapped: false, withCount: null, withoutCount: null, coveragePct: null, withClients: null, withoutClients: null, source: 'Google Calendar · iCal · próximos 30 dias', period: null, message: 'Agenda indisponível ou não configurada.' };
   const monthLabel = meetings.month ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${meetings.month}-01T00:00:00Z`)) : 'mês atual';
   const cards = [
     { id: 'readiness-planning', label: 'PLANEJAMENTO', value: planning.withCount === null ? 'N/D' : formatNumber(planning.withCount), detail: planning.withCount === null ? 'campo não disponível' : `${formatNumber(planning.withoutCount)} sem planejamento · ${formatNumber(eligible)} ativos`, progress: planning.coveragePct, tone: 'warning', title: 'Clientes com planejamento identificado no Monday.', explanation: `${formatNumber(planning.withCount ?? 0)} clientes com planejamento e ${formatNumber(planning.withoutCount ?? 0)} sem planejamento. Fonte: ${planning.source}.`, action: 'Abrir clientes com e sem planejamento' },
-    { id: 'readiness-meetings', label: 'REUNIÕES NO MÊS ATUAL', value: meetings.withCount === null ? 'N/D' : formatNumber(meetings.withCount), detail: meetings.withCount === null ? 'histórico de reuniões indisponível' : `${formatNumber(meetings.withoutCount)} sem reunião · ${monthLabel}`, progress: meetings.coveragePct, tone: 'cyan', title: 'Clientes com reunião registrada no mês atual.', explanation: meetings.withCount === null ? 'O board de Reuniões ainda não respondeu nesta leitura.' : `${formatNumber(meetings.withCount)} clientes têm pelo menos uma reunião em ${monthLabel}; ${formatNumber(meetings.withoutCount)} não têm reunião registrada.`, action: 'Abrir clientes com e sem reunião' },
+    { id: 'readiness-meetings', label: 'REUNIÕES NO MÊS ATUAL · MONDAY', value: meetings.withCount === null ? 'N/D' : formatNumber(meetings.withCount), detail: meetings.withCount === null ? 'board de reuniões indisponível' : `${formatNumber(meetings.withoutCount)} sem reunião · ${monthLabel}`, progress: meetings.coveragePct, tone: 'cyan', title: 'Clientes com reunião registrada no board Reuniões do Monday no mês atual.', explanation: meetings.withCount === null ? 'O board de Reuniões ainda não respondeu nesta leitura.' : `${formatNumber(meetings.withCount)} clientes têm pelo menos uma reunião no board Reuniões em ${monthLabel}; ${formatNumber(meetings.withoutCount)} não têm registro nesse board.`, action: 'Abrir clientes com e sem reunião no Monday' },
+    { id: 'readiness-agenda', label: 'AGENDA · PRÓXIMOS 30 DIAS', value: agenda.mapped ? formatNumber(agenda.withCount) : 'N/D', detail: agenda.mapped ? `${formatNumber(agenda.withoutCount)} sem reunião na Agenda` : 'iCal indisponível', progress: agenda.mapped ? agenda.coveragePct : null, tone: agenda.mapped ? 'cyan' : 'supporting', title: 'Clientes com evento correspondente no Google Calendar nos próximos 30 dias.', explanation: agenda.mapped ? `${formatNumber(agenda.withCount)} clientes têm evento correspondente na Agenda; ${formatNumber(agenda.withoutCount)} não têm evento correspondente no período.` : `${agenda.message || 'Google Calendar indisponível nesta leitura.'}`, action: 'Abrir clientes com e sem reunião na Agenda' },
     { id: 'readiness-onboarding', label: 'FASE DE ENTRADA', value: formatNumber(onboarding.withCount), detail: `${formatNumber(onboarding.withoutCount)} fora da entrada · janela ${formatNumber(onboarding.windowDays)}D`, progress: eligible ? (onboarding.withCount / eligible) * 100 : null, tone: 'cyan', title: 'Clientes em implantação segundo a janela de entrada do Nexus.', explanation: `${formatNumber(onboarding.withCount)} clientes estão na janela de implantação de ${formatNumber(onboarding.windowDays)} dias e são separados do indicador de cliente sem execução.`, action: 'Abrir clientes em fase de entrada' },
     { id: 'readiness-calendar', label: 'CALENDÁRIO · 3 MESES', value: calendar.mapped ? formatNumber(calendar.completeCount) : 'N/D', detail: calendar.mapped ? `${formatNumber(calendar.missingCount)} sem 3 meses · ${formatNumber(eligible)} ativos` : '3 colunas não mapeadas no Monday', progress: calendar.mapped ? calendar.coveragePct : null, tone: calendar.mapped ? 'warning' : 'supporting', title: 'Clientes com três meses de calendário preenchidos no Monday.', explanation: calendar.mapped ? `${formatNumber(calendar.completeCount)} clientes têm as três colunas mensais preenchidas e ${formatNumber(calendar.missingCount)} não têm cobertura completa.` : `${calendar.message || 'Mapeie três IDs de colunas mensais para ativar esta leitura.'}`, action: 'Abrir cobertura de calendário' }
   ];
 
   return (
     <section className="readiness-kpi-band" aria-label="KPIs de prontidão e relacionamento da carteira">
-      <div className="readiness-kpi-header"><div><span className="executive-section-kicker">PRONTIDÃO · RELACIONAMENTO</span><h2>O que está preparado antes da execução?</h2></div><span className="readiness-kpi-note">CLIENTES · FONTES EXECUTIVAS</span></div>
-      <div className="readiness-kpi-grid">
+      <div className="readiness-kpi-header"><div><span className="executive-section-kicker">PRONTIDÃO · RELACIONAMENTO</span><h2>O que está preparado antes da execução?</h2></div><div className="readiness-kpi-header-actions"><span className="readiness-kpi-note">CLIENTES · FONTES EXECUTIVAS</span><button type="button" className="readiness-kpi-toggle" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'RECOLHER KPIs' : 'ABRIR KPIs DE PRONTIDÃO'} <span aria-hidden="true">{expanded ? '↑' : '↓'}</span></button></div></div>
+      {!expanded ? <div className="readiness-kpi-compact" aria-label="Resumo compacto de prontidão">
+        {cards.map(card => <button type="button" className={`readiness-kpi-chip ${card.tone}`} key={card.id} onClick={() => onSelect(card.id)}><span>{card.label}</span><strong>{card.value}</strong><small>{card.detail}</small></button>)}
+      </div> : <div className="readiness-kpi-grid">
         {cards.map(card => <article className={`executive-kpi-card supporting ${card.tone}`} key={card.id} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
           <span className="executive-kpi-label">{card.label}</span>
           <strong className="executive-kpi-value">{card.value}</strong>
@@ -232,7 +237,7 @@ function ReadinessKpiBand({ snapshot, onSelect }) {
           <span className="executive-kpi-click">CLIQUE PARA INVESTIGAR ↗</span>
           <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
         </article>)}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -255,11 +260,18 @@ function MissionBoard({ snapshot, onSelect }) {
   };
   const renderDeduction = deduction => {
     const isSystemic = deduction.mode === 'source_gap';
+    const observedCount = Number(deduction.observedCount ?? deduction.count) || 0;
+    const penalizedCount = Number(deduction.penalizedCount ?? deduction.count) || 0;
+    const protectedCount = Number(deduction.protectedCount) || 0;
+    const populationLabel = isSystemic
+      ? `${formatNumber(observedCount)} clientes observados · 1 penalização sistêmica`
+      : `${formatNumber(observedCount)} observados · ${formatNumber(penalizedCount)} penalizados${protectedCount ? ` · ${formatNumber(protectedCount)} protegidos` : ''}`;
+    const ruleLabel = isSystemic ? '-5 pts no total · penalização única da fonte' : `${formatNumber(penalizedCount)} × -${formatNumber(deduction.pointsPerItem)} pts`;
     return (
       <button type="button" className={`score-ledger-row ${isSystemic ? 'systemic' : ''}`} key={deduction.id} onClick={() => openDeduction(deduction)}>
         <span className="score-ledger-row-copy">
           <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts perdidos</b></span>
-          <small><strong>{formatNumber(deduction.count)} {isSystemic ? 'clientes afetados' : 'itens afetados'}</strong> <i>·</i> {isSystemic ? '-5 pts no total · penalização única da fonte' : `-${formatNumber(deduction.pointsPerItem)} pts por item`} <i>·</i> <b>-{formatNumber(deduction.points)} pts no total</b> <i>·</i> {deduction.source}</small>
+          <small><strong>{populationLabel}</strong> <i>·</i> {ruleLabel} <i>·</i> <b>-{formatNumber(deduction.points)} pts no total</b> <i>·</i> {deduction.source}</small>
         </span>
         <span className="score-ledger-row-action">ABRIR CAUSA ↗</span>
       </button>
@@ -648,6 +660,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
   const stalled = Number(execution.stalled?.length || 0);
   const delayedDemands = Number(summary.delayedDemands) || 0;
   const readiness = snapshot?.portfolioReadiness || {};
+  const sourceRelation = snapshot?.sourceRelation || { counts: {}, overlapDetails: [], note: 'Relacionamento entre fontes ainda não disponível.' };
   const readinessDeduction = (readiness.scoreDeductions || []).find(deduction => deduction.id === panel.readinessId) || readiness.scoreDeductions?.[0];
   const readinessQuality = readinessDeduction?.kind === 'planning' ? readiness.quality?.planning : readiness.quality?.dashboard;
   const readinessQualityLabel = readinessQuality?.classification === 'source-empty-or-unmapped'
@@ -658,11 +671,16 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         ? 'COBERTURA COMPLETA'
         : 'QUALIDADE NÃO INFORMADA';
   const readinessClients = readinessDeduction?.affectedClients || [];
+  const readinessObservedClients = readinessDeduction?.observedClients || readinessClients;
+  const readinessProtectedClients = readinessDeduction?.protectedClients || [];
   const visibleReadinessClients = showAll ? readinessClients : readinessClients.slice(0, 5);
+  const visibleReadinessObservedClients = showAll ? readinessObservedClients : readinessObservedClients.slice(0, 5);
+  const visibleReadinessProtectedClients = showAll ? readinessProtectedClients : readinessProtectedClients.slice(0, 5);
   const readinessKpis = readiness.kpis || {};
   const readinessKpi = {
     'readiness-planning': readinessKpis.planning,
     'readiness-meetings': readinessKpis.meetingsCurrentMonth,
+    'readiness-agenda': readinessKpis.agendaNext30Days,
     'readiness-onboarding': readinessKpis.onboarding,
     'readiness-calendar': readinessKpis.calendar3Months
   }[panel.id];
@@ -679,7 +697,8 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
     publication: { eyebrow: 'KPI · PRODUÇÃO DE CONTEÚDO', title: `${publicationDelays.length} veiculações vencidas`, subtitle: 'Fonte: board Produção de Conteúdo · prazo usado: data de veiculação. São itens que ultrapassaram a data prevista no Monday.', accent: 'warning' },
     readiness: { eyebrow: 'KPI · PRONTIDÃO EXECUTIVA', title: readinessDeduction?.label || 'Lacuna de prontidão', subtitle: 'A investigação mostra se o problema está na fonte inteira ou em clientes específicos, sem contar o mesmo cliente duas vezes.', accent: readinessDeduction?.kind === 'dashboard' ? 'cyan' : 'warning' },
     'readiness-planning': { eyebrow: 'KPI · PLANEJAMENTO', title: 'Quais clientes têm ou não têm planejamento?', subtitle: 'Fonte: Monday.com · Gestão de Clientes · Planejamento.', accent: 'warning' },
-    'readiness-meetings': { eyebrow: 'KPI · REUNIÕES', title: 'Quais clientes tiveram reunião no mês atual?', subtitle: 'Fonte: Monday.com · Reuniões · coluna data. A leitura usa o mês da captura atual.', accent: 'cyan' },
+    'readiness-meetings': { eyebrow: 'KPI · REUNIÕES · MONDAY', title: 'Quais clientes tiveram reunião no mês atual?', subtitle: 'Fonte: Monday.com · Reuniões · coluna data. A leitura usa o mês da captura atual.', accent: 'cyan' },
+    'readiness-agenda': { eyebrow: 'KPI · AGENDA · GOOGLE CALENDAR', title: 'Quais clientes têm reunião na Agenda nos próximos 30 dias?', subtitle: 'Fonte: Google Calendar · iCal · evento correspondido pelo nome do cliente. Esta fonte é separada do board Reuniões do Monday.', accent: 'cyan' },
     'readiness-onboarding': { eyebrow: 'KPI · FASE DE ENTRADA', title: 'Quais clientes estão em fase de entrada?', subtitle: 'A fase de entrada usa a janela de implantação do Nexus e separa clientes novos do risco de inatividade.', accent: 'cyan' },
     'readiness-calendar': { eyebrow: 'KPI · CALENDÁRIO', title: 'Quais clientes têm três meses de calendário?', subtitle: readinessKpi?.mapped ? 'Fonte: três colunas mensais configuradas no Monday.' : 'A leitura fica N/D até que três IDs de colunas mensais sejam mapeados no Monday.', accent: readinessKpi?.mapped ? 'warning' : 'cyan' }
   }[panel.id] || { eyebrow: 'KPI · INVESTIGAÇÃO', title: 'Detalhamento do KPI', subtitle: 'Leitura executiva baseada no snapshot atual.', accent: 'cyan' };
@@ -732,29 +751,30 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
 
         {readinessKpi ? <>
           <div className="kpi-score-explanation"><div><span>COM O SINAL</span><strong>{readinessKpi.withCount == null ? 'N/D' : formatNumber(readinessKpi.withCount)}</strong></div><div><span>SEM O SINAL</span><strong>{readinessKpi.withoutCount == null ? 'N/D' : formatNumber(readinessKpi.withoutCount)}</strong></div><div><span>COBERTURA</span><strong>{formatPct(readinessKpi.coveragePct)}</strong></div></div>
-          <div className="readiness-quality-callout"><div><span>FONTE</span><strong>{readinessKpi.source || 'N/D'}</strong></div><div><span>PERÍODO/CAMPO</span><strong>{readinessKpi.month || readinessKpi.columnIds?.join(', ') || 'N/D'}</strong></div><div><span>CLIENTES LISTADOS</span><strong>{readinessKpi.mapped === false ? 'N/D' : formatNumber(readinessKpiClients.length)}</strong></div></div>
+          <div className="readiness-quality-callout"><div><span>FONTE</span><strong>{readinessKpi.source || 'N/D'}</strong></div><div><span>PERÍODO/CAMPO</span><strong>{readinessKpi.period || readinessKpi.month || readinessKpi.columnIds?.join(', ') || 'N/D'}</strong></div><div><span>CLIENTES LISTADOS</span><strong>{readinessKpi.mapped === false ? 'N/D' : formatNumber(readinessKpiClients.length)}</strong></div></div>
           {readinessKpi.mapped === false ? <div className="investigation-callout"><span>QUALIDADE DA FONTE</span><p>{readinessKpi.message || 'A cobertura de três meses ainda não está mapeada no Monday. O Nexus não converte ausência de coluna em falso zero.'}</p></div> : <>
             <div className="kpi-investigation-section-title">CLIENTES COM O SINAL · {formatNumber(readinessKpiWithClients.length)}</div>
-            <div className="kpi-client-grid">{readinessKpiWithClients.map(client => <div className="kpi-client-card" key={`with-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Em fase de entrada' : 'Campo/reunião identificado'}</span></div></div>)}</div>
+            <div className="kpi-client-grid">{readinessKpiWithClients.map(client => <div className="kpi-client-card" key={`with-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Em fase de entrada' : panel.id === 'readiness-agenda' ? 'Evento correspondente na Agenda' : 'Campo/reunião identificado'}</span></div></div>)}</div>
             <div className="kpi-investigation-section-title">CLIENTES SEM O SINAL · {formatNumber(readinessKpiWithoutClients.length)}</div>
-            <div className="kpi-client-grid">{readinessKpiWithoutClients.slice(0, showAll ? readinessKpiWithoutClients.length : 5).map(client => <div className="kpi-client-card" key={`without-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Fora da janela de entrada' : 'Sem evidência no período/campo'}</span></div></div>)}</div>
+            <div className="kpi-client-grid">{readinessKpiWithoutClients.slice(0, showAll ? readinessKpiWithoutClients.length : 5).map(client => <div className="kpi-client-card" key={`without-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Fora da janela de entrada' : panel.id === 'readiness-agenda' ? 'Sem evento correspondente nos próximos 30 dias' : 'Sem evidência no período/campo'}</span></div></div>)}</div>
             {readinessKpiWithoutClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessKpiWithoutClients.length - 5})`}</button> : null}
           </>}
         </> : null}
 
         {panel.id === 'readiness' ? <>
-           <div className="kpi-score-explanation"><div><span>CLIENTES SINALIZADOS</span><strong>{formatNumber(readinessDeduction?.count || readinessClients.length)}</strong></div><div><span>DESCONTO NO PLACAR</span><strong>-{formatNumber(readinessDeduction?.points || 0)} pts</strong></div></div>
+           <div className="kpi-score-explanation"><div><span>CLIENTES OBSERVADOS</span><strong>{formatNumber(readinessDeduction?.observedCount ?? readinessObservedClients.length)}</strong></div><div><span>ENTRAM NO SCORE</span><strong>{readinessDeduction?.mode === 'source_gap' ? '1 fonte' : formatNumber(readinessDeduction?.penalizedCount ?? readinessClients.length)}</strong></div><div><span>PROTEGIDOS</span><strong>{formatNumber(readinessDeduction?.protectedCount || 0)}</strong></div><div><span>DESCONTO NO PLACAR</span><strong>-{formatNumber(readinessDeduction?.points || 0)} pts</strong></div></div>
            <div className="readiness-quality-callout"><div><span>QUALIDADE DA FONTE</span><strong>{readinessQualityLabel}</strong></div><div><span>CAMPO MONDAY</span><strong>{readinessQuality?.columnId || 'não informado'}</strong></div><div><span>COBERTURA OBSERVADA</span><strong>{formatPct(readinessQuality?.coveragePct)} · {formatNumber(readinessQuality?.populatedClients)} preenchidos de {formatNumber(readinessQuality?.eligibleClients)}</strong></div></div>
-           <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural. Antes de tratar o desconto como falha operacional, valide se o campo está correto e se a fonte realmente deveria estar preenchida.' : 'A lacuna é parcial. O Nexus aplica pontos por cliente afetado, excluindo clientes sem execução e onboarding para evitar dupla penalização.'}</p></div>
-          <div className="kpi-investigation-section-title">CLIENTES AFETADOS · {readinessClients.length}</div>
-           <div className="kpi-client-grid">{visibleReadinessClients.map(client => <div className="kpi-client-card" key={client}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span><b className="evidence-penalty-note">{readinessDeduction?.mode === 'source_gap' ? `parte do desconto sistêmico de -${formatNumber(readinessDeduction?.points || 0)} pts` : `-${formatNumber(readinessDeduction?.pointsPerItem || 0)} pts neste cliente`}</b></div></div>)}</div>
-          {readinessClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessClients.length - 5})`}</button> : null}
+           <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural.' : `${readinessDeduction?.observedCount ?? readinessObservedClients.length} clientes foram encontrados sem o campo; ${readinessDeduction?.penalizedCount ?? readinessClients.length} entram no score. ${readinessDeduction?.protectedCount || 0} ficam protegidos por ${readinessDeduction?.explanation || 'regra de não duplicação.'}`}</p></div>
+           <div className="kpi-investigation-section-title">CLIENTES OBSERVADOS SEM O CAMPO · {readinessObservedClients.length}</div>
+           <div className="kpi-client-grid">{visibleReadinessObservedClients.map(client => { const isPenalized = readinessClients.includes(client); const protectedClient = readinessProtectedClients.find(item => item.client === client); return <div className="kpi-client-card" key={`observed-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span><b className="evidence-penalty-note">{isPenalized ? `ENTRA NO SCORE · -${formatNumber(readinessDeduction?.pointsPerItem || 0)} pts` : `PROTEGIDO · ${protectedClient?.reason || 'regra de não duplicação'}`}</b></div></div>; })}</div>
+           {readinessObservedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessObservedClients.length - 5})`}</button> : null}
         </> : null}
 
         {panel.id === 'health' ? <>
           <div className="kpi-score-explanation"><div><span>SCORE BRUTO ATUAL</span><strong>{formatPoints(score)}</strong></div><div><span>PONTOS RECUPERÁVEIS</span><strong>{formatPoints(snapshot?.portfolioStability?.recoveryPointsAvailable || 0)}</strong></div></div>
           <div className="investigation-callout"><span>COMO O PLACAR FOI COMPOSTO</span><p>{scoreComposition(snapshot)}</p></div>
-          <div className="kpi-factor-grid"><div><strong>-{formatNumber(delayedInternal * 2)} pts</strong><span>{formatNumber(delayedInternal)} itens de Produção de Conteúdo × -2 pts · prazo interno</span></div><div><strong>-{formatNumber(delayedPublication * 5)} pts</strong><span>{formatNumber(delayedPublication)} itens de Produção de Conteúdo × -5 pts · veiculação</span></div><div><strong>-{formatNumber(stalled * 5)} pts</strong><span>{formatNumber(stalled)} clientes sem item em Produção de Conteúdo e sem Solicitação de Demanda × -5 pts</span></div><div><strong>-{formatNumber(delayedDemands * 2)} pts</strong><span>{formatNumber(delayedDemands)} Solicitações de Demandas vencidas × -2 pts</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)} pts</strong><span>{formatNumber(deduction.count)} afetados · desconto total da fonte</span></div>)}</div>
+          <div className="kpi-factor-grid"><div><strong>-{formatNumber(delayedInternal * 2)} pts</strong><span>{formatNumber(delayedInternal)} itens de Produção de Conteúdo × -2 pts · prazo interno</span></div><div><strong>-{formatNumber(delayedPublication * 5)} pts</strong><span>{formatNumber(delayedPublication)} itens de Produção de Conteúdo × -5 pts · veiculação</span></div><div><strong>-{formatNumber(stalled * 5)} pts</strong><span>{formatNumber(stalled)} clientes sem item em Produção de Conteúdo e sem Solicitação de Demanda × -5 pts</span></div><div><strong>-{formatNumber(delayedDemands * 2)} pts</strong><span>{formatNumber(delayedDemands)} Solicitações de Demandas vencidas × -2 pts</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)} pts</strong><span>{deduction.mode === 'source_gap' ? `${formatNumber(deduction.observedCount ?? deduction.count)} observados · 1 penalização sistêmica` : `${formatNumber(deduction.observedCount ?? deduction.count)} observados · ${formatNumber(deduction.penalizedCount ?? deduction.count)} penalizados · ${formatNumber(deduction.protectedCount || 0)} protegidos`}</span></div>)}</div>
+          <div className="source-relation-callout"><div className="source-relation-heading"><span>RELAÇÃO ENTRE FONTES</span><strong>{formatNumber(sourceRelation.counts?.overlapClients || 0)} clientes com itens nas duas fontes</strong></div><p>{sourceRelation.note}</p><div className="source-relation-grid"><div><strong>{formatNumber(sourceRelation.counts?.productionOpenClients || 0)}</strong><span>clientes com Produção de Conteúdo aberta</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOpenClients || 0)}</strong><span>clientes com Solicitações abertas</span></div><div><strong>{formatNumber(sourceRelation.counts?.productionOnlyClients || 0)}</strong><span>somente Produção</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOnlyClients || 0)}</strong><span>somente Solicitações</span></div></div>{sourceRelation.overlapDetails?.length ? <><div className="kpi-investigation-section-title">POSSÍVEL SOBREPOSIÇÃO · {sourceRelation.overlapDetails.length} CLIENTES</div><div className="source-relation-list">{sourceRelation.overlapDetails.slice(0, showAll ? sourceRelation.overlapDetails.length : 5).map(item => <div className="source-relation-item" key={item.client}><strong>{item.client}</strong><span>Produção: {formatNumber(item.productionOpen)} abertos · {formatNumber(item.productionDelayed)} atrasados · Demandas: {formatNumber(item.demandOpen)} abertas · {formatNumber(item.demandDelayed)} vencidas</span></div>)}</div>{sourceRelation.overlapDetails.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${sourceRelation.overlapDetails.length - 5})`}</button> : null}</> : null}</div>
           <p className="investigation-footnote">Este proxy não mede receita, satisfação ou produtividade individual. Ele sinaliza que a pressão operacional ultrapassou o limite da escala atual.</p>
         </> : null}
 

@@ -26,20 +26,54 @@ export default function AnalystStation({ snapshot, onExit }) {
   const [panelError, setPanelError] = useState('');
   const [panelPageError, setPanelPageError] = useState('');
   const [panelLoadingMore, setPanelLoadingMore] = useState(false);
+  const [panelRefreshing, setPanelRefreshing] = useState(false);
   const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '' });
+
+  const fetchPanelSummary = async ({ wait = false } = {}) => {
+    const response = await fetch(`/api/executive/vybe-panel?limit=200${wait ? '&wait=1' : ''}`, { cache: 'no-store' });
+    return response.ok
+      ? response.json()
+      : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.')));
+  };
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/executive/vybe-panel?limit=200')
-      .then(response => response.ok ? response.json() : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.'))))
-      .then(payload => {
-        if (!cancelled) setPanelSnapshot(payload);
-      })
-      .catch(error => {
+    const loadPanel = async () => {
+      try {
+        const payload = await fetchPanelSummary();
+        if (cancelled) return;
+        setPanelSnapshot(payload);
+        if (payload.cache?.pending) {
+          window.setTimeout(async () => {
+            try {
+              const freshPayload = await fetchPanelSummary({ wait: true });
+              if (!cancelled) setPanelSnapshot(freshPayload);
+            } catch (error) {
+              if (!cancelled) setPanelError(error.message);
+            }
+          }, 1200);
+        }
+      } catch (error) {
         if (!cancelled) setPanelError(error.message);
-      });
+      }
+    };
+    loadPanel();
     return () => { cancelled = true; };
   }, []);
+
+  const refreshPanel = async () => {
+    if (panelRefreshing) return;
+    setPanelRefreshing(true);
+    setPanelError('');
+    try {
+      const payload = await fetchPanelSummary({ wait: true });
+      setPanelSnapshot(payload);
+    } catch (error) {
+      setPanelError(error.message);
+    } finally {
+      setPanelRefreshing(false);
+    }
+  };
 
   const loadMorePanel = async () => {
     const cursor = panelSnapshot?.pagination?.nextCursor;
@@ -121,8 +155,9 @@ export default function AnalystStation({ snapshot, onExit }) {
           <>
             <div className="analyst-source-summary" aria-live="polite">
               <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
-              {panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
-            </div>
+               {panelSnapshot.cache?.pending ? ' · atualização em segundo plano' : panelSnapshot.cache?.stale ? ' · usando cache anterior' : panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
+               <button type="button" className="list-expand analyst-panel-refresh" onClick={refreshPanel} disabled={panelRefreshing}>{panelRefreshing ? 'ATUALIZANDO PAINEL…' : 'ATUALIZAR CONTEXTO DO PAINEL'}</button>
+             </div>
             {panelSnapshot.warning ? <div className="analyst-source-warning" role="status" aria-live="polite">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
             {panelPageError ? <div className="analyst-source-warning" role="status" aria-live="polite">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
             <div className="analyst-source-groups">

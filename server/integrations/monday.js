@@ -629,6 +629,7 @@ class MondayIntegration {
     });
 
     const delayedDemands = [];
+    const openDemandItems = [];
     // Demanda aberta é diferente de demanda atrasada: um cliente com demandas no
     // prazo está sendo atendido, e não pode ser lido como parado só porque nada
     // dele venceu ainda.
@@ -657,23 +658,25 @@ class MondayIntegration {
 
       if (!isDone && status !== '') {
         if (cliente) clientsWithOpenDemand.add(cliente);
+        const openDemand = {
+          id: item.id,
+          name: item.name,
+          quadro: item.group ? item.group.title : 'Sem Quadro',
+          cliente,
+          status,
+          prazo: prazoStr,
+          isDelayed: isBeforeToday(prazoStr, today)
+        };
+        openDemandItems.push(openDemand);
         // Mesma régua dos posts: demanda com prazo hoje ainda não está atrasada.
-        if (isBeforeToday(prazoStr, today)) {
-          delayedDemands.push({
-            id: item.id,
-            name: item.name,
-            quadro: item.group ? item.group.title : 'Sem Quadro',
-            cliente,
-            status,
-            prazo: prazoStr
-          });
-        }
+        if (openDemand.isDelayed) delayedDemands.push(openDemand);
       }
     });
 
     // O array continua sendo o retorno principal para não quebrar quem só conta
     // atrasos; a carteira com demanda aberta viaja junto como propriedade.
     delayedDemands.clientsWithOpenDemand = [...clientsWithOpenDemand];
+    delayedDemands.openDemandItems = openDemandItems;
     delayedDemands.pagination = pagination;
     return delayedDemands;
   }

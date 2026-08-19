@@ -4,8 +4,9 @@ const url = process.env.VYBE_PREVIEW_URL || 'https://5173-iez9v8jz7x88hqzi5jtco-
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
 const page = await context.newPage();
-await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-await page.waitForTimeout(4000);
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
+await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
 
 const report = await page.evaluate(() => {
   const body = document.body;
@@ -23,7 +24,7 @@ const report = await page.evaluate(() => {
     ownerRows: rows,
     hoverVisible,
     missionCount,
-    kpiCount: document.querySelectorAll('.executive-kpi-card').length,
+    kpiCount: document.querySelectorAll('.executive-kpi-card').length + document.querySelectorAll('.readiness-kpi-chip').length,
     nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
     manualRefreshButton: Boolean(document.querySelector('.manual-refresh-button')),
   };
@@ -65,7 +66,7 @@ if (report.bodyWidth !== 390 || report.overflow !== 0) failures.push(`overflow h
 if (report.ownerRows[0]?.name !== 'Deivid Oliveira Ribeiro') failures.push(`primeiro responsável inesperado: ${report.ownerRows[0]?.name}`);
 if (!report.ownerRows[0]?.urgency.includes('19D') || !report.ownerRows[0]?.urgency.includes('CRÍTICO MÁXIMO')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
 if (report.ownerRows.length !== 5) failures.push(`responsáveis visíveis esperado 5, obtido ${report.ownerRows.length}`);
-if (report.kpiCount !== 10) failures.push(`KPIs esperados 10, obtido ${report.kpiCount}`);
+if (report.kpiCount !== 11) failures.push(`KPIs esperados 11, obtido ${report.kpiCount}`);
 if (selected.selectedOwner !== 'Deivid Oliveira Ribeiro') failures.push(`seleção touch não fixou Deivid: ${selected.selectedOwner}`);
 if (!selected.popoverTitle.includes('2 DEMANDAS EM RISCO')) failures.push(`popover esperado com 2 demandas, obtido: ${selected.popoverTitle}`);
 if (selected.mondayLinks !== 2) failures.push(`links Monday esperados 2, obtidos ${selected.mondayLinks}`);
