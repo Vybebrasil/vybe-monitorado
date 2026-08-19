@@ -29,8 +29,8 @@ export default function AnalystStation({ snapshot, onExit }) {
   const [panelRefreshing, setPanelRefreshing] = useState(false);
   const [filters, setFilters] = useState({ client: '', responsible: '', stage: '', status: '' });
 
-  const fetchPanelSummary = async ({ wait = false } = {}) => {
-    const response = await fetch(`/api/executive/vybe-panel?limit=200${wait ? '&wait=1' : ''}`, { cache: 'no-store' });
+  const fetchPanelSummary = async ({ wait = false, signal } = {}) => {
+    const response = await fetch(`/api/executive/vybe-panel?limit=200${wait ? '&wait=1' : ''}`, { cache: 'no-store', signal });
     return response.ok
       ? response.json()
       : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.')));
@@ -38,27 +38,28 @@ export default function AnalystStation({ snapshot, onExit }) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const loadPanel = async () => {
       try {
-        const payload = await fetchPanelSummary();
+        const payload = await fetchPanelSummary({ signal: controller.signal });
         if (cancelled) return;
         setPanelSnapshot(payload);
         if (payload.cache?.pending) {
           window.setTimeout(async () => {
             try {
-              const freshPayload = await fetchPanelSummary({ wait: true });
+              const freshPayload = await fetchPanelSummary({ wait: true, signal: controller.signal });
               if (!cancelled) setPanelSnapshot(freshPayload);
             } catch (error) {
-              if (!cancelled) setPanelError(error.message);
+              if (!cancelled && error.name !== 'AbortError') setPanelError(error.message);
             }
           }, 1200);
         }
       } catch (error) {
-        if (!cancelled) setPanelError(error.message);
+        if (!cancelled && error.name !== 'AbortError') setPanelError(error.message);
       }
     };
     loadPanel();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, []);
 
   const refreshPanel = async () => {
@@ -119,6 +120,11 @@ export default function AnalystStation({ snapshot, onExit }) {
   const panelAffectedItems = useMemo(() => allDelaysSorted
     .map(item => ({ ...item, panelItem: panelItemsById.get(String(item.id)) }))
     .filter(item => item.panelItem), [allDelaysSorted, panelItemsById]);
+  const panelGroups = useMemo(() => Object.entries((panelSnapshot?.items || []).reduce((acc, item) => {
+    const group = item.group?.title || 'Sem grupo';
+    acc[group] = (acc[group] || 0) + 1;
+    return acc;
+  }, {})).slice(0, 6), [panelSnapshot?.items]);
   const filterOptions = useMemo(() => {
     const values = key => [...new Set(delayDetails.map(item => String(item?.[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     return { clients: values('client'), responsible: values('responsavel'), stages: values('stage'), statuses: values('status') };
@@ -161,11 +167,7 @@ export default function AnalystStation({ snapshot, onExit }) {
             {panelSnapshot.warning ? <div className="analyst-source-warning" role="status" aria-live="polite">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
             {panelPageError ? <div className="analyst-source-warning" role="status" aria-live="polite">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
             <div className="analyst-source-groups">
-              {Object.entries((panelSnapshot.items || []).reduce((acc, item) => {
-                const group = item.group?.title || 'Sem grupo';
-                acc[group] = (acc[group] || 0) + 1;
-                return acc;
-              }, {})).slice(0, 6).map(([group, count]) => (
+              {panelGroups.map(([group, count]) => (
                 <span key={group} className="analyst-source-chip">{group}: <b>{count}</b></span>
               ))}
             </div>
