@@ -7,6 +7,11 @@ const page = await context.newPage();
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
 await page.waitForSelector('.nexus-dashboard-shell', { state: 'visible', timeout: 30000 });
+const summaryNav = page.locator('.nexus-mobile-context-nav button').filter({ hasText: /RESUMO/i }).first();
+if (await summaryNav.count()) {
+  await summaryNav.click();
+  await page.waitForTimeout(160);
+}
 
 let report = await page.evaluate(() => {
   const body = document.body;

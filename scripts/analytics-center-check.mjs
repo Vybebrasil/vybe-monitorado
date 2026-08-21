@@ -21,10 +21,27 @@ const close = async () => {
 const failures = [];
 const kpis = await page.locator('.analytics-kpi').count();
 const panels = await page.locator('.analytics-panel').count();
+const trendPanel = await page.locator('.analytics-trend-panel').count();
+const trendMetrics = await page.locator('.analytics-trend-metrics button').count();
+const trendRanges = await page.locator('.analytics-trend-ranges button').count();
 const overflow = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
 if (kpis !== 6) failures.push(`esperava 6 KPIs, encontrou ${kpis}`);
-if (panels !== 5) failures.push(`esperava 5 painéis analíticos, encontrou ${panels}`);
+if (panels !== 6) failures.push(`esperava 6 painéis analíticos incluindo a linha temporal, encontrou ${panels}`);
+if (trendPanel !== 1) failures.push(`esperava 1 gráfico de linha, encontrou ${trendPanel}`);
+if (trendMetrics !== 8) failures.push(`esperava 8 métricas temporais, encontrou ${trendMetrics}`);
+if (trendRanges !== 3) failures.push(`esperava 3 janelas temporais, encontrou ${trendRanges}`);
 if (overflow.body > overflow.viewport) failures.push(`overflow horizontal: ${overflow.body} > ${overflow.viewport}`);
+
+const filterSelects = await page.locator('.analytics-filter-control select').count();
+if (filterSelects !== 4) failures.push(`esperava 4 filtros cruzados, encontrou ${filterSelects}`);
+if (filterSelects) {
+  const firstSelect = page.locator('.analytics-filter-control select').first();
+  if (await firstSelect.locator('option').count() > 1) {
+    await firstSelect.selectOption({ index: 1 });
+    if (!(await page.locator('.analytics-filter-clear').count())) failures.push('filtro aplicado sem ação LIMPAR FILTROS');
+    await page.locator('.analytics-filter-clear').click();
+  }
+}
 
 const ownerRows = await page.locator('.analytics-owner-row').count();
 if (!ownerRows) failures.push('nenhum responsável no Analytics Center');
@@ -49,7 +66,7 @@ for (const selector of ['.analytics-stage-row', '.analytics-status-row']) {
   }
 }
 
-const report = { pageErrors, kpis, panels, ownerRows, overflow, failures };
+const report = { pageErrors, kpis, panels, trendPanel, trendMetrics, trendRanges, filterSelects, ownerRows, overflow, failures };
 console.log(JSON.stringify(report, null, 2));
 await browser.close();
 if (pageErrors.length || failures.length) process.exit(1);

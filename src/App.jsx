@@ -12,7 +12,7 @@ import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
 import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
 import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
 import { ExecutiveVisualOverview } from './components/ExecutiveVisualOverview.jsx';
-import { ExecutiveAnalyticsCenter } from './components/ExecutiveAnalyticsCenter.jsx';
+import { ExecutiveAnalyticsCenter, TrendChart } from './components/ExecutiveAnalyticsCenter.jsx';
 import { AnalyticsDrilldownDrawer } from './components/AnalyticsDrilldownDrawer.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
@@ -770,7 +770,7 @@ function ExecutiveViewNav({ activeView, onChange, snapshot }) {
   </nav>;
 }
 
-function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
+function ManagerStation({ snapshot, history, timeSeries, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
@@ -854,6 +854,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
       {activeView === 'summary' ? <>
         <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
         <ExecutiveVisualOverview snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
+        <TrendChart timeSeries={timeSeries} />
         <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
       </> : null}
 
@@ -867,6 +868,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
       {activeView === 'analytics' ? <ExecutiveAnalyticsCenter
         snapshot={snapshot}
         history={history}
+        timeSeries={timeSeries}
         onSelect={(selection) => {
           setDetailPanel({ ...selection, type: 'analytics', targetType: selection.type });
           setJarvisMessage({ text: `Abrindo ${selection.title || 'esta leitura'} com os dados observáveis disponíveis.`, hint: 'O painel analítico mantém a evidência, a fonte e o link para investigação.' });
@@ -1201,7 +1203,7 @@ function App() {
       const nextSnapshot = metricsData.metrics.executiveSnapshot;
       const nextMirrorVersion = Number(metricsData.meta?.sync?.version || nextSnapshot?.sourceQuality?.sync?.version || 0);
       if (nextMirrorVersion > 0) mirrorVersionRef.current = nextMirrorVersion;
-      setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null });
+      setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null, timeSeries: metricsData.meta?.timeSeries || null });
     } catch (err) {
       if (err.name === 'AbortError') return;
       const message = err.message || 'Falha catastrófica de comunicação com o Monday.com.';
@@ -1291,7 +1293,7 @@ function App() {
 
       {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onRefresh={() => loadMetrics({ manual: true })} refreshing={refreshing} refreshError={refreshError} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} timeSeries={metrics.timeSeries} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onRefresh={() => loadMetrics({ manual: true })} refreshing={refreshing} refreshError={refreshError} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">

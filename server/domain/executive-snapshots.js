@@ -117,3 +117,57 @@ export function summarizeSnapshotTrend(snapshots = [], now = new Date()) {
     }
   };
 }
+
+const numericOrNull = value => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+function snapshotSeriesPoint(snapshot = {}) {
+  const summary = snapshot.summary || {};
+  const quantitative = snapshot.quantitative || {};
+  const productivity = snapshot.productivity || {};
+  const activeItems = numericOrNull(productivity.activeItems ?? quantitative.activeItems);
+  const clientRanking = Array.isArray(snapshot.clientRanking) ? snapshot.clientRanking : [];
+  return {
+    capturedAt: snapshot.capturedAt || null,
+    sourceVersion: snapshot.sourceQuality?.sync?.version ?? snapshot.sourceQuality?.version ?? null,
+    score: numericOrNull(snapshot.portfolioStability?.score),
+    activeItems,
+    completedItems: numericOrNull(productivity.completedItems ?? quantitative.completedItems),
+    delayedProduction: numericOrNull(summary.delayedTeam ?? quantitative.overdueInternal),
+    overdueDemands: numericOrNull(summary.delayedDemands),
+    exposedClients: numericOrNull(summary.exposedClients ?? clientRanking.filter(item => Number(item.delayedItems) > 0).length),
+    stalledClients: numericOrNull(summary.stalledClients ?? snapshot.portfolioExecution?.stalled?.length),
+    openDemands: numericOrNull(Array.isArray(snapshot.demandItems) ? snapshot.demandItems.length : null)
+  };
+}
+
+function comparePointToWindow(points, days, now) {
+  const cutoff = now.getTime() - days * 86400000;
+  const inWindow = points.filter(point => point.capturedAt && new Date(point.capturedAt).getTime() >= cutoff);
+  if (inWindow.length < 2) return { available: false, points: inWindow.length, baseline: null, current: inWindow.at(-1) || null, message: `Histórico insuficiente para comparação de ${days} dias.` };
+  const baseline = inWindow[0];
+  const current = inWindow.at(-1);
+  const delta = {};
+  for (const key of ['score', 'activeItems', 'completedItems', 'delayedProduction', 'overdueDemands', 'openDemands', 'exposedClients', 'stalledClients']) {
+    delta[key] = baseline[key] !== null && current[key] !== null ? current[key] - baseline[key] : null;
+  }
+  return { available: true, points: inWindow.length, baseline, current, delta, message: null };
+}
+
+export function buildExecutiveTimeSeries(snapshots = [], now = new Date()) {
+  const points = snapshots
+    .filter(snapshot => snapshot?.capturedAt && !Number.isNaN(new Date(snapshot.capturedAt).getTime()))
+    .sort((a, b) => new Date(a.capturedAt) - new Date(b.capturedAt))
+    .map(snapshotSeriesPoint);
+  const windows = { '7d': comparePointToWindow(points, 7, now), '30d': comparePointToWindow(points, 30, now), '90d': comparePointToWindow(points, 90, now) };
+  return {
+    available: points.length >= 2,
+    status: points.length >= 2 ? 'available' : 'no_baseline',
+    points,
+    windows,
+    message: points.length >= 2 ? null : 'Ainda não há pontos históricos suficientes para desenhar uma tendência confiável.'
+  };
+}

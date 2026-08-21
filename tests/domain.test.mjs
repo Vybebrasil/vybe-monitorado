@@ -13,7 +13,7 @@ import {
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildCalendarSignals, buildExecutiveSnapshot, buildReadinessKpis } from '../server/domain/executive.js';
-import { summarizeExecutiveDelta } from '../server/domain/executive-snapshots.js';
+import { summarizeExecutiveDelta, buildExecutiveTimeSeries } from '../server/domain/executive-snapshots.js';
 import { buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
@@ -23,6 +23,23 @@ import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, resetOperati
 import { buildExecutiveSourceMeta } from '../server/integrations/executive-sources.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
+
+test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
+  const snapshots = [
+    { capturedAt: '2026-08-17T10:00:00.000Z', portfolioStability: { score: -30 }, summary: { delayedTeam: 30, delayedDemands: 10, stalledClients: 3 }, demandItems: [{ id: 'd1' }], quantitative: { activeItems: 150, completedItems: 120 } },
+    { capturedAt: '2026-08-19T10:00:00.000Z', portfolioStability: { score: -24 }, summary: { delayedTeam: 27, delayedDemands: 8, stalledClients: 2 }, demandItems: [{ id: 'd1' }, { id: 'd2' }], quantitative: { activeItems: 155, completedItems: 125 } },
+    { capturedAt: '2026-08-20T10:00:00.000Z', portfolioStability: { score: -20 }, summary: { delayedTeam: 25, delayedDemands: 6, stalledClients: 1 }, demandItems: [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }], quantitative: { activeItems: 158, completedItems: 130 } }
+  ];
+  const series = buildExecutiveTimeSeries(snapshots, new Date('2026-08-20T12:00:00.000Z'));
+  assert.equal(series.available, true);
+  assert.equal(series.points.length, 3);
+  assert.equal(series.points[0].score, -30);
+  assert.equal(series.windows['7d'].available, true);
+  assert.equal(series.windows['7d'].delta.score, 10);
+  assert.equal(series.windows['7d'].delta.delayedProduction, -5);
+  assert.equal(series.windows['7d'].delta.openDemands, 2);
+  assert.equal(buildExecutiveTimeSeries([snapshots[0]], new Date('2026-08-20T12:00:00.000Z')).available, false);
+});
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {
   const result = buildClientHealthScore({
