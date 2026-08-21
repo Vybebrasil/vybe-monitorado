@@ -46,6 +46,8 @@ const runGroup = async (name, selector) => {
   }
 };
 
+await runGroup('command-metric', '.command-metric');
+await runGroup('command-decision', '.command-decision-card');
 await runGroup('kpi', '.executive-kpi-card');
 await runGroup('mission', '.mission-card');
 await runGroup('ledger', '.score-ledger-row');
@@ -70,7 +72,7 @@ const runContext = async (name, tabPattern, expectedSelector, forbiddenSelector 
   }
 };
 
-await runContext('context-summary', /RESUMO/i, '.jarvis-decision-briefing', '.executive-module');
+await runContext('context-summary', /RESUMO/i, '.command-center', '.mission-board');
 await runContext('context-portfolio', /CARTEIRA/i, '.readiness-kpi-band', '.executive-module');
 await runContext('context-demands', /DEMANDAS/i, '.demand-module', '.mission-board');
 await runContext('context-team', /TIME/i, '.performance-module', '.demand-module');

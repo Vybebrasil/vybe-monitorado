@@ -55,47 +55,67 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner }) {
   const derivedOwners = detailedRows.length ? buildObservableOwners(detailedRows) : [];
   const derivedStages = detailedRows.length ? buildObservableStages(detailedRows) : [];
   const visibleStages = derivedStages.length ? derivedStages : stages.map(stage => ({ ...stage, active: Number(stage.count) || 0, delayed: null, delayedPct: null }));
-  const topOwners = (derivedOwners.length ? derivedOwners : owners.map(owner => ({
-    name: owner.name,
-    total: Number(owner.posts) || 0,
-    active: Number(owner.posts) || 0,
-    completed: 0,
-    delayed: Number(owner.delayedTotal) || 0,
-    ready: 0,
-    completionPct: null,
-    delayedPct: Number(owner.posts) ? Number(((Number(owner.delayedTotal) || 0) / Number(owner.posts) * 100).toFixed(1)) : null
-  }))).slice(0, 6);
+  const topOwners = (derivedOwners.length ? derivedOwners : owners.map(owner => {
+    const active = Array.isArray(owner.posts) ? owner.posts.length : (Number(owner.posts) || 0);
+    return {
+      name: owner.name,
+      total: active,
+      active,
+      completed: null,
+      delayed: Number(owner.delayedTotal) || 0,
+      ready: 0,
+      completionPct: null,
+      delayedPct: active ? Number((((Number(owner.delayedTotal) || 0) / active) * 100).toFixed(1)) : null
+    };
+  })).slice(0, 6);
+
+  const largestLoad = [...topOwners].sort((a, b) => Number(b.active) - Number(a.active))[0];
+  const highestDelay = [...topOwners].filter(owner => Number(owner.active) > 0).sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
+  const bottleneck = [...visibleStages].sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
 
   return (
-    <section className="executive-module performance-module" aria-label="Visão executiva de time e performance">
-      <header className="executive-module-header">
-        <div><span className="executive-section-kicker">TIME · PERFORMANCE OBSERVÁVEL</span><h2>Como a capacidade está distribuída?</h2><p>Volume, entrega e sinais de atraso. Não é diagnóstico de produtividade individual nem avaliação de pessoas.</p></div>
-        <span className="executive-module-source">Monday.com · Produção de Conteúdo</span>
+    <section className="executive-module performance-module team-command" aria-label="Visão executiva de time e performance">
+      <header className="team-command-hero">
+        <div><span className="executive-section-kicker">TIME · CAPACIDADE OBSERVÁVEL</span><h2>O time está absorvendo a operação?</h2><p>Compare carga, entrega e pressão sem transformar volume em avaliação de valor individual.</p></div>
+        <div className="team-command-answer"><span>RESPOSTA AGORA</span><strong>{delayedItems > 0 ? `${formatPct(activeItems ? delayedItems / activeItems * 100 : null)} da carteira está atrasada` : 'Sem atraso dominante'}</strong><small>Monday.com · Produção de Conteúdo</small></div>
       </header>
-      <div className="executive-module-kpi-grid performance-kpis">
-        <div className="executive-module-kpi"><span>CARTEIRA ATIVA</span><strong>{formatNumber(activeItems)}</strong><small>itens em execução</small></div>
-        <div className="executive-module-kpi stable"><span>CONCLUÍDOS</span><strong>{formatNumber(completedItems)}</strong><small>{formatPct(totalScope ? completedItems / totalScope * 100 : null)} da base lida</small></div>
-        <div className="executive-module-kpi critical"><span>ATRASADOS</span><strong>{formatNumber(delayedItems)}</strong><small>{formatPct(activeItems ? delayedItems / activeItems * 100 : null)} dos ativos</small></div>
-        <div className="executive-module-kpi cyan"><span>PRONTOS PARA AGENDAR</span><strong>{formatNumber(readyToSchedule)}</strong><small>Agendado + Para agendar</small></div>
+
+      <div className="team-command-kpis">
+        <div><span>EM EXECUÇÃO</span><strong>{formatNumber(activeItems)}</strong><small>itens ativos</small></div>
+        <div><span>CONCLUÍDOS</span><strong>{formatNumber(completedItems)}</strong><small>{formatPct(totalScope ? completedItems / totalScope * 100 : null)} da base</small></div>
+        <div className="critical"><span>ATRASADOS</span><strong>{formatNumber(delayedItems)}</strong><small>{formatPct(activeItems ? delayedItems / activeItems * 100 : null)} dos ativos</small></div>
+        <div className="cyan"><span>PRONTOS PARA AGENDA</span><strong>{formatNumber(readyToSchedule)}</strong><small>próxima entrega</small></div>
       </div>
-      <div className="executive-performance-grid">
-        <div className="executive-module-list">
-          <div className="executive-module-section-title"><span>SINAIS POR RESPONSÁVEL</span><b>não é ranking de valor individual</b></div>
-          {topOwners.length === 0 ? <div className="executive-empty-state"><strong>Dados de responsável não disponíveis.</strong><span>O Nexus não transforma ausência de dados em uma nota individual.</span></div> : topOwners.map(owner => {
-            const total = Number(owner.total) || 0;
+
+      <div className="team-command-signals">
+        <div><span>MAIOR CARGA OBSERVADA</span><strong>{largestLoad?.name || 'N/D'}</strong><small>{largestLoad ? `${formatNumber(largestLoad.active)} ativos` : 'Sem dados completos'}</small></div>
+        <div><span>MAIOR PRESSÃO RELATIVA</span><strong>{highestDelay?.name || 'N/D'}</strong><small>{highestDelay ? `${formatPct(highestDelay.delayedPct)} dos ativos em atraso` : 'Sem dados completos'}</small></div>
+        <div><span>ETAPA MAIS PRESSIONADA</span><strong>{bottleneck?.stage || 'N/D'}</strong><small>{bottleneck ? `${formatNumber(bottleneck.delayed || 0)} atrasos · ${formatPct(bottleneck.delayedPct)}` : 'Sem dados completos'}</small></div>
+      </div>
+
+      <div className="team-command-grid">
+        <article className="team-capacity-panel">
+          <header><div><span>MAPA DE CAPACIDADE</span><strong>Pessoas e carga atual</strong></div><small>clique para investigar</small></header>
+          {topOwners.length === 0 ? <div className="executive-empty-state"><strong>Dados de responsável não disponíveis.</strong><span>O Nexus não transforma ausência de dados em uma nota individual.</span></div> : <div className="team-capacity-cards">{topOwners.map(owner => {
             const delayed = Number(owner.delayed) || 0;
             const delayedPct = owner.delayedPct;
-            return <button type="button" className="executive-owner-row" key={owner.name} onClick={() => onOpenOwner?.(owner.name)}>
-              <span className="executive-owner-name">{owner.name}</span>
-              <span className="executive-owner-track"><i style={{ width: `${Math.min(100, Number(delayedPct) || 0)}%` }} /></span>
-              <strong>{formatNumber(delayed)}</strong><small>{formatNumber(owner.active)} ativos · {formatNumber(owner.completed)} concluídos · {formatPct(delayedPct)} dos ativos</small><em>INVESTIGAR ↗</em>
+            return <button type="button" className="team-capacity-card" key={owner.name} onClick={() => onOpenOwner?.(owner.name)}>
+              <span className="team-capacity-name">{owner.name}</span><b>{formatPct(delayedPct)}</b>
+              <i><em style={{ width: `${Math.min(100, Number(delayedPct) || 0)}%` }} /></i>
+              <div><small>ATIVOS<strong>{formatNumber(owner.active)}</strong></small><small>CONCLUÍDOS<strong>{owner.completed === null ? 'N/D' : formatNumber(owner.completed)}</strong></small><small>ATRASOS<strong>{formatNumber(delayed)}</strong></small></div>
+              <u>INVESTIGAR ↗</u>
             </button>;
-          })}
-        </div>
-        <aside className="executive-module-side">
-          <div className="executive-module-section-title"><span>DISTRIBUIÇÃO POR ETAPA</span><b>{formatNumber(visibleStages.length)} etapas</b></div>
-          {visibleStages.slice(0, 6).map(stage => <div className="executive-stage-row" key={stage.stage}><span>{stage.stage}</span><strong>{formatNumber(stage.active ?? stage.count)}</strong><i><b style={{ width: `${Math.min(100, Number(stage.pctOfActive) || (activeItems ? (Number(stage.active || 0) / activeItems * 100) : 0))}%` }} /></i><small>{stage.delayed === null || stage.delayed === undefined ? formatPct(stage.pctOfActive) : `${formatNumber(stage.delayed)} atrasos · ${formatPct(stage.delayedPct)}`}</small></div>)}
-          <div className="executive-module-note"><strong>LEITURA CORRETA</strong><span>Alta concentração de itens ou atrasos indica necessidade de investigação de capacidade, prioridade e cadastro — não culpa automática.</span></div>
+          })}</div>}
+        </article>
+
+        <aside className="team-stage-panel">
+          <header><div><span>GARGALOS POR ETAPA</span><strong>Pressão do fluxo</strong></div><small>{formatNumber(visibleStages.length)} etapas</small></header>
+          <div className="team-stage-list">{visibleStages.slice(0, 6).map(stage => <div className="team-stage-row" key={stage.stage}>
+            <div><span>{stage.stage}</span><strong>{formatNumber(stage.active ?? stage.count)}</strong></div>
+            <i><b style={{ width: `${Math.min(100, Number(stage.delayedPct) || Number(stage.pctOfActive) || 0)}%` }} /></i>
+            <small>{stage.delayed === null || stage.delayed === undefined ? `${formatPct(stage.pctOfActive)} da carteira` : `${formatNumber(stage.delayed)} atrasos · ${formatPct(stage.delayedPct)}`}</small>
+          </div>)}</div>
+          <div className="team-command-note"><strong>COMO LER</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span></div>
         </aside>
       </div>
     </section>

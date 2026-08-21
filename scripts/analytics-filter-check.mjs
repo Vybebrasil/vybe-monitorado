@@ -47,6 +47,8 @@ await page.route('**/api/dashboard/metrics**', route => route.fulfill({ status: 
 await page.route('**/api/executive/operational-mirror**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, ready: true, version: 1, sync: { state: 'fresh', version: 1 } }) }));
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
+const analyticsNav = page.locator('.nexus-sidebar-link, .nexus-mobile-context-nav button').filter({ hasText: /ANALYTICS/i }).first();
+if (await analyticsNav.count()) await analyticsNav.click();
 await page.waitForSelector('.analytics-center', { state: 'visible', timeout: 10000 });
 const readKpis = async () => page.locator('.analytics-kpi strong').allTextContents();
 const before = await readKpis();

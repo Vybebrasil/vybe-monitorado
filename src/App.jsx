@@ -6,14 +6,12 @@ import { buildMissions, canonicalStage, clampPct, clickable, delayUrgency, forma
 import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
 import { ReadinessKpiBand } from './components/ReadinessKpiBand.jsx';
 import { MissionBoard } from './components/MissionBoard.jsx';
-import { JarvisDecisionBriefing } from './components/JarvisDecisionBriefing.jsx';
 import { ExecutivePulseBars } from './components/ExecutivePulseBars.jsx';
 import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
 import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
 import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
-import { ExecutiveVisualOverview } from './components/ExecutiveVisualOverview.jsx';
-import { ExecutiveAnalyticsCenter, TrendChart } from './components/ExecutiveAnalyticsCenter.jsx';
-import ExecutiveProjectionPanel from './components/ExecutiveProjectionPanel.jsx';
+import { ExecutiveAnalyticsCenter } from './components/ExecutiveAnalyticsCenter.jsx';
+import ExecutiveCommandCenter from './components/ExecutiveCommandCenter.jsx';
 import { AnalyticsDrilldownDrawer } from './components/AnalyticsDrilldownDrawer.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
@@ -852,23 +850,22 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
       >
         <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
-      {activeView === 'summary' ? <>
-        <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
-        <section className="executive-intelligence-band" aria-label="Memória e eficácia executiva">
-          <div><span>MEMÓRIA EXECUTIVA</span><strong>{intelligence?.available ? (intelligence.partial ? 'PARCIAL' : 'ATIVA') : 'N/D'}</strong><small>{intelligence?.note || 'A leitura live está disponível; memória histórica ainda não configurada.'}</small></div>
-          <div><span>DECISÕES AVALIADAS</span><strong>{formatNumber(intelligence?.effectiveness?.evaluatedDecisions || 0)}</strong><small>{formatNumber(intelligence?.effectiveness?.pendingEvaluation || 0)} aguardam impacto</small></div>
-          <div><span>SINAL DE EFICÁCIA</span><strong>{intelligence?.effectiveness?.positiveRate === null || intelligence?.effectiveness?.positiveRate === undefined ? 'N/D' : `${intelligence.effectiveness.positiveRate}%`}</strong><small>{intelligence?.effectiveness?.label || 'Sem base de impacto'}</small></div>
-          <div><span>RISCOS PERSISTENTES</span><strong>{formatNumber(intelligence?.persistentRisks?.length || 0)}</strong><small>{intelligence?.persistentRisks?.[0]?.recommendedAction || 'Nenhum risco persistente registrado.'}{intelligence?.clientHealth?.available ? ` · ${formatNumber(intelligence.clientHealth.atRiskCount)} saúde em risco` : ''}</small></div>
-        </section>
-        <ExecutiveVisualOverview snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
-        <TrendChart timeSeries={timeSeries} />
-        <ExecutiveProjectionPanel projections={intelligence?.projections} />
-        <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
-      </> : null}
+      {activeView === 'summary' ? <ExecutiveCommandCenter
+        snapshot={snapshot}
+        timeSeries={timeSeries}
+        intelligence={intelligence}
+        onOpenAnalyst={onOpenAnalyst}
+        onSelect={(id, readinessId) => {
+          if (id.startsWith('owner:')) return setDetailPanel({ type: 'owner', id: id.replace(/^owner:/, ''), title: `Gargalos: ${id.replace(/^owner:/, '')}` });
+          if (id.startsWith('client:')) return setDetailPanel({ type: 'client', id: id.replace(/^client:/, ''), title: `Investigação: ${id.replace(/^client:/, '')}` });
+          setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` });
+        }}
+      /> : null}
 
       {activeView === 'portfolio' ? <>
         <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
         <ExecutivePulseBars snapshot={snapshot} />
+        <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
       </> : null}
 
       {activeView === 'demands' ? <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'client', id: client, title: `Visão: ${client}` })} /> : null}

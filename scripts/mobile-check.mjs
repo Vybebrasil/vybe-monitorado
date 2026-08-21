@@ -29,7 +29,9 @@ let report = await page.evaluate(() => {
     ownerRows: rows,
     hoverVisible,
     missionCount,
-    kpiCount: document.querySelectorAll('.nexus-visual-card').length,
+    kpiCount: document.querySelectorAll('.command-metric').length,
+    commandCenter: Boolean(document.querySelector('.command-center')),
+    commandDecisionCount: document.querySelectorAll('.command-decision-card').length,
     nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
     manualRefreshButton: Boolean(document.querySelector('.nexus-topbar-refresh')),
   };
@@ -93,7 +95,9 @@ const firstOwnerName = report.ownerRows[0]?.name || '';
 if (!firstOwnerName) failures.push('nenhum responsável visível para validar o card mobile');
 if (!/\d+D/.test(report.ownerRows[0]?.urgency || '') || !/(critical-max|critical|high|attention|clear)/.test(report.ownerRows[0]?.className || '')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
 if (report.ownerRows.length === 0 || report.ownerRows.length > 5) failures.push(`responsáveis visíveis fora do limite esperado 1–5, obtido ${report.ownerRows.length}`);
-  if (report.kpiCount !== 4) failures.push(`módulos visuais do Resumo esperados 4, obtido ${report.kpiCount}`);
+  if (!report.commandCenter) failures.push('novo Command Center não encontrado no Resumo');
+  if (report.kpiCount !== 5) failures.push(`KPIs compactos do Resumo esperados 5, obtido ${report.kpiCount}`);
+  if (report.commandDecisionCount === 0 || report.commandDecisionCount > 3) failures.push(`decisões prioritárias fora do limite 1–3, obtido ${report.commandDecisionCount}`);
 if (report.readinessKpiCount !== 5) failures.push(`chips de Prontidão esperados 5, obtido ${report.readinessKpiCount}`);
 if (selected.selectedOwner !== firstOwnerName) failures.push(`seleção touch não fixou o primeiro responsável: ${selected.selectedOwner}`);
 if (!selected.popoverTitle.includes(firstOwnerName)) failures.push(`popover não identificou o responsável selecionado: ${selected.popoverTitle}`);
