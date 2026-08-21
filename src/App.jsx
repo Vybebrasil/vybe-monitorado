@@ -12,6 +12,8 @@ import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
 import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
 import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
 import { ExecutiveVisualOverview } from './components/ExecutiveVisualOverview.jsx';
+import { ExecutiveAnalyticsCenter } from './components/ExecutiveAnalyticsCenter.jsx';
+import { AnalyticsDrilldownDrawer } from './components/AnalyticsDrilldownDrawer.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -475,7 +477,7 @@ const DetailDrawer = ({ panel, setPanel, delayDetails, snapshot }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [panel, setPanel]);
 
-  if (!panel || panel.type === 'kpi') return null;
+  if (!panel || !['owner', 'client'].includes(panel.type)) return null;
 
   const activeItems = Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : [];
   let list = [];
@@ -862,6 +864,15 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
 
       {activeView === 'demands' ? <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'client', id: client, title: `Visão: ${client}` })} /> : null}
       {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'owner', id: owner, title: `Gargalos: ${owner}` })} /> : null}
+      {activeView === 'analytics' ? <ExecutiveAnalyticsCenter
+        snapshot={snapshot}
+        history={history}
+        onSelect={(selection) => {
+          setDetailPanel({ ...selection, type: 'analytics', targetType: selection.type });
+          setJarvisMessage({ text: `Abrindo ${selection.title || 'esta leitura'} com os dados observáveis disponíveis.`, hint: 'O painel analítico mantém a evidência, a fonte e o link para investigação.' });
+        }}
+        onOpenAnalyst={onOpenAnalyst}
+      /> : null}
 
       {activeView === 'portfolio' ? <div className="executive-visual-grid">
         <StatusComposition snapshot={snapshot} />
@@ -1005,6 +1016,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
         </div>
       </div> : null}
 
+        <AnalyticsDrilldownDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
         <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} snapshot={snapshot} />
         <KpiInvestigationDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
       </ExecutiveDashboardShell>

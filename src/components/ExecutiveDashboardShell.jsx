@@ -5,7 +5,8 @@ const NAV_ITEMS = [
   { id: 'summary', label: 'Resumo executivo', short: 'Resumo', icon: LayoutDashboard, detail: 'decisão e risco' },
   { id: 'portfolio', label: 'Carteira', short: 'Carteira', icon: Briefcase, detail: 'capacidade e previsibilidade' },
   { id: 'demands', label: 'Demandas', short: 'Demandas', icon: ListChecks, detail: 'solicitações à agência' },
-  { id: 'team', label: 'Time & performance', short: 'Time', icon: Users, detail: 'capacidade observável' }
+  { id: 'team', label: 'Time & performance', short: 'Time', icon: Users, detail: 'capacidade observável' },
+  { id: 'analytics', label: 'Analytics Center', short: 'Analytics', icon: Activity, detail: 'volume, risco e fluxo' }
 ];
 
 export function ExecutiveDashboardShell({
