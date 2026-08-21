@@ -775,7 +775,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
   const [selectedOwnerId, setSelectedOwnerId] = useState(null);
-  const [activeView, setActiveView] = useState('summary');
+  const [activeView, setActiveView] = useState(() => new URLSearchParams(window.location.search).has('analytics') ? 'analytics' : 'summary');
   const [jarvisMessage, setJarvisMessage] = useState({
     text: 'Estou com você. A leitura está organizada e vou conduzir o próximo ponto que merece decisão.',
     hint: 'Selecione qualquer evidência; eu explico por que ela importa.'
