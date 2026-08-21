@@ -6,7 +6,7 @@ const context = await browser.newContext({ viewport: { width: 390, height: 844 }
 const page = await context.newPage();
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
-await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
+await page.waitForSelector('.nexus-dashboard-shell', { state: 'visible', timeout: 30000 });
 
 let report = await page.evaluate(() => {
   const body = document.body;
@@ -24,13 +24,13 @@ let report = await page.evaluate(() => {
     ownerRows: rows,
     hoverVisible,
     missionCount,
-    kpiCount: document.querySelectorAll('.executive-kpi-card').length + document.querySelectorAll('.readiness-kpi-chip').length,
+    kpiCount: document.querySelectorAll('.nexus-visual-card').length,
     nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
-    manualRefreshButton: Boolean(document.querySelector('.manual-refresh-button')),
+    manualRefreshButton: Boolean(document.querySelector('.nexus-topbar-refresh')),
   };
 });
 
-await page.locator('.executive-view-tab').filter({ hasText: /CARTEIRA/i }).first().click();
+await page.locator('.nexus-mobile-context-nav button').filter({ hasText: /CARTEIRA/i }).first().click();
 await page.waitForSelector('.owner-bar-row', { state: 'visible', timeout: 30000 });
 report = { ...report, ...await page.evaluate(() => ({
   ownerRows: [...document.querySelectorAll('.owner-bar-row')].map(row => ({
@@ -58,22 +58,22 @@ const selected = await page.evaluate(() => ({
     drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
   }));
 
-await page.locator('.executive-view-tab').filter({ hasText: /RESUMO EXECUTIVO/i }).first().click();
-await page.waitForSelector('.manual-refresh-button', { state: 'visible', timeout: 30000 });
-const refreshButton = page.locator('.manual-refresh-button');
+await page.locator('.nexus-mobile-context-nav button').filter({ hasText: /RESUMO/i }).first().click();
+await page.waitForSelector('.nexus-topbar-refresh', { state: 'visible', timeout: 30000 });
+const refreshButton = page.locator('.nexus-topbar-refresh');
 await refreshButton.click();
 await page.waitForFunction(() => {
-  const button = document.querySelector('.manual-refresh-button');
-  const error = document.querySelector('.manual-refresh-error');
+  const button = document.querySelector('.nexus-topbar-refresh');
+  const error = document.querySelector('.nexus-source-alert');
   return Boolean(error?.textContent?.trim()) || button?.disabled === false;
 }, null, { timeout: 30000 });
 const refreshState = await page.evaluate(() => ({
-  buttonText: document.querySelector('.manual-refresh-button')?.textContent?.trim() || '',
-  disabled: document.querySelector('.manual-refresh-button')?.disabled ?? null,
-  error: document.querySelector('.manual-refresh-error')?.textContent?.trim() || ''
+  buttonText: document.querySelector('.nexus-topbar-refresh')?.textContent?.trim() || '',
+  disabled: document.querySelector('.nexus-topbar-refresh')?.disabled ?? null,
+  error: document.querySelector('.nexus-source-alert')?.textContent?.trim() || ''
 }));
 
-await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();
+await page.locator('.nexus-topbar-analyst').click();
 await page.waitForTimeout(350);
 const analystState = await page.evaluate(() => ({
   filterCount: document.querySelectorAll('.analyst-filter-grid select').length,
@@ -88,7 +88,7 @@ const firstOwnerName = report.ownerRows[0]?.name || '';
 if (!firstOwnerName) failures.push('nenhum responsável visível para validar o card mobile');
 if (!/\d+D/.test(report.ownerRows[0]?.urgency || '') || !/(critical-max|critical|high|attention|clear)/.test(report.ownerRows[0]?.className || '')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
 if (report.ownerRows.length === 0 || report.ownerRows.length > 5) failures.push(`responsáveis visíveis fora do limite esperado 1–5, obtido ${report.ownerRows.length}`);
-if (report.kpiCount !== 6) failures.push(`KPIs do Resumo esperados 6, obtido ${report.kpiCount}`);
+  if (report.kpiCount !== 4) failures.push(`módulos visuais do Resumo esperados 4, obtido ${report.kpiCount}`);
 if (report.readinessKpiCount !== 5) failures.push(`chips de Prontidão esperados 5, obtido ${report.readinessKpiCount}`);
 if (selected.selectedOwner !== firstOwnerName) failures.push(`seleção touch não fixou o primeiro responsável: ${selected.selectedOwner}`);
 if (!selected.popoverTitle.includes(firstOwnerName)) failures.push(`popover não identificou o responsável selecionado: ${selected.popoverTitle}`);
@@ -97,7 +97,7 @@ if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado
 if (analystState.filterCount !== 5) failures.push(`filtros cruzados esperados 5 no ANALISTA, obtidos ${analystState.filterCount}`);
 if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);
   if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
-  if (!report.manualRefreshButton) failures.push('botão ATUALIZAR DADOS não encontrado');
+  if (!report.manualRefreshButton) failures.push('botão ATUALIZAR da topbar não encontrado');
   if (refreshState.disabled) failures.push('botão ATUALIZAR DADOS permaneceu bloqueado após a leitura');
   if (refreshState.error) failures.push(`refresh apresentou erro: ${refreshState.error}`);
   if (!focusState.active) failures.push(`seletor de responsável não recebeu foco: ${JSON.stringify(focusState)}`);

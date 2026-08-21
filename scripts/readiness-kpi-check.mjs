@@ -20,7 +20,8 @@ page.on('pageerror', error => errors.push(error.message));
 await page.route('**/api/dashboard/metrics**', async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }); });
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
-await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
+await page.waitForSelector('.nexus-dashboard-shell', { state: 'visible', timeout: 30000 });
+await page.locator('.nexus-sidebar-link').filter({ hasText: /CARTEIRA/i }).first().click();
 await page.waitForSelector('.readiness-kpi-band', { state: 'visible', timeout: 30000 });
 await page.waitForSelector('.readiness-kpi-chip, .readiness-kpi-grid .executive-kpi-card', { state: 'visible', timeout: 30000 });
 

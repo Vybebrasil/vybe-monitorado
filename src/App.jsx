@@ -10,6 +10,8 @@ import { JarvisDecisionBriefing } from './components/JarvisDecisionBriefing.jsx'
 import { ExecutivePulseBars } from './components/ExecutivePulseBars.jsx';
 import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
 import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
+import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
+import { ExecutiveVisualOverview } from './components/ExecutiveVisualOverview.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -835,22 +837,21 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
 
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
-      <header className="app-header">
-        <div className="app-header-title">
-          <Target size={28} /> JARVIS / GUIA EXECUTIVO <span className="badge">GUIADO</span>
-        </div>
-        <div className="app-header-meta">
-          <span>JARVIS ATIVO · RISCO, CAPACIDADE E DECISÃO</span>
-          <button className="jarvis-exit-analyst" onClick={onOpenAnalyst}>SAIR DO JARVIS · ABRIR ANALISTA &rarr;</button>
-        </div>
-      </header>
-
-      <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
-      <ExecutiveViewNav activeView={activeView} onChange={setActiveView} snapshot={snapshot} />
+      <ExecutiveDashboardShell
+        activeView={activeView}
+        onChange={setActiveView}
+        snapshot={snapshot}
+        onExit={onExit}
+        onOpenAnalyst={onOpenAnalyst}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        refreshError={refreshError}
+      >
+        <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
 
       {activeView === 'summary' ? <>
         <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
-        <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
+        <ExecutiveVisualOverview snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
         <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
       </> : null}
 
@@ -1004,8 +1005,9 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
         </div>
       </div> : null}
 
-      <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} snapshot={snapshot} />
-      <KpiInvestigationDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
+        <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} snapshot={snapshot} />
+        <KpiInvestigationDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
+      </ExecutiveDashboardShell>
     </div>
   );
 }

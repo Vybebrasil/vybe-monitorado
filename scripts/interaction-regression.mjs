@@ -9,13 +9,13 @@ page.on('pageerror', error => pageErrors.push(error.message));
 
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('.jarvis-wake-screen', { state: 'detached', timeout: 30000 });
-await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
+await page.waitForSelector('.nexus-dashboard-shell', { state: 'visible', timeout: 30000 });
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const state = async () => page.evaluate(() => ({
   rootChildren: document.querySelector('#root')?.children.length || 0,
   rootText: (document.querySelector('#root')?.innerText || '').trim().slice(0, 120),
-  cockpit: Boolean(document.querySelector('.app-header')),
+  cockpit: Boolean(document.querySelector('.nexus-dashboard-shell')),
   drawer: Boolean(document.querySelector('aside, [role="dialog"]')),
 }));
 
@@ -54,7 +54,7 @@ await runGroup('readiness-chip', '.readiness-kpi-chip');
 
 const runContext = async (name, tabPattern, expectedSelector, forbiddenSelector = null) => {
   try {
-    await page.locator('.executive-view-tab').filter({ hasText: tabPattern }).first().click();
+    await page.locator('.nexus-sidebar-link').filter({ hasText: tabPattern }).first().click();
     await wait(180);
     const contextState = await page.evaluate(({ expected, forbidden }) => ({
       expected: Boolean(document.querySelector(expected)),
@@ -70,13 +70,13 @@ const runContext = async (name, tabPattern, expectedSelector, forbiddenSelector 
   }
 };
 
-await runContext('context-summary', /RESUMO EXECUTIVO/i, '.jarvis-decision-briefing', '.executive-module');
+await runContext('context-summary', /RESUMO/i, '.jarvis-decision-briefing', '.executive-module');
 await runContext('context-portfolio', /CARTEIRA/i, '.readiness-kpi-band', '.executive-module');
 await runContext('context-demands', /DEMANDAS/i, '.demand-module', '.mission-board');
-await runContext('context-team', /TIME.*PERFORMANCE/i, '.performance-module', '.demand-module');
+await runContext('context-team', /TIME/i, '.performance-module', '.demand-module');
 
 try {
-  await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();
+  await page.locator('.nexus-topbar-analyst').click();
   await wait(400);
   const analyst = await page.evaluate(() => ({
     rootChildren: document.querySelector('#root')?.children.length || 0,
