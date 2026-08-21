@@ -52,6 +52,29 @@ await runGroup('ledger', '.score-ledger-row');
 await runGroup('owner-open', '.owner-bar-open');
 await runGroup('readiness-chip', '.readiness-kpi-chip');
 
+const runContext = async (name, tabPattern, expectedSelector, forbiddenSelector = null) => {
+  try {
+    await page.locator('.executive-view-tab').filter({ hasText: tabPattern }).first().click();
+    await wait(180);
+    const contextState = await page.evaluate(({ expected, forbidden }) => ({
+      expected: Boolean(document.querySelector(expected)),
+      forbidden: forbidden ? Boolean(document.querySelector(forbidden)) : false,
+      bodyWidth: document.body.scrollWidth,
+      viewportWidth: window.innerWidth
+    }), { expected: expectedSelector, forbidden: forbiddenSelector });
+    const result = { name, ...contextState, pageErrors: pageErrors.length };
+    results.push(result);
+    if (!contextState.expected || contextState.forbidden || contextState.bodyWidth > contextState.viewportWidth) failures.push({ ...result, reason: 'contexto inesperado, misturado ou com overflow' });
+  } catch (error) {
+    failures.push({ name, reason: error.message });
+  }
+};
+
+await runContext('context-summary', /RESUMO EXECUTIVO/i, '.jarvis-decision-briefing', '.executive-module');
+await runContext('context-portfolio', /CARTEIRA/i, '.readiness-kpi-band', '.executive-module');
+await runContext('context-demands', /DEMANDAS/i, '.demand-module', '.mission-board');
+await runContext('context-team', /TIME.*PERFORMANCE/i, '.performance-module', '.demand-module');
+
 try {
   await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();
   await wait(400);

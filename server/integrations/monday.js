@@ -598,7 +598,8 @@ class MondayIntegration {
         delayedPrazo: row.delayedPrazo,
         delayedVeiculacao: row.delayedVeiculacao,
         delayedTotal: row.delayedPrazo + row.delayedVeiculacao,
-        posts: row.posts
+        posts: Array.isArray(row.posts) ? row.posts.length : Number(row.posts) || 0,
+        itemIds: Array.isArray(row.posts) ? row.posts.map(item => item.id).filter(Boolean).slice(0, 100) : []
       }))
     };
 

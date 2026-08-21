@@ -8,6 +8,8 @@ import { ReadinessKpiBand } from './components/ReadinessKpiBand.jsx';
 import { MissionBoard } from './components/MissionBoard.jsx';
 import { JarvisDecisionBriefing } from './components/JarvisDecisionBriefing.jsx';
 import { ExecutivePulseBars } from './components/ExecutivePulseBars.jsx';
+import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
+import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -727,7 +729,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         {panel.id === 'execution' ? <>
           <div className="kpi-investigation-section-title">CLIENTES SEM EXECUÇÃO · {execution.stalled?.length || 0}</div><div className="kpi-client-grid">{(execution.stalled || []).map(client => <div className="kpi-client-card" key={client.client}><strong>{client.client}</strong><div className="kpi-evidence-card-meta"><span>{client.daysSinceEntry === null ? 'Tempo na carteira não informado' : `${client.daysSinceEntry} dias na carteira`}</span><span>Sem conteúdo em produção</span><span>Sem demanda aberta</span></div><button type="button" className="kpi-inline-action" onClick={() => setPanel({ type: 'client', id: client.client, title: `Visão: ${client.client}` })}>ABRIR CONTEXTO ↗</button></div>)}</div><div className="investigation-callout"><span>ONBOARDING SEPARADO</span><p>{(execution.onboarding || []).length} cliente(s) ainda estão na janela de implantação de {execution.onboardingWindowDays} dias e não entram no indicador de cliente parado.</p></div></> : null}
 
-        {panel.id !== 'health' && panel.id !== 'active' && panel.id !== 'delays' && panel.id !== 'publication' && panel.id !== 'exposure' && panel.id !== 'execution' ? evidenceList(visibleDelays, 'EVIDÊNCIAS', delays.length, delays) : null}
+        {!String(panel.id || '').startsWith('readiness') && panel.id !== 'health' && panel.id !== 'active' && panel.id !== 'delays' && panel.id !== 'publication' && panel.id !== 'exposure' && panel.id !== 'execution' ? evidenceList(visibleDelays, 'EVIDÊNCIAS', delays.length, delays) : null}
       </div>
     </aside>
   </div>;
@@ -752,11 +754,24 @@ function JarvisCopilot({ message, nextCommand }) {
   );
 }
 
+function ExecutiveViewNav({ activeView, onChange, snapshot }) {
+  const tabs = [
+    { id: 'summary', label: 'RESUMO EXECUTIVO', detail: 'decisão e risco' },
+    { id: 'portfolio', label: 'CARTEIRA', detail: `${formatNumber(snapshot?.quantitative?.activeItems || 0)} itens ativos` },
+    { id: 'demands', label: 'DEMANDAS', detail: `${formatNumber(snapshot?.demandItems?.length || 0)} solicitações` },
+    { id: 'team', label: 'TIME & PERFORMANCE', detail: 'capacidade observável' }
+  ];
+  return <nav className="executive-view-nav" aria-label="Contextos executivos">
+    {tabs.map(tab => <button type="button" key={tab.id} className={`executive-view-tab ${activeView === tab.id ? 'active' : ''}`} aria-selected={activeView === tab.id} onClick={() => onChange(tab.id)}><strong>{tab.label}</strong><span>{tab.detail}</span></button>)}
+  </nav>;
+}
+
 function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
   const [selectedOwnerId, setSelectedOwnerId] = useState(null);
+  const [activeView, setActiveView] = useState('summary');
   const [jarvisMessage, setJarvisMessage] = useState({
     text: 'Estou com você. A leitura está organizada e vou conduzir o próximo ponto que merece decisão.',
     hint: 'Selecione qualquer evidência; eu explico por que ela importa.'
@@ -831,14 +846,23 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
       </header>
 
       <JarvisCopilot message={activeJarvisMessage} nextCommand={nextCommand} />
-      <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
+      <ExecutiveViewNav activeView={activeView} onChange={setActiveView} snapshot={snapshot} />
 
-      <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
-      <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
-      <ExecutivePulseBars snapshot={snapshot} />
-      <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
+      {activeView === 'summary' ? <>
+        <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
+        <ExecutiveKpiBand snapshot={snapshot} history={history} riskClients={worstClients.length} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
+        <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
+      </> : null}
 
-      <div className="executive-visual-grid">
+      {activeView === 'portfolio' ? <>
+        <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
+        <ExecutivePulseBars snapshot={snapshot} />
+      </> : null}
+
+      {activeView === 'demands' ? <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'client', id: client, title: `Visão: ${client}` })} /> : null}
+      {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'owner', id: owner, title: `Gargalos: ${owner}` })} /> : null}
+
+      {activeView === 'portfolio' ? <div className="executive-visual-grid">
         <StatusComposition snapshot={snapshot} />
         <StageDistribution snapshot={snapshot} />
         <OwnerBars
@@ -864,9 +888,9 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
             setJarvisMessage({ text: `${client.client} tem ${client.riskPct}% de exposição no recorte (${client.delayedItems} de ${client.openItems} itens). Vou abrir a evidência antes de sugerir qualquer decisão.`, hint: 'Próximo: entender se o risco é interno, de veiculação ou de contexto.' });
           }}
         />
-      </div>
+      </div> : null}
 
-      <div className="dashboard-grid">
+      {activeView === 'portfolio' ? <div className="dashboard-grid">
         {/* COLUNA ESQUERDA - ALERTAS DIRETOS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
@@ -978,7 +1002,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onRefresh, r
           </div>
           {worstClients.length > 5 && <button type="button" className="list-expand table-expand" onClick={() => setShowAllClients(value => !value)}>{showAllClients ? 'VER MENOS' : `VER MAIS (${worstClients.length - 5})`}</button>}
         </div>
-      </div>
+      </div> : null}
 
       <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} snapshot={snapshot} />
       <KpiInvestigationDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />

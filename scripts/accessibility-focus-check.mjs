@@ -47,6 +47,8 @@ const focusReport = async (selector, label) => {
 };
 
 const results = [];
+await page.locator('.executive-view-tab').filter({ hasText: /CARTEIRA/i }).first().click();
+await page.waitForSelector('.readiness-kpi-toggle, .readiness-kpi-chip', { state: 'visible', timeout: 30000 });
 results.push(await focusReport('.readiness-kpi-toggle', 'readiness-kpi-toggle'));
 results.push(await focusReport('.readiness-kpi-chip', 'readiness-kpi-chip'));
 await page.getByRole('button', { name: /SAIR DO JARVIS.*ABRIR ANALISTA/i }).click();

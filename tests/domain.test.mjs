@@ -191,7 +191,7 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
         { name: 'Cliente B', open: 5, delayedPrazo: 0, delayedVeiculacao: 1, details: [{ id: '2', isDelayedVeiculacao: true }] }
       ],
       delayDetails: [{ id: '1', client: 'Cliente A', name: 'Post atrasado', delayType: 'prazo interno', daysOverdue: 2 }],
-      productivity: { completionPct: 25, readyToSchedule: 4, delayedItems: 2, byStage: [{ stage: 'Design', count: 8, pctOfActive: 53.3 }] },
+      productivity: { completionPct: 25, readyToSchedule: 4, delayedItems: 2, byStage: [{ stage: 'Design', count: 8, pctOfActive: 53.3 }], topResponsibles: [{ name: 'Paulo Martins', delayedTotal: 2, posts: 6 }] },
       quantitative: {
         totalItems: 20,
         itemsWithClient: 20,
@@ -213,7 +213,10 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
         statusColors: { 'Finalizado': '#9cd326', 'Em andamento': '#fdab3d', 'A Fazer': '#c4c4c4' }
       }
     },
-    demands: [],
+    demands: Object.assign([{ id: 'd1', name: 'Demanda vencida', cliente: 'Cliente A', status: 'Aguardando', prazo: '2026-08-16', isDelayed: true }], {
+      openDemandItems: [{ id: 'd1', name: 'Demanda vencida', cliente: 'Cliente A', status: 'Aguardando', prazo: '2026-08-16', isDelayed: true }],
+      clientsWithOpenDemand: ['Cliente A']
+    }),
     generatedAt: '2026-08-17T00:00:00.000Z'
   });
 
@@ -225,6 +228,10 @@ test('Snapshot executivo preserva KPIs quantitativos e ranking de risco', () => 
   assert.equal(snapshot.clientRanking[0].riskPct, 20);
   assert.equal(snapshot.delayDetails[0].delayType, 'prazo interno');
   assert.equal(snapshot.productivity.readyToSchedule, 4);
+  assert.equal(snapshot.productivity.topResponsibles[0].posts, 6);
+  assert.equal(snapshot.productivity.topResponsibles[0].delayedTotal, 2);
+  assert.equal(snapshot.demandItems[0].name, 'Demanda vencida');
+  assert.equal(snapshot.delayedDemandItems[0].isDelayed, true);
   assert.equal(snapshot.quantitative.statusColors['Em andamento'], '#fdab3d');
   assert.deepEqual(snapshot.sourceQuality.fieldCoverage, { complete: false, missing: ['priority'] });
   assert.equal(snapshot.executiveRisks[0].ownerRole, 'Liderança executiva');

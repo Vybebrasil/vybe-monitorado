@@ -20,6 +20,8 @@ function cleanSnapshot(snapshot = {}) {
     portfolioReadiness: snapshot.portfolioReadiness || null,
     sourceQuality: snapshot.sourceQuality || null,
     calendarSignals: snapshot.calendarSignals || null,
+    demandItems: Array.isArray(snapshot.demandItems) ? snapshot.demandItems.slice(0, 200) : [],
+    delayedDemandItems: Array.isArray(snapshot.delayedDemandItems) ? snapshot.delayedDemandItems.slice(0, 200) : [],
     productivity: snapshot.productivity || null,
     executiveRisks: Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks.slice(0, 30) : [],
     decisionsNeeded: Array.isArray(snapshot.decisionsNeeded) ? snapshot.decisionsNeeded.slice(0, 20) : []

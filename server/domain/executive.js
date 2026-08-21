@@ -516,6 +516,8 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     sourceRelation,
     calendarSignals,
     delayDetails: delayDetails,
+    demandItems: openDemandItems,
+    delayedDemandItems: Array.isArray(demands) ? demands : [],
     productivity,
     summary: {
       openItems: totalOpen,
