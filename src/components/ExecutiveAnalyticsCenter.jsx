@@ -26,6 +26,10 @@ const trendMetrics = [
   { key: 'openDemands', label: 'Backlog de demandas', color: '#f0abfc', formatter: formatNumber },
   { key: 'activeItems', label: 'Itens ativos', color: '#5eead4', formatter: formatNumber },
   { key: 'completedItems', label: 'Concluídos', color: '#63e6be', formatter: formatNumber },
+  { key: 'completionPct', label: '% concluídos', color: '#34d399', formatter: formatPct },
+  { key: 'delayedProductionPct', label: '% atrasos produção', color: '#fb7185', formatter: formatPct },
+  { key: 'overdueDemandsPct', label: '% demandas vencidas', color: '#fbbf24', formatter: formatPct },
+  { key: 'readyPct', label: '% prontos para agendar', color: '#c084fc', formatter: formatPct },
   { key: 'exposedClients', label: 'Clientes expostos', color: '#f97316', formatter: formatNumber },
   { key: 'stalledClients', label: 'Sem execução', color: '#f43f5e', formatter: formatNumber }
 ];

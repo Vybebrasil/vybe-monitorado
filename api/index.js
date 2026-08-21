@@ -13,7 +13,7 @@ import { buildExecutiveSnapshot } from '../server/domain/executive.js';
 import { listDecisionRecords, saveDecisionRecord, updateDecisionRecord } from '../server/domain/executive-records.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildClientHealthScore } from '../server/domain/health-score.js';
-import { listExecutiveSnapshots, saveExecutiveSnapshot, summarizeSnapshotTrend, summarizeExecutiveDelta, buildExecutiveTimeSeries } from '../server/domain/executive-snapshots.js';
+import { listExecutiveSnapshots, saveExecutiveSnapshot, shouldPersistExecutiveSnapshot, summarizeSnapshotTrend, summarizeExecutiveDelta, buildExecutiveTimeSeries } from '../server/domain/executive-snapshots.js';
 import { listImpactRecords, saveImpactRecord, updateImpactRecord } from '../server/domain/impact-records.js';
 import { listHealthSnapshots, saveHealthSnapshot, summarizeHealthTrend } from '../server/domain/health-snapshots.js';
 import { summarizeDecisionEffectiveness, detectPersistentRisks, summarizePortfolioPatterns, buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
@@ -21,6 +21,8 @@ import { buildExecutiveBriefingDocument } from '../server/domain/executive-brief
 import { buildExecutiveAlerts } from '../server/domain/executive-alerts.js';
 import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/executive-planning.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
+import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
+import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
 import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { securityHeaders, createRateLimiter, rateLimitConfig } from '../server/security.js';
@@ -47,6 +49,47 @@ const autosaveEnabled = (envName, storeName) => {
   if (explicit === 'false') return false;
   return isProduction && describeRecordStore(storeName).ready;
 };
+
+async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null } = {}) {
+  const [decisionsResult, impactsResult, healthResult] = await Promise.allSettled([
+    listDecisionRecords(),
+    listImpactRecords(),
+    listHealthSnapshots()
+  ]);
+  const decisions = decisionsResult.status === 'fulfilled' ? decisionsResult.value : [];
+  const impacts = impactsResult.status === 'fulfilled' ? impactsResult.value : [];
+  const healthSnapshots = healthResult.status === 'fulfilled' ? healthResult.value : [];
+  const effectiveness = summarizeDecisionEffectiveness(decisions, impacts);
+  const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
+  const liveRisks = Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks : [];
+  const patterns = summarizePortfolioPatterns({ decisions, impacts, healthSnapshots });
+  const briefing = buildExecutiveBriefing({ snapshot, effectiveness, risks: [...liveRisks, ...persistentRisks], patterns });
+  const alerts = buildExecutiveAlerts({ risks: [...liveRisks, ...persistentRisks], effectiveness, freshness: snapshot.sourceQuality?.freshness || 'live' });
+  const learning = buildOutcomeLearning({ decisions, impacts, persistentRisks });
+  const stores = {
+    decisions: decisionsResult.status === 'fulfilled',
+    impacts: impactsResult.status === 'fulfilled',
+    health: healthResult.status === 'fulfilled'
+  };
+  return {
+    available: Object.values(stores).some(Boolean),
+    partial: !Object.values(stores).every(Boolean),
+    effectiveness,
+    persistentRisks,
+    patterns,
+    briefing,
+    alerts,
+    learning,
+    memory: buildDecisionMemory({ decisions, impacts }),
+    scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }),
+    projections: buildExecutiveProjections({ snapshot, timeSeries }),
+    clientHealth: buildClientHealthPortfolio(healthSnapshots),
+    storage: stores,
+    note: Object.values(stores).every(Boolean)
+      ? 'Memória executiva, impactos e saúde disponíveis.'
+      : 'Leitura live disponível; parte da memória executiva aguarda datastore configurado.'
+  };
+}
 
 const adminTokenMatches = req => {
   const expected = process.env.NEXUS_ADMIN_TOKEN || '';
@@ -558,39 +601,55 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       generatedAt: new Date().toISOString()
     });
     let snapshotSaved = false;
+    let snapshotPersistReason = 'autosave_disabled';
     const snapshotAutosave = autosaveEnabled('NEXUS_SNAPSHOT_AUTOSAVE', 'snapshots');
-    if (snapshotAutosave) {
-      try {
-        await saveExecutiveSnapshot(executiveSnapshot);
-        snapshotSaved = true;
-      } catch (snapshotError) {
-        console.warn('[API] Snapshot executivo não persistido:', snapshotError.message);
+    let storedSnapshots = [];
+    let historyLoadError = null;
+    try {
+      storedSnapshots = await listExecutiveSnapshots({ limit: 180 });
+    } catch (historyError) {
+      historyLoadError = historyError;
+    }
+
+    if (snapshotAutosave && !historyLoadError) {
+      const persistDecision = shouldPersistExecutiveSnapshot(executiveSnapshot, storedSnapshots[0] || null);
+      snapshotPersistReason = persistDecision.reason;
+      if (persistDecision.save) {
+        try {
+          await saveExecutiveSnapshot(executiveSnapshot);
+          snapshotSaved = true;
+        } catch (snapshotError) {
+          snapshotPersistReason = snapshotError.code || 'save_failed';
+          console.warn('[API] Snapshot executivo não persistido:', snapshotError.message);
+        }
       }
     }
 
     let history = { status: 'unavailable', available: false, message: 'Histórico executivo indisponível nesta implantação.' };
     let timeSeries = { status: 'not_configured', available: false, points: [], windows: {}, message: 'Configure o datastore de snapshots para desenhar tendências históricas.' };
-    try {
-      const storedSnapshots = await listExecutiveSnapshots({ limit: 180 });
-      const baseline = snapshotSaved ? storedSnapshots[1] : storedSnapshots[0];
+    if (!historyLoadError) {
+      const baseline = storedSnapshots[0] || null;
       history = summarizeExecutiveDelta(executiveSnapshot, baseline);
-      history.snapshotsAvailable = storedSnapshots.length;
-      const seriesSnapshots = snapshotSaved ? storedSnapshots : [executiveSnapshot, ...storedSnapshots];
+      history.snapshotsAvailable = storedSnapshots.length + (snapshotSaved ? 1 : 0);
+      history.snapshotPersistReason = snapshotPersistReason;
+      const seriesSnapshots = [executiveSnapshot, ...storedSnapshots];
       timeSeries = buildExecutiveTimeSeries(seriesSnapshots, new Date());
-    } catch (historyError) {
+    } else {
       history = {
-        status: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'not_configured' : 'unavailable',
+        status: historyLoadError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'not_configured' : 'unavailable',
         available: false,
-        message: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'Configure o datastore de snapshots para acompanhar mudanças entre leituras.' : 'Não foi possível carregar o histórico executivo.'
+        message: historyLoadError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'Configure o datastore de snapshots para acompanhar mudanças entre leituras.' : 'Não foi possível carregar o histórico executivo.'
       };
       timeSeries = {
-        status: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'not_configured' : 'unavailable',
+        status: historyLoadError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'not_configured' : 'unavailable',
         available: false,
         points: [],
         windows: {},
-        message: historyError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'Configure o datastore de snapshots para desenhar tendências históricas.' : 'Não foi possível carregar a série histórica.'
+        message: historyLoadError.code === 'SNAPSHOT_STORE_NOT_CONFIGURED' ? 'Configure o datastore de snapshots para desenhar tendências históricas.' : 'Não foi possível carregar a série histórica.'
       };
     }
+
+    const intelligence = await buildExecutiveIntelligence({ snapshot: executiveSnapshot, timeSeries });
 
     // O espelho operacional trabalha com deltas a cada 15 segundos. A CDN do
     // Nexus não pode manter uma resposta por um minuto, caso contrário o gestor
@@ -609,8 +668,10 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         sync: executiveSnapshot.sourceQuality?.sync || null,
         snapshotSaved,
         snapshotAutosave,
+        snapshotPersistReason,
         history,
         timeSeries,
+        intelligence,
         persistence: {
           liveReadReady: true,
           historicalReady: history.available || history.status === 'stable' || history.status === 'improving' || history.status === 'worsening',

@@ -13,7 +13,7 @@ import {
 } from '../server/domain/executive-alerts.js';
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildCalendarSignals, buildExecutiveSnapshot, buildReadinessKpis } from '../server/domain/executive.js';
-import { summarizeExecutiveDelta, buildExecutiveTimeSeries } from '../server/domain/executive-snapshots.js';
+import { summarizeExecutiveDelta, buildExecutiveTimeSeries, shouldPersistExecutiveSnapshot } from '../server/domain/executive-snapshots.js';
 import { buildExecutiveBriefing } from '../server/domain/decision-analytics.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
@@ -23,6 +23,8 @@ import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, resetOperati
 import { buildExecutiveSourceMeta } from '../server/integrations/executive-sources.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
+import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
+import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
 
 test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
   const snapshots = [
@@ -38,7 +40,50 @@ test('Série temporal executiva calcula pontos e comparação 7D com snapshots r
   assert.equal(series.windows['7d'].delta.score, 10);
   assert.equal(series.windows['7d'].delta.delayedProduction, -5);
   assert.equal(series.windows['7d'].delta.openDemands, 2);
+  assert.equal(series.points.at(-1).completionPct, 45.1);
+  assert.equal(series.points.at(-1).delayedProductionPct, 15.8);
+  assert.equal(series.points.at(-1).overdueDemandsPct, 200);
   assert.equal(buildExecutiveTimeSeries([snapshots[0]], new Date('2026-08-20T12:00:00.000Z')).available, false);
+});
+
+test('Autosave temporal ignora a mesma versão do espelho e respeita intervalo mínimo', () => {
+  const base = { capturedAt: '2026-08-21T10:00:00.000Z', sourceQuality: { sync: { version: 10 } } };
+  const sameVersion = { capturedAt: '2026-08-21T10:01:00.000Z', sourceQuality: { sync: { version: 10 } } };
+  const changedTooSoon = { capturedAt: '2026-08-21T10:02:00.000Z', sourceQuality: { sync: { version: 11 } } };
+  const changedAfterInterval = { capturedAt: '2026-08-21T16:00:00.000Z', sourceQuality: { sync: { version: 11 } } };
+
+  assert.equal(shouldPersistExecutiveSnapshot(sameVersion, base).save, false);
+  assert.equal(shouldPersistExecutiveSnapshot(sameVersion, base).reason, 'same_source_version');
+  assert.equal(shouldPersistExecutiveSnapshot(changedTooSoon, base, { minIntervalSeconds: 300 }).save, false);
+  assert.equal(shouldPersistExecutiveSnapshot(changedAfterInterval, base, { minIntervalSeconds: 300 }).save, true);
+});
+
+test('Projeções executivas distinguem tendência histórica de esforço contrafactual', () => {
+  const result = buildExecutiveProjections({
+    snapshot: { summary: { delayedTeam: 20, delayedDemands: 10 }, quantitative: { activeItems: 100 }, demandItems: Array.from({ length: 50 }, (_, index) => ({ id: String(index) })) },
+    timeSeries: { points: [
+      { capturedAt: '2026-08-19T00:00:00.000Z', delayedProduction: 24, overdueDemands: 12, activeItems: 100 },
+      { capturedAt: '2026-08-21T00:00:00.000Z', delayedProduction: 20, overdueDemands: 10, activeItems: 100 }
+    ] }
+  });
+  assert.equal(result.available, true);
+  assert.equal(result.mode, 'observed_trend');
+  assert.equal(result.trendPerDay.delayedProduction, -2);
+  assert.equal(result.scenarios[0].requiredDailyDelayResolution, 2.86);
+  assert.match(result.scenarios[0].assumption, /Contrafactual/);
+  assert.equal(buildExecutiveProjections({ snapshot: { summary: { delayedTeam: 20 } }, timeSeries: { points: [] } }).mode, 'counterfactual_only');
+});
+
+test('Portfólio de saúde histórica usa o último snapshot por cliente e preserva tendência', () => {
+  const result = buildClientHealthPortfolio([
+    { clientId: 'a', clientName: 'Alpha', status: 'risk', trend: 'declining', score: 32, capturedAt: '2026-08-20T10:00:00.000Z' },
+    { clientId: 'a', clientName: 'Alpha', status: 'stable', trend: 'improving', score: 60, capturedAt: '2026-08-19T10:00:00.000Z' },
+    { clientId: 'b', clientName: 'Beta', status: 'stable', trend: 'improving', score: 78, capturedAt: '2026-08-20T11:00:00.000Z' }
+  ]);
+  assert.equal(result.observedClients, 2);
+  assert.equal(result.atRiskCount, 1);
+  assert.equal(result.improvingCount, 1);
+  assert.equal(result.rows[0].clientId, 'b');
 });
 
 test('Health Score saudável preserva explicabilidade e confiança alta', () => {

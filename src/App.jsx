@@ -13,6 +13,7 @@ import { ExecutivePerformancePanel } from './components/ExecutivePerformancePane
 import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
 import { ExecutiveVisualOverview } from './components/ExecutiveVisualOverview.jsx';
 import { ExecutiveAnalyticsCenter, TrendChart } from './components/ExecutiveAnalyticsCenter.jsx';
+import ExecutiveProjectionPanel from './components/ExecutiveProjectionPanel.jsx';
 import { AnalyticsDrilldownDrawer } from './components/AnalyticsDrilldownDrawer.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
@@ -770,7 +771,7 @@ function ExecutiveViewNav({ activeView, onChange, snapshot }) {
   </nav>;
 }
 
-function ManagerStation({ snapshot, history, timeSeries, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
+function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, onOpenAnalyst, onRefresh, refreshing, refreshError }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
@@ -853,8 +854,15 @@ function ManagerStation({ snapshot, history, timeSeries, onExit, onOpenAnalyst, 
 
       {activeView === 'summary' ? <>
         <JarvisDecisionBriefing snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: id.startsWith('client:') ? 'client' : 'kpi', id: id.replace(/^client:/, ''), title: id.startsWith('client:') ? `Investigação: ${id.replace(/^client:/, '')}` : `KPI: ${id}` })} />
+        <section className="executive-intelligence-band" aria-label="Memória e eficácia executiva">
+          <div><span>MEMÓRIA EXECUTIVA</span><strong>{intelligence?.available ? (intelligence.partial ? 'PARCIAL' : 'ATIVA') : 'N/D'}</strong><small>{intelligence?.note || 'A leitura live está disponível; memória histórica ainda não configurada.'}</small></div>
+          <div><span>DECISÕES AVALIADAS</span><strong>{formatNumber(intelligence?.effectiveness?.evaluatedDecisions || 0)}</strong><small>{formatNumber(intelligence?.effectiveness?.pendingEvaluation || 0)} aguardam impacto</small></div>
+          <div><span>SINAL DE EFICÁCIA</span><strong>{intelligence?.effectiveness?.positiveRate === null || intelligence?.effectiveness?.positiveRate === undefined ? 'N/D' : `${intelligence.effectiveness.positiveRate}%`}</strong><small>{intelligence?.effectiveness?.label || 'Sem base de impacto'}</small></div>
+          <div><span>RISCOS PERSISTENTES</span><strong>{formatNumber(intelligence?.persistentRisks?.length || 0)}</strong><small>{intelligence?.persistentRisks?.[0]?.recommendedAction || 'Nenhum risco persistente registrado.'}{intelligence?.clientHealth?.available ? ` · ${formatNumber(intelligence.clientHealth.atRiskCount)} saúde em risco` : ''}</small></div>
+        </section>
         <ExecutiveVisualOverview snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
         <TrendChart timeSeries={timeSeries} />
+        <ExecutiveProjectionPanel projections={intelligence?.projections} />
         <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
       </> : null}
 
@@ -1203,7 +1211,7 @@ function App() {
       const nextSnapshot = metricsData.metrics.executiveSnapshot;
       const nextMirrorVersion = Number(metricsData.meta?.sync?.version || nextSnapshot?.sourceQuality?.sync?.version || 0);
       if (nextMirrorVersion > 0) mirrorVersionRef.current = nextMirrorVersion;
-      setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null, timeSeries: metricsData.meta?.timeSeries || null });
+      setMetrics({ executiveSnapshot: nextSnapshot, history: metricsData.meta?.history || null, timeSeries: metricsData.meta?.timeSeries || null, intelligence: metricsData.meta?.intelligence || null });
     } catch (err) {
       if (err.name === 'AbortError') return;
       const message = err.message || 'Falha catastrófica de comunicação com o Monday.com.';
@@ -1293,7 +1301,7 @@ function App() {
 
       {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} timeSeries={metrics.timeSeries} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onRefresh={() => loadMetrics({ manual: true })} refreshing={refreshing} refreshError={refreshError} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} timeSeries={metrics.timeSeries} intelligence={metrics.intelligence} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onRefresh={() => loadMetrics({ manual: true })} refreshing={refreshing} refreshError={refreshError} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">

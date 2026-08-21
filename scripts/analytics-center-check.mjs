@@ -28,7 +28,7 @@ const overflow = await page.evaluate(() => ({ body: document.body.scrollWidth, v
 if (kpis !== 6) failures.push(`esperava 6 KPIs, encontrou ${kpis}`);
 if (panels !== 6) failures.push(`esperava 6 painéis analíticos incluindo a linha temporal, encontrou ${panels}`);
 if (trendPanel !== 1) failures.push(`esperava 1 gráfico de linha, encontrou ${trendPanel}`);
-if (trendMetrics !== 8) failures.push(`esperava 8 métricas temporais, encontrou ${trendMetrics}`);
+if (trendMetrics !== 12) failures.push(`esperava 12 métricas temporais, encontrou ${trendMetrics}`);
 if (trendRanges !== 3) failures.push(`esperava 3 janelas temporais, encontrou ${trendRanges}`);
 if (overflow.body > overflow.viewport) failures.push(`overflow horizontal: ${overflow.body} > ${overflow.viewport}`);
 

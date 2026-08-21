@@ -42,6 +42,26 @@ export async function saveExecutiveSnapshot(snapshot) {
   return record;
 }
 
+export function shouldPersistExecutiveSnapshot(currentSnapshot = {}, previousSnapshot = null, {
+  minIntervalSeconds = Number(process.env.NEXUS_SNAPSHOT_MIN_INTERVAL_SECONDS) || 300
+} = {}) {
+  if (!previousSnapshot) return { save: true, reason: 'no_baseline' };
+  const currentVersion = currentSnapshot?.sourceQuality?.sync?.version ?? currentSnapshot?.sourceQuality?.version ?? null;
+  const previousVersion = previousSnapshot?.sourceQuality?.sync?.version ?? previousSnapshot?.sourceQuality?.version ?? null;
+  const currentTime = new Date(currentSnapshot.capturedAt || 0).getTime();
+  const previousTime = new Date(previousSnapshot.capturedAt || 0).getTime();
+  const elapsedSeconds = Number.isFinite(currentTime) && Number.isFinite(previousTime) && currentTime >= previousTime
+    ? (currentTime - previousTime) / 1000
+    : null;
+  if (currentVersion !== null && previousVersion !== null && String(currentVersion) === String(previousVersion)) {
+    return { save: false, reason: 'same_source_version', sourceVersion: currentVersion, elapsedSeconds };
+  }
+  if (elapsedSeconds !== null && elapsedSeconds < Math.max(0, minIntervalSeconds)) {
+    return { save: false, reason: 'minimum_interval', sourceVersion: currentVersion, elapsedSeconds, minIntervalSeconds };
+  }
+  return { save: true, reason: 'source_changed_or_interval_elapsed', sourceVersion: currentVersion, elapsedSeconds };
+}
+
 export function summarizeExecutiveDelta(currentSnapshot = null, previousSnapshot = null) {
   if (!currentSnapshot || !previousSnapshot) {
     return { status: 'no_baseline', available: false, message: 'Ainda não existe uma leitura anterior persistida para comparação.' };
@@ -129,18 +149,30 @@ function snapshotSeriesPoint(snapshot = {}) {
   const quantitative = snapshot.quantitative || {};
   const productivity = snapshot.productivity || {};
   const activeItems = numericOrNull(productivity.activeItems ?? quantitative.activeItems);
+  const completedItems = numericOrNull(productivity.completedItems ?? quantitative.completedItems);
+  const delayedProduction = numericOrNull(summary.delayedTeam ?? quantitative.overdueInternal);
+  const overdueDemands = numericOrNull(summary.delayedDemands);
+  const readyItems = numericOrNull(productivity.readyToSchedule);
+  const openDemands = numericOrNull(Array.isArray(snapshot.demandItems) ? snapshot.demandItems.length : null);
   const clientRanking = Array.isArray(snapshot.clientRanking) ? snapshot.clientRanking : [];
+  const totalScope = activeItems !== null && completedItems !== null ? activeItems + completedItems : null;
+  const ratio = (value, denominator) => value !== null && denominator > 0 ? Number(((value / denominator) * 100).toFixed(1)) : null;
   return {
     capturedAt: snapshot.capturedAt || null,
     sourceVersion: snapshot.sourceQuality?.sync?.version ?? snapshot.sourceQuality?.version ?? null,
     score: numericOrNull(snapshot.portfolioStability?.score),
     activeItems,
-    completedItems: numericOrNull(productivity.completedItems ?? quantitative.completedItems),
-    delayedProduction: numericOrNull(summary.delayedTeam ?? quantitative.overdueInternal),
-    overdueDemands: numericOrNull(summary.delayedDemands),
+    completedItems,
+    delayedProduction,
+    overdueDemands,
     exposedClients: numericOrNull(summary.exposedClients ?? clientRanking.filter(item => Number(item.delayedItems) > 0).length),
     stalledClients: numericOrNull(summary.stalledClients ?? snapshot.portfolioExecution?.stalled?.length),
-    openDemands: numericOrNull(Array.isArray(snapshot.demandItems) ? snapshot.demandItems.length : null)
+    openDemands,
+    readyItems,
+    completionPct: ratio(completedItems, totalScope),
+    delayedProductionPct: ratio(delayedProduction, activeItems),
+    readyPct: ratio(readyItems, activeItems),
+    overdueDemandsPct: ratio(overdueDemands, openDemands)
   };
 }
 
@@ -151,7 +183,7 @@ function comparePointToWindow(points, days, now) {
   const baseline = inWindow[0];
   const current = inWindow.at(-1);
   const delta = {};
-  for (const key of ['score', 'activeItems', 'completedItems', 'delayedProduction', 'overdueDemands', 'openDemands', 'exposedClients', 'stalledClients']) {
+  for (const key of ['score', 'activeItems', 'completedItems', 'delayedProduction', 'overdueDemands', 'openDemands', 'exposedClients', 'stalledClients', 'readyItems', 'completionPct', 'delayedProductionPct', 'readyPct', 'overdueDemandsPct']) {
     delta[key] = baseline[key] !== null && current[key] !== null ? current[key] - baseline[key] : null;
   }
   return { available: true, points: inWindow.length, baseline, current, delta, message: null };
