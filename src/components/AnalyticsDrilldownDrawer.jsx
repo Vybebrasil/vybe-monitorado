@@ -41,7 +41,11 @@ function isReady(item) {
 
 export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const [showAll, setShowAll] = useState(false);
-  useEffect(() => { setShowAll(false); }, [panel]);
+  const [showCompleted, setShowCompleted] = useState(false);
+  useEffect(() => {
+    setShowAll(false);
+    setShowCompleted(panel?.targetType === 'kpi' && panel?.id === 'completedItems');
+  }, [panel]);
   useEffect(() => {
     if (!panel) return undefined;
     const onKeyDown = event => { if (event.key === 'Escape') setPanel(null); };
@@ -59,31 +63,47 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
 
   const items = useMemo(() => {
     if (!panel) return [];
-    const scoped = items => items.filter(item => matchesPanelFilters(item, panel.filters || {}));
-    if (targetType === 'owner') return scoped([...productionItems, ...delayDetails].filter((item, index, list) => list.findIndex(candidate => candidate?.id === item?.id) === index && matchesOwner(item, panel.id)));
-    if (targetType === 'client') return scoped(productionItems.filter(item => itemClient(item) === panel.id));
+    const scoped = rows => rows.filter(item => matchesPanelFilters(item, panel.filters || {}));
+    let rows = [];
+    if (targetType === 'owner') rows = [...productionItems, ...delayDetails].filter((item, index, list) => list.findIndex(candidate => candidate?.id === item?.id) === index && matchesOwner(item, panel.id));
+    if (targetType === 'client') rows = productionItems.filter(item => itemClient(item) === panel.id);
     if (targetType === 'filter') {
       const key = panel.filterKey;
-      return scoped(productionItems.filter(item => key === 'stage' ? itemStage(item) === panel.id : String(item?.status || '') === panel.id));
+      rows = productionItems.filter(item => key === 'stage' ? itemStage(item) === panel.id : String(item?.status || '') === panel.id);
     }
     if (targetType === 'kpi') {
-      if (panel.id === 'internal-delays') return scoped(delayDetails.filter(item => String(item.delayType || '').includes('prazo interno')));
-      if (panel.id === 'publication') return scoped(delayDetails.filter(item => String(item.delayType || '').includes('veiculação')));
-      if (panel.id === 'overdue-demands') return scoped(sourceItems.filter(item => item?.isDelayed));
-      if (panel.id === 'activeItems') return scoped(productionItems.filter(item => !isCompleted(item)));
-      if (panel.id === 'completedItems') return scoped(productionItems.filter(isCompleted));
-      if (panel.id === 'readyItems') return scoped(productionItems.filter(item => !isCompleted(item) && isReady(item)));
-      return [];
+      if (panel.id === 'internal-delays') rows = delayDetails.filter(item => String(item.delayType || '').includes('prazo interno'));
+      if (panel.id === 'publication') rows = delayDetails.filter(item => String(item.delayType || '').includes('veiculação'));
+      if (panel.id === 'overdue-demands') rows = sourceItems.filter(item => item?.isDelayed);
+      if (panel.id === 'activeItems') rows = productionItems.filter(item => !isCompleted(item));
+      if (panel.id === 'completedItems') rows = productionItems.filter(isCompleted);
+      if (panel.id === 'readyItems') rows = productionItems.filter(item => !isCompleted(item) && isReady(item));
     }
-    return [];
+    return scoped(rows);
   }, [activeItems, delayDetails, demandRows, panel, productionItems, sourceItems, targetType]);
+
+  const completedItems = useMemo(() => items.filter(isCompleted), [items]);
+  const itemsToDisplay = useMemo(() => {
+    const operational = items.filter(item => !isCompleted(item));
+    const rows = showCompleted ? items : operational;
+    return [...rows].sort((a, b) => {
+      const completedDelta = Number(isCompleted(a)) - Number(isCompleted(b));
+      if (completedDelta) return completedDelta;
+      const delayedDelta = Number(isDelayed(b)) - Number(isDelayed(a));
+      if (delayedDelta) return delayedDelta;
+      const overdueDelta = (Number(b.daysOverdue) || 0) - (Number(a.daysOverdue) || 0);
+      if (overdueDelta) return overdueDelta;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+    });
+  }, [items, showCompleted]);
 
   if (!panel || panel.type !== 'analytics') return null;
   const delayed = items.filter(isDelayed);
   const clients = new Set(items.map(itemClient).filter(Boolean));
   const owners = new Set(items.flatMap(item => splitOwners(item?.responsavel)));
   const totalDays = delayed.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
-  const visibleItems = showAll ? items : items.slice(0, 5);
+  const visibleItems = showAll ? itemsToDisplay : itemsToDisplay.slice(0, 5);
+  const isCompletedOnlyPanel = targetType === 'kpi' && panel?.id === 'completedItems';
   const eyebrow = targetType === 'owner' ? 'ANALYTICS · RESPONSÁVEL' : targetType === 'client' ? 'ANALYTICS · CLIENTE' : targetType === 'filter' ? `ANALYTICS · ${panel.filterKey === 'stage' ? 'ETAPA' : 'STATUS'}` : 'ANALYTICS · INDICADOR';
   const title = panel.title || 'Investigação analítica';
   const subtitle = targetType === 'owner'
@@ -103,20 +123,21 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
         {targetType === 'owner' ? <div className="investigation-callout"><span>LEITURA CORRETA</span><p>Volume e atraso podem refletir concentração de carteira, etapa, prioridade e complexidade. O Nexus mostra sinais para investigação, não uma nota individual.</p></div> : null}
         {targetType === 'kpi' && panel.id === 'health' ? <div className="investigation-callout"><span>COMPOSIÇÃO</span><p>{snapshot?.portfolioStability?.explanation || 'O placar combina sinais de atraso, execução e prontidão observados no snapshot.'}</p></div> : null}
         {items.length === 0 ? <div className="investigation-empty"><strong>Sem evidência suficiente.</strong><span>Esta seleção não trouxe itens no recorte atual. O Nexus mantém N/D ou zero sem fabricar dados.</span></div> : <>
-          <div className="kpi-investigation-section-title"><span>EVIDÊNCIAS · {formatNumber(items.length)} ITEM(S)</span><strong>{delayed.length ? `${formatNumber(delayed.length)} com sinal` : 'sem atraso no recorte'}</strong></div>
-          <ul className="kpi-evidence-list analytics-evidence-list">{visibleItems.map((item, index) => {
+          {!isCompletedOnlyPanel && completedItems.length > 0 ? <div className="analytics-evidence-controls"><div><span>FINALIZADOS</span><strong>{formatNumber(completedItems.length)} itens concluídos ficam ocultos por padrão.</strong></div><button type="button" className="analytics-completed-toggle" onClick={() => { setShowCompleted(value => !value); setShowAll(false); }}>{showCompleted ? 'OCULTAR FINALIZADOS' : `MOSTRAR FINALIZADOS (${formatNumber(completedItems.length)})`}</button></div> : null}
+          <div className="kpi-investigation-section-title"><span>EVIDÊNCIAS · {formatNumber(itemsToDisplay.length)} EXIBIDAS{itemsToDisplay.length !== items.length ? ` · ${formatNumber(items.length)} NO RECORTE` : ''}</span><strong>{delayed.length ? `${formatNumber(delayed.length)} com sinal` : 'sem atraso no recorte'}</strong></div>
+          {itemsToDisplay.length === 0 ? <div className="investigation-empty"><strong>Nenhum item aberto neste recorte.</strong><span>Os itens encontrados estão finalizados. Use MOSTRAR FINALIZADOS para consultar o histórico.</span></div> : <ul className="kpi-evidence-list analytics-evidence-list">{visibleItems.map((item, index) => {
             const delayedItem = isDelayed(item);
             const urgency = delayedItem ? delayUrgency(item.daysOverdue) : { tone: 'stable', label: 'DENTRO DO PRAZO', description: 'O prazo não aparece vencido nesta leitura.' };
             const statusColor = statusColorFor(item.status, snapshot?.quantitative?.statusColors);
-            return <li key={item.id || `${item.name}-${index}`} className={`kpi-evidence-card urgency-${urgency.tone}`}>
+            return <li key={item.id || `${item.name}-${index}`} className={`kpi-evidence-card urgency-${urgency.tone}${isCompleted(item) ? ' item-completed' : ''}`}>
               <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`}>{delayedItem ? `ATRASO: ${item.daysOverdue || 0}D · ${urgency.label}` : 'DENTRO DO PRAZO'}</span></div>
               <div className="kpi-evidence-card-meta"><span>{itemClient(item)}</span><span>{itemStage(item)}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColor, borderColor: statusColor }}>{item.status}</span> : null}</div>
               <div className="kpi-evidence-card-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span className="people-field"><b>Resp.</b><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div>
               {item.editorDesigner ? <div className="kpi-evidence-card-meta"><span className="people-field"><b>Editor/Designer</b><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span></div> : null}
               {item.id ? <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
             </li>;
-          })}</ul>
-          {items.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${items.length - 5})`}</button> : null}
+          })}</ul>}
+          {itemsToDisplay.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${itemsToDisplay.length - 5})`}</button> : null}
         </>}
       </div>
     </aside>

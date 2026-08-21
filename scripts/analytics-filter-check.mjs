@@ -57,9 +57,27 @@ const after = await readKpis();
 if (before.join('|') === after.join('|')) failures.push(`KPIs não mudaram após o filtro: ${before.join('|')}`);
 const expected = ['2', '1', '0', '1', '1', 'N/D'];
 if (after.join('|') !== expected.join('|')) failures.push(`recorte inesperado: ${after.join('|')} (esperado ${expected.join('|')})`);
-if (!(await page.locator('.analytics-filter-active-badge').count())) failures.push('selo RECORTE ATIVO ausente');
-if (pageErrors.length) failures.push(`page errors: ${pageErrors.join('; ')}`);
-console.log(JSON.stringify({ before, after, expected, pageErrors, failures }, null, 2));
+  if (!(await page.locator('.analytics-filter-active-badge').count())) failures.push('selo RECORTE ATIVO ausente');
+
+  const ownerRow = page.getByRole('button', { name: /Reriston Souza Silva/ }).first();
+  if (!(await ownerRow.count())) {
+    failures.push('responsável do fixture não encontrado para testar finalizados');
+  } else {
+    await ownerRow.click();
+    await page.waitForSelector('.analytics-drilldown-drawer', { state: 'visible', timeout: 5000 });
+    const drawer = page.locator('.analytics-drilldown-drawer');
+    const hiddenText = await drawer.innerText();
+    if (hiddenText.includes('Post finalizado')) failures.push('finalizado apareceu antes do comando explícito');
+    const toggle = drawer.getByRole('button', { name: /MOSTRAR FINALIZADOS/ });
+    if (!(await toggle.count())) failures.push('controle MOSTRAR FINALIZADOS ausente');
+    if (await toggle.count()) {
+      await toggle.click();
+      const shownText = await drawer.innerText();
+      if (!shownText.includes('Post finalizado')) failures.push('finalizado não apareceu após MOSTRAR FINALIZADOS');
+    }
+  }
+  if (pageErrors.length) failures.push(`page errors: ${pageErrors.join('; ')}`);
+  console.log(JSON.stringify({ before, after, expected, pageErrors, failures }, null, 2));
 await browser.close();
 if (failures.length) process.exit(1);
 console.log('ANALYTICS_FILTER_PASS');
