@@ -640,6 +640,45 @@ test('Produção sinaliza cobertura parcial quando o espelho não entrega campos
   assert.equal(result.quantitative.fieldCoverage.complete, false);
 });
 
+test('Produção expõe coorte completa para recorte executivo sem alterar KPIs globais', async () => {
+  const result = await mondayIntegration.getOpenPosts({
+    mirrorSnapshot: {
+      version: 8,
+      items: [
+        {
+          id: 'active-1',
+          name: 'Conteúdo ativo',
+          group: { title: 'Redação' },
+          column_values: [
+            { id: 'lista_suspensa_mkmqnjbv', text: 'Cliente A', value: '' },
+            { id: 'status', text: 'Em andamento', value: '' },
+            { id: 'person', text: 'Reriston Souza Silva', value: '' },
+            { id: 'data', text: '', value: '{"date":"2099-08-20"}' },
+            { id: 'data__1', text: '', value: '' }
+          ]
+        },
+        {
+          id: 'done-1',
+          name: 'Conteúdo concluído',
+          group: { title: 'Redação' },
+          column_values: [
+            { id: 'lista_suspensa_mkmqnjbv', text: 'Cliente A', value: '' },
+            { id: 'status', text: 'Finalizado', value: '' },
+            { id: 'person', text: 'Reriston Souza Silva', value: '' },
+            { id: 'data', text: '', value: '' },
+            { id: 'data__1', text: '', value: '' }
+          ]
+        }
+      ]
+    }
+  });
+  assert.equal(result.itemRows.length, 2);
+  assert.equal(result.itemRows.find(item => item.id === 'done-1').isCompleted, true);
+  assert.equal(result.activeItems.length, 1);
+  assert.equal(result.productivity.activeItems, 1);
+  assert.equal(result.productivity.completedItems, 1);
+});
+
 test('Cliente do espelho busca snapshot inicial e depois somente o delta da versão', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];

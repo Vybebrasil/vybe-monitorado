@@ -513,10 +513,16 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     },
     portfolioExecution: executionGap,
     activeItems: posts.activeItems || ranking.flatMap(row => (row.details || []).map(item => ({ ...item, client: row.name }))),
+    // Coorte completa do board atual para recortes executivos. O histórico
+    // persistido continua removendo essas linhas em cleanSnapshot().
+    itemRows: Array.isArray(posts.itemRows) ? posts.itemRows : null,
+    itemRowsComplete: Array.isArray(posts.itemRows),
     sourceRelation,
     calendarSignals,
     delayDetails: delayDetails,
     demandItems: openDemandItems,
+    demandItemRows: Array.isArray(demands.itemRows) ? demands.itemRows : null,
+    demandItemRowsComplete: Array.isArray(demands.itemRows),
     delayedDemandItems: Array.isArray(demands) ? demands : [],
     productivity,
     summary: {

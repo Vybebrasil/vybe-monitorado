@@ -22,6 +22,23 @@ function matchesOwner(item, owner) {
   return (item?.responsavelPeople || []).some(person => person?.name === owner);
 }
 
+function matchesPanelFilters(item, filters = {}) {
+  return (!filters.owner || matchesOwner(item, filters.owner))
+    && (!filters.client || itemClient(item) === filters.client)
+    && (!filters.stage || itemStage(item) === filters.stage)
+    && (!filters.status || String(item?.status || '') === filters.status);
+}
+
+function isCompleted(item) {
+  if (item?.isCompleted === true) return true;
+  return ['finalizado', 'publicado', 'cancelado', 'feito', 'concluído', 'entregue'].some(label => String(item?.status || '').toLowerCase().includes(label));
+}
+
+function isReady(item) {
+  if (item?.isReady === true) return true;
+  return ['agendado', 'para agendar'].some(label => String(item?.status || '').toLowerCase().includes(label));
+}
+
 export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const [showAll, setShowAll] = useState(false);
   useEffect(() => { setShowAll(false); }, [panel]);
@@ -34,27 +51,32 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
 
   const targetType = panel?.targetType;
   const activeItems = Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : [];
+  const productionItems = Array.isArray(snapshot?.itemRows) ? snapshot.itemRows : activeItems;
   const delayDetails = Array.isArray(snapshot?.delayDetails) ? snapshot.delayDetails : [];
   const demandItems = Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : [];
-  const sourceItems = targetType === 'kpi' && panel?.id === 'overdue-demands' ? (Array.isArray(snapshot?.delayedDemandItems) ? snapshot.delayedDemandItems : demandItems) : activeItems;
+  const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : demandItems;
+  const sourceItems = targetType === 'kpi' && panel?.id === 'overdue-demands' ? demandRows : productionItems;
 
   const items = useMemo(() => {
     if (!panel) return [];
-    if (targetType === 'owner') return [...activeItems, ...delayDetails].filter((item, index, list) => list.findIndex(candidate => candidate?.id === item?.id) === index && matchesOwner(item, panel.id));
-    if (targetType === 'client') return activeItems.filter(item => itemClient(item) === panel.id);
+    const scoped = items => items.filter(item => matchesPanelFilters(item, panel.filters || {}));
+    if (targetType === 'owner') return scoped([...productionItems, ...delayDetails].filter((item, index, list) => list.findIndex(candidate => candidate?.id === item?.id) === index && matchesOwner(item, panel.id)));
+    if (targetType === 'client') return scoped(productionItems.filter(item => itemClient(item) === panel.id));
     if (targetType === 'filter') {
       const key = panel.filterKey;
-      return activeItems.filter(item => key === 'stage' ? itemStage(item) === panel.id : String(item?.status || '') === panel.id);
+      return scoped(productionItems.filter(item => key === 'stage' ? itemStage(item) === panel.id : String(item?.status || '') === panel.id));
     }
     if (targetType === 'kpi') {
-      if (panel.id === 'internal-delays') return delayDetails.filter(item => String(item.delayType || '').includes('prazo interno'));
-      if (panel.id === 'publication') return delayDetails.filter(item => String(item.delayType || '').includes('veiculação'));
-      if (panel.id === 'overdue-demands') return sourceItems.filter(item => item?.isDelayed);
-      if (panel.id === 'activeItems') return activeItems;
+      if (panel.id === 'internal-delays') return scoped(delayDetails.filter(item => String(item.delayType || '').includes('prazo interno')));
+      if (panel.id === 'publication') return scoped(delayDetails.filter(item => String(item.delayType || '').includes('veiculação')));
+      if (panel.id === 'overdue-demands') return scoped(sourceItems.filter(item => item?.isDelayed));
+      if (panel.id === 'activeItems') return scoped(productionItems.filter(item => !isCompleted(item)));
+      if (panel.id === 'completedItems') return scoped(productionItems.filter(isCompleted));
+      if (panel.id === 'readyItems') return scoped(productionItems.filter(item => !isCompleted(item) && isReady(item)));
       return [];
     }
     return [];
-  }, [activeItems, delayDetails, panel, sourceItems, targetType]);
+  }, [activeItems, delayDetails, demandRows, panel, productionItems, sourceItems, targetType]);
 
   if (!panel || panel.type !== 'analytics') return null;
   const delayed = items.filter(isDelayed);

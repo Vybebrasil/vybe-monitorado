@@ -62,10 +62,6 @@ function parseDateValue(value) {
 
 // Teto de itens por página da API do Monday.
 const PAGE_LIMIT = 500;
-// Índice do rótulo "Finalizado" na coluna `status` do board de Produção de Conteúdo.
-// É o único status concluído existente lá hoje; Publicado e Cancelado seguem
-// tratados por texto em `isDone`, caso passem a existir.
-const DONE_STATUS_INDEX = 3;
 const PRIORITY_COLUMN_ID = process.env.MONDAY_PRODUCTION_PRIORITY_COLUMN_ID || 'color_mm164yv8';
 const EDITOR_DESIGNER_COLUMN_ID = process.env.MONDAY_PRODUCTION_EDITOR_DESIGNER_COLUMN_ID || 'multiple_person_mm18b2p0';
 
@@ -327,7 +323,10 @@ class MondayIntegration {
       const result = await this.getAllBoardItems({
         boardId: 7829537690,
         limit: PAGE_LIMIT,
-        queryParams: `, query_params: { rules: [{ column_id: "status", compare_value: [${DONE_STATUS_INDEX}], operator: not_any_of }] }`,
+        // O recorte executivo precisa conhecer também os concluídos por pessoa,
+        // cliente, etapa e status. A paginação completa substitui o antigo filtro
+        // de status na origem; os KPIs continuam excluindo os status concluídos
+        // apenas no domínio, sem perder a dimensão necessária para os filtros.
         selection: `
           id
           name
@@ -355,6 +354,7 @@ class MondayIntegration {
     const priorityCounts = {};
     const formatCounts = {};
     const personIds = new Set();
+    const itemRows = [];
     const availableColumnIds = new Set(items.flatMap(item => (item.column_values || []).map(column => column?.id).filter(Boolean)));
     const fieldCoverage = {
       priority: { columnId: PRIORITY_COLUMN_ID, available: availableColumnIds.has(PRIORITY_COLUMN_ID) },
@@ -363,9 +363,11 @@ class MondayIntegration {
     fieldCoverage.missing = Object.entries(fieldCoverage).filter(([, value]) => value && value.available === false).map(([field]) => field);
     fieldCoverage.complete = fieldCoverage.missing.length === 0;
     let totalItems = 0;
-    // Concluídos filtrados na origem: o board inteiro menos o que a query devolveu.
-    // Antes isto contava apenas os concluídos que coubessem na página lida.
-    let completedItems = Math.max(0, boardItemsCount - items.length);
+    // A leitura atual traz o board completo (espelho ou fallback paginado),
+    // então os concluídos são contados item a item dentro do mesmo loop. Não
+    // somar a diferença entre items_count e items.length, pois isso duplicaria
+    // o total quando a consulta já não filtra status.
+    let completedItems = 0;
     let itemsWithClient = 0;
     let itemsWithInternalDeadline = 0;
     let itemsWithPublicationDate = 0;
@@ -424,6 +426,30 @@ class MondayIntegration {
       const statusLower = status.toLowerCase();
       const isDone = statusLower.includes('finalizado') || statusLower.includes('publicado') || statusLower.includes('cancelado');
       const isReady = statusLower.includes('agendado') || statusLower.includes('para agendar');
+      const itemRow = {
+        id: item.id,
+        name: item.name,
+        client: normalizedClient,
+        cliente: normalizedClient,
+        stage: groupName,
+        etapa: groupName,
+        status: normalizedStatus,
+        responsible: responsavel,
+        responsavel,
+        responsavelRefs,
+        editorDesigner,
+        editorDesignerRefs,
+        prazo: prazoStr,
+        dueDate: prazoStr,
+        veiculacao: veiculacaoStr,
+        isCompleted: isDone,
+        isReady,
+        isDelayed: false,
+        isDelayedPrazo: false,
+        isDelayedVeiculacao: false,
+        source: 'Produção de Conteúdo'
+      };
+      itemRows.push(itemRow);
 
       if (status !== '' && !isDone) {
         totalItems += 1;
@@ -479,6 +505,9 @@ class MondayIntegration {
         if (isDelayedPrazo || isDelayedVeiculacao) {
           totalDelayed += 1;
         }
+        itemRow.isDelayedPrazo = isDelayedPrazo;
+        itemRow.isDelayedVeiculacao = isDelayedVeiculacao;
+        itemRow.isDelayed = isDelayedPrazo || isDelayedVeiculacao;
 
         postsByClient[cliente].details.push({
           id: item.id,
@@ -499,18 +528,21 @@ class MondayIntegration {
     });
 
     const peopleDirectory = await this.getPeopleDirectory([...personIds]);
-    Object.values(postsByClient).forEach(clientData => clientData.details.forEach(post => {
-      post.responsavelPeople = (post.responsavelRefs?.length ? post.responsavelRefs : fallbackPeople(post.responsavel)).map(person => ({
+    const enrichPeople = row => {
+      row.responsavelPeople = (row.responsavelRefs?.length ? row.responsavelRefs : fallbackPeople(row.responsavel)).map(person => ({
         ...person,
         ...(peopleDirectory[person.id] || {}),
-        name: peopleDirectory[person.id]?.name || person.name || post.responsavel || 'Pessoa não identificada'
+        name: peopleDirectory[person.id]?.name || person.name || row.responsavel || 'Pessoa não identificada'
       }));
-      post.editorDesignerPeople = (post.editorDesignerRefs?.length ? post.editorDesignerRefs : fallbackPeople(post.editorDesigner)).map(person => ({
+      row.editorDesignerPeople = (row.editorDesignerRefs?.length ? row.editorDesignerRefs : fallbackPeople(row.editorDesigner)).map(person => ({
         ...person,
         ...(peopleDirectory[person.id] || {}),
-        name: peopleDirectory[person.id]?.name || person.name || post.editorDesigner || 'Pessoa não identificada'
+        name: peopleDirectory[person.id]?.name || person.name || row.editorDesigner || 'Pessoa não identificada'
       }));
-    }));
+      return row;
+    };
+    itemRows.forEach(enrichPeople);
+    Object.values(postsByClient).forEach(clientData => clientData.details.forEach(enrichPeople));
 
     // Ordenar por clientes com mais atrasos/abertos, e ordenar posts do mais antigo para mais novo
     const ranking = Object.keys(postsByClient).map(cliente => {
@@ -605,7 +637,11 @@ class MondayIntegration {
 
     return {
       ranking,
-      activeItems: ranking.flatMap(row => (row.details || []).map(item => ({ ...item, client: row.name }))),
+      // activeItems preserva o contrato histórico: apenas itens em fluxo.
+      activeItems: itemRows.filter(item => !item.isCompleted && item.status !== 'Sem status'),
+      // itemRows é a coorte atual completa e serve aos recortes executivos
+      // sem ser necessário consultar o Monday novamente no frontend.
+      itemRows,
       totalDelayed,
       delayDetails,
       productivity,
@@ -658,6 +694,7 @@ class MondayIntegration {
 
     const delayedDemands = [];
     const openDemandItems = [];
+    const demandRows = [];
     // Demanda aberta é diferente de demanda atrasada: um cliente com demandas no
     // prazo está sendo atendido, e não pode ser lido como parado só porque nada
     // dele venceu ainda.
@@ -668,10 +705,12 @@ class MondayIntegration {
       let cliente = '';
       let status = '';
       let prazoStr = '';
+      let responsavel = '';
 
       item.column_values.forEach(c => {
         if (c.id === 'lista_suspensa_mkmet5gs') cliente = normalizeClientName(c.text);
         if (c.id === 'status') status = c.text || '';
+        if (c.id === 'person' || c.id === 'responsavel') responsavel = c.text || '';
         if (c.id === 'data') {
           try {
             if (c.value) {
@@ -683,6 +722,23 @@ class MondayIntegration {
       });
 
       const isDone = status.toLowerCase().includes('feito') || status.toLowerCase().includes('concluído') || status.toLowerCase().includes('entregue') || status.toLowerCase().includes('cancelado');
+      const demandRow = {
+        id: item.id,
+        name: item.name,
+        client: cliente || 'Sem Cliente',
+        cliente: cliente || 'Sem Cliente',
+        stage: item.group?.title || 'Sem Quadro',
+        etapa: item.group?.title || 'Sem Quadro',
+        status: status || 'Sem status',
+        responsible: responsavel,
+        responsavel,
+        prazo: prazoStr,
+        dueDate: prazoStr,
+        isCompleted: isDone,
+        isDelayed: !isDone && isBeforeToday(prazoStr, today),
+        source: 'Solicitações de Demandas'
+      };
+      demandRows.push(demandRow);
 
       if (!isDone && status !== '') {
         if (cliente) clientsWithOpenDemand.add(cliente);
@@ -705,6 +761,7 @@ class MondayIntegration {
     // atrasos; a carteira com demanda aberta viaja junto como propriedade.
     delayedDemands.clientsWithOpenDemand = [...clientsWithOpenDemand];
     delayedDemands.openDemandItems = openDemandItems;
+    delayedDemands.itemRows = demandRows;
     delayedDemands.pagination = pagination;
     return delayedDemands;
   }
