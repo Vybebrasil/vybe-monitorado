@@ -198,30 +198,32 @@ function ExecutiveKpiBand({ snapshot, riskClients, onSelect, history, onRefresh,
   const stabilityTone = healthScore < 0 ? 'catastrophic' : healthScore < 25 ? 'critical' : healthScore < 60 ? 'warning' : 'stable';
   const cards = [
     { id: 'health', label: 'SAÚDE EXECUTIVA', value: formatPoints(healthScore), detail: `${healthScore < 0 ? 'ABAIXO DA LINHA DE RECUPERAÇÃO' : snapshot?.portfolioStability?.label || 'sem leitura'} · score bruto`, progress: healthScore, min: -100, max: 100, tone: stabilityTone, title: 'Score bruto de pressão operacional. Pode ficar negativo; não é percentual de itens saudáveis nem indicador financeiro.', explanation: healthExplanation, action: 'Abrir composição do score' },
+    { id: 'delays', label: 'ATRASOS INTERNOS', value: formatNumber(delayedInternal), detail: `${formatPct(quantitative.overdueInternalPctOfActive)} dos ativos · -${formatNumber(delayedInternal * 2)} pts`, progress: quantitative.overdueInternalPctOfActive, tone: 'critical', title: 'Itens ativos de Produção de Conteúdo com prazo interno vencido.', explanation: `${formatNumber(delayedInternal)} itens de Produção de Conteúdo no Monday, distribuídos por cliente, responsável, etapa, status e dias de atraso. Cada item retira 2 pontos.`, action: 'Abrir os atrasos de Produção de Conteúdo' },
+    { id: 'exposure', label: 'CLIENTES EXPOSTOS', value: formatNumber(riskClients), detail: eligibleClients ? `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} ativos · ${formatPct(exposedPct)}` : 'denominador indisponível', progress: exposedPct, tone: 'warning', title: 'Clientes com pelo menos um atraso agregado no recorte.', explanation: `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} clientes ativos têm pelo menos um atraso interno ou de veiculação.`, action: 'Abrir clientes expostos' },
+    { id: 'execution', label: 'SEM EXECUÇÃO', value: formatNumber(stalledCount), detail: `${formatPct(stalledPct)} da carteira · -${formatNumber(stalledCount * 5)} pts`, progress: stalledPct, tone: 'critical', title: 'Clientes ativos sem conteúdo em Produção de Conteúdo e sem solicitação aberta.', explanation: `${formatNumber(stalledCount)} clientes estão sem conteúdo em Produção de Conteúdo e sem demanda aberta; onboarding é tratado separadamente. Cada um retira 5 pontos.`, action: 'Abrir clientes sem execução' },
     { id: 'active', priority: 'supporting', label: 'ITENS ATIVOS', value: formatNumber(activeItems), detail: `${formatPct(quantitative.activePct)} da base histórica`, progress: quantitative.activePct, tone: 'cyan', title: 'Itens ativos no recorte atual do board Produção de Conteúdo.', explanation: `${formatNumber(activeItems)} ativos de ${formatNumber(activeBase)} itens lidos, excluindo Finalizado, Publicado e Cancelado do recorte ativo.`, action: 'Abrir composição da carteira' },
-    { id: 'delays', label: 'ATRASOS EM PRODUÇÃO DE CONTEÚDO', value: formatNumber(delayedInternal), detail: `${formatPct(quantitative.overdueInternalPctOfActive)} dos ativos · -${formatNumber(delayedInternal * 2)} pts · Produção de Conteúdo`, progress: quantitative.overdueInternalPctOfActive, tone: 'critical', title: 'Itens ativos do board Produção de Conteúdo com prazo interno vencido.', explanation: `${formatNumber(delayedInternal)} itens de Produção de Conteúdo no Monday, distribuídos por cliente, responsável, etapa, status e dias de atraso. Cada item retira 2 pontos; fonte: prazo interno.`, action: 'Abrir os itens atrasados da Produção de Conteúdo' },
-    { id: 'exposure', label: 'CLIENTES EXPOSTOS', value: formatNumber(riskClients), detail: eligibleClients ? `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} ativos` : 'denominador indisponível', progress: exposedPct, tone: 'warning', title: 'Clientes com pelo menos um atraso agregado no recorte.', explanation: `${formatNumber(riskClients)} de ${formatNumber(eligibleClients)} clientes ativos têm pelo menos um atraso interno ou de veiculação.`, action: 'Abrir clientes expostos' },
-    { id: 'execution', priority: 'supporting', label: 'CLIENTES SEM EXECUÇÃO', value: formatNumber(stalledCount), detail: `${formatPct(stalledPct)} da carteira ativa · -${formatNumber(stalledCount * 5)} pts`, progress: stalledPct, tone: 'critical', title: 'Clientes ativos sem item no board Produção de Conteúdo e sem solicitação aberta.', explanation: `${formatNumber(stalledCount)} clientes estão sem conteúdo em Produção de Conteúdo e sem demanda aberta em Solicitações de Demandas; onboarding é tratado separadamente. Cada um retira 5 pontos.`, action: 'Abrir clientes sem execução' },
-    { id: 'publication', label: 'VEICULAÇÕES VENCIDAS', value: formatNumber(delayedPublication), detail: `${formatPct(quantitative.overduePublicationPctOfActive)} dos ativos · -${formatNumber(delayedPublication * 5)} pts · Produção de Conteúdo`, progress: quantitative.overduePublicationPctOfActive, tone: 'warning', title: 'Itens do board Produção de Conteúdo que ultrapassaram a data prevista de veiculação.', explanation: `${formatNumber(delayedPublication)} itens têm a veiculação vencida no board Produção de Conteúdo; cada item será mostrado com cliente, responsável, prazo e motivo. Cada um retira 5 pontos.`, action: 'Abrir veiculações vencidas da Produção de Conteúdo' }
+    { id: 'publication', priority: 'supporting', label: 'VEICULAÇÕES VENCIDAS', value: formatNumber(delayedPublication), detail: `${formatPct(quantitative.overduePublicationPctOfActive)} dos ativos · -${formatNumber(delayedPublication * 5)} pts`, progress: quantitative.overduePublicationPctOfActive, tone: 'warning', title: 'Itens de Produção de Conteúdo que ultrapassaram a data prevista de veiculação.', explanation: `${formatNumber(delayedPublication)} itens têm a veiculação vencida; cada item será mostrado com cliente, responsável, prazo e motivo. Cada um retira 5 pontos.`, action: 'Abrir veiculações vencidas' }
   ];
+  const primaryCards = cards.filter(card => !card.priority);
+  const supportCards = cards.filter(card => card.priority === 'supporting');
+  const activeSignals = [delayedInternal, delayedPublication, stalledCount, delayedDemands].filter(value => value > 0).length;
+  const renderCard = card => (
+    <article className={`executive-kpi-card ${card.tone} ${card.priority || 'decision-primary'}`} key={card.id} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
+      <div className="executive-kpi-card-top"><span className="executive-kpi-label">{card.label}</span><span className="executive-kpi-card-action">INVESTIGAR ↗</span></div>
+      <strong className="executive-kpi-value">{card.value}</strong>
+      <span className="executive-kpi-detail">{card.detail}</span>
+      <ExecutiveMeter value={card.progress} min={card.min ?? 0} max={card.max ?? 100} tone={card.tone} label={card.title} displayValue={card.id === 'health' ? formatPoints(healthScore) : undefined} />
+      <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
+    </article>
+  );
 
   return (
     <section className="executive-kpi-band" aria-label="KPIs executivos da carteira">
-      <div className="executive-kpi-header"><div><span className="executive-section-kicker">LEITURA EXECUTIVA</span><h2>O estado da carteira em números</h2></div><span className={`data-live-badge ${snapshot?.sourceQuality?.complete === true ? 'complete' : ''}`}>{snapshot?.sourceQuality?.source || 'Monday.com'} · {snapshot?.sourceQuality?.complete === true ? 'LEITURA COMPLETA' : snapshot?.sourceQuality?.freshness === 'fallback' ? 'FALLBACK DIRETO' : 'LEITURA PARCIAL'}</span></div>
+      <div className="executive-kpi-header"><div><span className="executive-section-kicker">DECIDA PELA CARTEIRA</span><h2>O que exige decisão agora?</h2><p className="executive-kpi-subtitle">Quatro sinais prioritários, dois indicadores de suporte e investigação em um clique.</p></div><div className="executive-kpi-context"><strong>{activeSignals}</strong><span>sinais críticos ativos</span><b>{formatPoints(healthScore)}</b><small>placar bruto</small></div></div>
       <SourceFreshness snapshot={snapshot} onRefresh={onRefresh} refreshing={refreshing} refreshError={refreshError} />
+      <div className="executive-kpi-primary-row">{primaryCards.map(renderCard)}</div>
+      <div className="executive-kpi-support-row" aria-label="KPIs de suporte">{supportCards.map(renderCard)}</div>
       <SnapshotDeltaBand history={history} />
-      <div className="executive-kpi-grid">
-        {cards.map(card => (
-          <article className={`executive-kpi-card ${card.tone} ${card.priority || 'primary'}`} key={card.label} {...clickable(() => onSelect(card.id), `${card.action}: ${card.label}`)}>
-            <span className="executive-kpi-label">{card.label}</span>
-            <strong className="executive-kpi-value">{card.value}</strong>
-            <span className="executive-kpi-detail">{card.detail}</span>
-            <ExecutiveMeter value={card.progress} min={card.min ?? 0} max={card.max ?? 100} tone={card.tone} label={card.title} displayValue={card.id === 'health' ? formatPoints(healthScore) : undefined} />
-            <span className="executive-kpi-click">CLIQUE PARA INVESTIGAR ↗</span>
-            <div className="executive-kpi-tooltip"><strong>{card.title}</strong><span>{card.explanation}</span><small>{card.action}</small></div>
-          </article>
-        ))}
-      </div>
     </section>
   );
 }
