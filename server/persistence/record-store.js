@@ -5,7 +5,8 @@ const STORE_DEFINITIONS = Object.freeze({
   decisions: { envPrefix: 'DECISION', keySuffix: 'executive-decisions' },
   snapshots: { envPrefix: 'SNAPSHOT', keySuffix: 'executive-snapshots' },
   impacts: { envPrefix: 'IMPACT', keySuffix: 'executive-impacts' },
-  health: { envPrefix: 'HEALTH', keySuffix: 'client-health-snapshots' }
+  health: { envPrefix: 'HEALTH', keySuffix: 'client-health-snapshots' },
+  events: { envPrefix: 'EVENT', keySuffix: 'executive-events' }
 });
 
 const probeCache = new Map();
@@ -272,31 +273,37 @@ export function createRecordStore({ storeName, localFileName, unavailableCode, u
       }
     },
 
-    async set(record) {
-      if (!record?.id) throw storageError('INVALID_STORE_RECORD', `O registro de ${storeName} precisa de id.`);
+    async setMany(recordsToSave = []) {
+      const records = recordsToSave.filter(record => record?.id);
+      if (!records.length) return [];
       const descriptor = ensureAvailable();
       if (descriptor.mode === 'local-development') {
-        const records = await readLocal(localFileName);
-        const index = records.findIndex(item => item.id === record.id);
-        if (index >= 0) records[index] = record;
-        else records.push(record);
-        const retained = pruneRecords(records, descriptor.retention).records;
+        const current = await readLocal(localFileName);
+        const byId = new Map(current.map(record => [record.id, record]));
+        records.forEach(record => byId.set(record.id, record));
+        const retained = pruneRecords([...byId.values()], descriptor.retention).records;
         await writeLocal(localFileName, retained);
-        return record;
+        return records;
       }
       try {
         const config = resolveRemoteConfig(storeName);
-        await executeRedis(config, ['HSET', descriptor.key, record.id, JSON.stringify(record)]);
+        const command = ['HSET', descriptor.key];
+        records.forEach(record => command.push(record.id, JSON.stringify(record)));
+        await executeRedis(config, command);
         if (descriptor.retention.enabled) {
           const values = await executeRedis(config, ['HVALS', descriptor.key]);
-          const records = (Array.isArray(values) ? values : []).map(value => parseRecord(value, storeName)).filter(Boolean);
-          const pruned = pruneRecords(records, descriptor.retention);
+          const stored = (Array.isArray(values) ? values : []).map(value => parseRecord(value, storeName)).filter(Boolean);
+          const pruned = pruneRecords(stored, descriptor.retention);
           if (pruned.removedIds.length) await executeRedis(config, ['HDEL', descriptor.key, ...pruned.removedIds]);
         }
-        return record;
+        return records;
       } catch (error) {
         throw storageError(unavailableCode, unavailableMessage, error);
       }
+    },
+
+    async set(record) {
+      return this.setMany([record]).then(saved => saved[0]);
     }
   };
 }

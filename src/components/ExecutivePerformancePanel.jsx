@@ -42,7 +42,7 @@ function buildObservableStages(rows) {
     .sort((a, b) => b.active - a.active || b.delayed - a.delayed);
 }
 
-export function ExecutivePerformancePanel({ snapshot, onOpenOwner }) {
+export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory }) {
   const productivity = snapshot?.productivity || {};
   const activeItems = Number(productivity.activeItems ?? snapshot?.quantitative?.activeItems) || 0;
   const completedItems = Number(productivity.completedItems ?? snapshot?.quantitative?.completedItems) || 0;
@@ -115,7 +115,7 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner }) {
             <i><b style={{ width: `${Math.min(100, Number(stage.delayedPct) || Number(stage.pctOfActive) || 0)}%` }} /></i>
             <small>{stage.delayed === null || stage.delayed === undefined ? `${formatPct(stage.pctOfActive)} da carteira` : `${formatNumber(stage.delayed)} atrasos · ${formatPct(stage.delayedPct)}`}</small>
           </div>)}</div>
-          <div className="team-command-note"><strong>COMO LER</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span></div>
+          <div className="team-command-note"><strong>COMO LER</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span><button type="button" onClick={onOpenHistory}>VER HISTÓRIA DO FLUXO ↗</button></div>
         </aside>
       </div>
     </section>

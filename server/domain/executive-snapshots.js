@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { createRecordStore } from '../persistence/record-store.js';
+import { compactSnapshotItems } from './executive-events.js';
 
 const snapshotStore = createRecordStore({
   storeName: 'snapshots',
@@ -24,7 +25,8 @@ function cleanSnapshot(snapshot = {}) {
     delayedDemandItems: Array.isArray(snapshot.delayedDemandItems) ? snapshot.delayedDemandItems.slice(0, 200) : [],
     productivity: snapshot.productivity || null,
     executiveRisks: Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks.slice(0, 30) : [],
-    decisionsNeeded: Array.isArray(snapshot.decisionsNeeded) ? snapshot.decisionsNeeded.slice(0, 20) : []
+    decisionsNeeded: Array.isArray(snapshot.decisionsNeeded) ? snapshot.decisionsNeeded.slice(0, 20) : [],
+    itemStates: Array.isArray(snapshot.itemStates) ? snapshot.itemStates.slice(0, 5000) : compactSnapshotItems(snapshot).slice(0, 5000)
   };
 }
 

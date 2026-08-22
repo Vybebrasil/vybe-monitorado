@@ -25,6 +25,7 @@ import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
+import { deriveSnapshotEvents, compactSnapshotItems } from '../server/domain/executive-events.js';
 
 test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
   const snapshots = [
@@ -56,6 +57,17 @@ test('Autosave temporal ignora a mesma versão do espelho e respeita intervalo m
   assert.equal(shouldPersistExecutiveSnapshot(sameVersion, base).reason, 'same_source_version');
   assert.equal(shouldPersistExecutiveSnapshot(changedTooSoon, base, { minIntervalSeconds: 300 }).save, false);
   assert.equal(shouldPersistExecutiveSnapshot(changedAfterInterval, base, { minIntervalSeconds: 300 }).save, true);
+});
+
+test('Eventos executivos explicam mudanças reais entre snapshots', () => {
+  const previous = { itemStates: [{ id: 'p1', name: 'Post 1', source: 'Produção de Conteúdo', client: 'Alpha', responsible: 'Ana', stage: 'Redação', status: 'Em andamento', dueDate: '2026-08-20', isDelayed: false, isCompleted: false }] };
+  const current = { capturedAt: '2026-08-21T10:00:00.000Z', itemStates: [{ id: 'p1', name: 'Post 1', source: 'Produção de Conteúdo', client: 'Alpha', responsible: 'Bruna', stage: 'Produção', status: 'Finalizado', dueDate: '2026-08-21', isDelayed: false, isCompleted: true }] };
+  const events = deriveSnapshotEvents(previous, current, current.capturedAt);
+  assert.ok(events.some(event => event.type === 'status_changed'));
+  assert.ok(events.some(event => event.type === 'responsible_changed'));
+  assert.ok(events.some(event => event.type === 'stage_changed'));
+  assert.ok(events.some(event => event.type === 'deadline_changed'));
+  assert.equal(compactSnapshotItems({ itemRows: current.itemStates, demandItemRows: [] }).length, 1);
 });
 
 test('Projeções executivas distinguem tendência histórica de esforço contrafactual', () => {

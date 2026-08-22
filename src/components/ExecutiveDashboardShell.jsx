@@ -1,4 +1,4 @@
-import { Activity, Briefcase, LayoutDashboard, ListChecks, RefreshCw, Search, Users, Wifi } from 'lucide-react';
+import { Activity, Briefcase, Clock3, LayoutDashboard, ListChecks, RefreshCw, Search, Users, Wifi } from 'lucide-react';
 import { formatNumber } from './executive-helpers.js';
 
 const NAV_ITEMS = [
@@ -6,7 +6,8 @@ const NAV_ITEMS = [
   { id: 'portfolio', label: 'Carteira', short: 'Carteira', icon: Briefcase, detail: 'capacidade e previsibilidade' },
   { id: 'demands', label: 'Demandas', short: 'Demandas', icon: ListChecks, detail: 'solicitações à agência' },
   { id: 'team', label: 'Time & performance', short: 'Time', icon: Users, detail: 'capacidade observável' },
-  { id: 'analytics', label: 'Analytics Center', short: 'Analytics', icon: Activity, detail: 'volume, risco e fluxo' }
+  { id: 'analytics', label: 'Analytics Center', short: 'Analytics', icon: Activity, detail: 'volume, risco e fluxo' },
+  { id: 'history', label: 'História & Logs', short: 'História', icon: Clock3, detail: 'evolução e causas' }
 ];
 
 export function ExecutiveDashboardShell({

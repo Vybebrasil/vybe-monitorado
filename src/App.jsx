@@ -13,6 +13,7 @@ import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.js
 import { ExecutiveAnalyticsCenter } from './components/ExecutiveAnalyticsCenter.jsx';
 import ExecutiveCommandCenter from './components/ExecutiveCommandCenter.jsx';
 import { AnalyticsDrilldownDrawer } from './components/AnalyticsDrilldownDrawer.jsx';
+import ExecutiveHistoryCenter from './components/ExecutiveHistoryCenter.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
@@ -855,6 +856,7 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
         timeSeries={timeSeries}
         intelligence={intelligence}
         onOpenAnalyst={onOpenAnalyst}
+        onOpenHistory={() => setActiveView('history')}
         onSelect={(id, readinessId) => {
           if (id.startsWith('owner:')) return setDetailPanel({ type: 'owner', id: id.replace(/^owner:/, ''), title: `Gargalos: ${id.replace(/^owner:/, '')}` });
           if (id.startsWith('client:')) return setDetailPanel({ type: 'client', id: id.replace(/^client:/, ''), title: `Investigação: ${id.replace(/^client:/, '')}` });
@@ -869,7 +871,15 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
       </> : null}
 
       {activeView === 'demands' ? <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'client', id: client, title: `Visão: ${client}` })} /> : null}
-      {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'owner', id: owner, title: `Gargalos: ${owner}` })} /> : null}
+      {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'owner', id: owner, title: `Gargalos: ${owner}` })} onOpenHistory={() => setActiveView('history')} /> : null}
+      {activeView === 'history' ? <ExecutiveHistoryCenter
+        snapshot={snapshot}
+        history={history}
+        timeSeries={timeSeries}
+        intelligence={intelligence}
+        onOpenAnalyst={onOpenAnalyst}
+      /> : null}
+
       {activeView === 'analytics' ? <ExecutiveAnalyticsCenter
         snapshot={snapshot}
         history={history}
@@ -879,6 +889,7 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
           setJarvisMessage({ text: `Abrindo ${selection.title || 'esta leitura'} com os dados observáveis disponíveis.`, hint: 'O painel analítico mantém a evidência, a fonte e o link para investigação.' });
         }}
         onOpenAnalyst={onOpenAnalyst}
+        onOpenHistory={() => setActiveView('history')}
       /> : null}
 
       {activeView === 'portfolio' ? <div className="executive-visual-grid">

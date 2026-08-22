@@ -188,7 +188,7 @@ export function TrendChart({ timeSeries, hasCrossFilter = false }) {
   </article>;
 }
 
-export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSelect, onOpenAnalyst }) {
+export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSelect, onOpenAnalyst, onOpenHistory }) {
   const quantitative = snapshot?.quantitative || {};
   const summary = snapshot?.summary || {};
   const productivity = snapshot?.productivity || {};
@@ -264,7 +264,7 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
     <section className="analytics-center" aria-label="Performance e Analytics Center">
       <header className="analytics-center-header">
         <div><span className="analytics-kicker">VYBE NEXUS · PERFORMANCE & ANALYTICS</span><h1>Como a agência está performando?</h1><p>Leitura observável de volume, fluxo, risco e concentração. Clique em qualquer linha para investigar a origem.</p></div><div className="analytics-center-meta">{hasCrossFilter ? <strong className="analytics-filter-active-badge">RECORTE ATIVO</strong> : null}</div>
-        <div className="analytics-center-meta"><span><Activity size={13} /> snapshot atual</span><strong>{historyAvailable ? 'COMPARAÇÃO DISPONÍVEL' : 'COMPARAÇÃO N/D'}</strong></div>
+        <div className="analytics-center-meta"><span><Activity size={13} /> snapshot atual</span><strong>{historyAvailable ? 'COMPARAÇÃO DISPONÍVEL' : 'COMPARAÇÃO N/D'}</strong><button type="button" className="analytics-history-link" onClick={onOpenHistory}>HISTÓRIA & LOGS ↗</button></div>
       </header>
 
       <div className="analytics-filter-bar" aria-label="Filtros cruzados do Analytics Center">

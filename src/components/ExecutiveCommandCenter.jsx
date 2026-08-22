@@ -20,7 +20,7 @@ function DecisionCard({ mission, index, onSelect }) {
   </button>;
 }
 
-export default function ExecutiveCommandCenter({ snapshot, timeSeries, intelligence, onSelect, onOpenAnalyst }) {
+export default function ExecutiveCommandCenter({ snapshot, timeSeries, intelligence, onSelect, onOpenAnalyst, onOpenHistory }) {
   const quantitative = snapshot?.quantitative || {};
   const productivity = snapshot?.productivity || {};
   const summary = snapshot?.summary || {};
@@ -39,6 +39,10 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
   const stalled = Array.isArray(execution.stalled) ? execution.stalled.length : 0;
   const historyReady = timeSeries?.available === true;
   const projection = intelligence?.projections;
+  const persistentRisks = Array.isArray(intelligence?.persistentRisks) ? intelligence.persistentRisks.length : null;
+  const alerts = Array.isArray(intelligence?.alerts) ? intelligence.alerts.length : null;
+  const clientRiskCount = Number.isFinite(Number(intelligence?.clientHealth?.atRiskCount)) ? Number(intelligence.clientHealth.atRiskCount) : null;
+  const evaluatedDecisions = Number.isFinite(Number(intelligence?.effectiveness?.evaluatedDecisions)) ? Number(intelligence.effectiveness.evaluatedDecisions) : null;
 
   return <section className="command-center" aria-label="Resumo executivo da agência">
     <header className="command-hero">
@@ -82,6 +86,8 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       </article>
     </div>
 
+    <section className="command-memory-strip"><header><div><Clock3 size={15} /><span>MEMÓRIA EXECUTIVA</span></div><small>o presente vira histórico quando há persistência</small><button type="button" onClick={onOpenHistory}>ABRIR HISTÓRIA ↗</button></header><div className="command-memory-grid"><div><strong>{alerts === null ? 'N/D' : formatNumber(alerts)}</strong><span>alertas em ciclo</span></div><div><strong>{persistentRisks === null ? 'N/D' : formatNumber(persistentRisks)}</strong><span>riscos persistentes</span></div><div><strong>{clientRiskCount === null ? 'N/D' : formatNumber(clientRiskCount)}</strong><span>clientes em risco histórico</span></div><div><strong>{evaluatedDecisions === null ? 'N/D' : formatNumber(evaluatedDecisions)}</strong><span>decisões com impacto medido</span></div></div></section>
+
     <div className="command-signal-grid">
       <article className="command-panel">
         <header><div><Users size={15} /><span>CAPACIDADE DO TIME</span></div><small>concentração observável</small></header>
@@ -97,9 +103,9 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       </article>
     </div>
 
-    {historyReady ? <TrendChart timeSeries={timeSeries} /> : <section className="command-history-strip">
+    {historyReady ? <section className="command-history-live"><div><Clock3 size={16} /><span>HISTÓRIA DA OPERAÇÃO</span><small>Veja a evolução real e os eventos que mudaram a carteira.</small></div><button type="button" onClick={onOpenHistory}>ABRIR HISTÓRIA ↗</button></section> : <section className="command-history-strip">
       <div><Clock3 size={16} /><span>HISTÓRICO AINDA NÃO ATIVO</span><small>A leitura atual está funcionando; a comparação temporal aguarda o datastore de snapshots.</small></div>
-      <div><strong>{projection?.mode === 'observed_trend' ? 'TENDÊNCIA ATIVA' : 'SEM PREVISÃO HISTÓRICA'}</strong><small>{projection?.mode === 'observed_trend' ? 'Comparações baseadas em snapshots reais.' : 'Cenários de esforço permanecem disponíveis no Analytics.'}</small></div>
+      <div><strong>{projection?.mode === 'observed_trend' ? 'TENDÊNCIA ATIVA' : 'SEM PREVISÃO HISTÓRICA'}</strong><small>{projection?.mode === 'observed_trend' ? 'Comparações baseadas em snapshots reais.' : 'Cenários de esforço permanecem disponíveis no Analytics.'}</small></div><button type="button" onClick={onOpenHistory}>VER HISTÓRIA & LOGS ↗</button>
     </section>}
   </section>;
 }

@@ -23,6 +23,7 @@ import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/e
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
+import { compactSnapshotItems, createExecutiveEvent, deriveSnapshotEvents, listExecutiveEvents, saveExecutiveEvents, eventStoreDescriptor } from '../server/domain/executive-events.js';
 import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { securityHeaders, createRateLimiter, rateLimitConfig } from '../server/security.js';
@@ -50,15 +51,17 @@ const autosaveEnabled = (envName, storeName) => {
   return isProduction && describeRecordStore(storeName).ready;
 };
 
-async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null } = {}) {
-  const [decisionsResult, impactsResult, healthResult] = await Promise.allSettled([
+async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null, events = null } = {}) {
+  const [decisionsResult, impactsResult, healthResult, eventsResult] = await Promise.allSettled([
     listDecisionRecords(),
     listImpactRecords(),
-    listHealthSnapshots()
+    listHealthSnapshots(),
+    events ? Promise.resolve(events) : listExecutiveEvents({ limit: 180 })
   ]);
   const decisions = decisionsResult.status === 'fulfilled' ? decisionsResult.value : [];
   const impacts = impactsResult.status === 'fulfilled' ? impactsResult.value : [];
   const healthSnapshots = healthResult.status === 'fulfilled' ? healthResult.value : [];
+  const executiveEvents = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
   const effectiveness = summarizeDecisionEffectiveness(decisions, impacts);
   const persistentRisks = detectPersistentRisks({ decisions, impacts, healthSnapshots });
   const liveRisks = Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks : [];
@@ -80,6 +83,8 @@ async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null } =
     briefing,
     alerts,
     learning,
+    events: executiveEvents,
+    eventStore: eventStoreDescriptor(),
     memory: buildDecisionMemory({ decisions, impacts }),
     scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }),
     projections: buildExecutiveProjections({ snapshot, timeSeries }),
@@ -143,7 +148,8 @@ app.get('/api/healthz', async (req, res) => {
   const ready = liveReadReady && historicalReady;
   const autosave = {
     snapshots: autosaveEnabled('NEXUS_SNAPSHOT_AUTOSAVE', 'snapshots'),
-    health: autosaveEnabled('NEXUS_HEALTH_AUTOSAVE', 'health')
+    health: autosaveEnabled('NEXUS_HEALTH_AUTOSAVE', 'health'),
+    events: autosaveEnabled('NEXUS_EVENT_AUTOSAVE', 'events')
   };
 
   res.json({
@@ -583,6 +589,27 @@ app.post('/api/save/:id', requireAdminAccess, blockLegacyFilePersistence, expres
 
 
 
+// Captura histórica independente: pode ser chamada por um cron externo ou pelo
+// cron da plataforma. Reutiliza a leitura live e não altera o Monday.
+app.get('/api/cron/executive-snapshot', async (req, res) => {
+  const expectedSecret = process.env.CRON_SECRET || process.env.NEXUS_CRON_SECRET || '';
+  const receivedSecret = req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-nexus-cron-secret') || '';
+  if (isProduction && (!expectedSecret || receivedSecret !== expectedSecret)) {
+    return res.status(401).json({ error: 'CRON_AUTH_REQUIRED', message: 'Configure CRON_SECRET e envie a autorização do job histórico.' });
+  }
+  try {
+    const protocol = isProduction ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol || 'http');
+    const host = req.get('host');
+    const target = `${protocol}://${host}/api/dashboard/metrics?refresh=1`;
+    const response = await fetch(target, { headers: { 'x-nexus-cron-internal': 'true' }, signal: AbortSignal.timeout(55_000) });
+    const payload = await response.json().catch(() => ({}));
+    return res.status(response.status).json({ success: response.ok, triggered: true, snapshotSaved: payload.meta?.snapshotSaved || false, eventPersistReason: payload.meta?.eventPersistReason || null, history: payload.meta?.history || null, timeSeries: payload.meta?.timeSeries || null });
+  } catch (error) {
+    console.error('[API] Captura histórica falhou:', error);
+    return res.status(502).json({ error: 'HISTORICAL_CAPTURE_FAILED', message: error.message });
+  }
+});
+
 // NOVO ENDPOINT: Command Center / Métricas Executivas do Monday
 app.get('/api/dashboard/metrics', async (req, res) => {
   console.log('[API] /api/dashboard/metrics called');
@@ -600,7 +627,9 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       sourceMeta,
       generatedAt: new Date().toISOString()
     });
+    const eventSnapshot = { ...executiveSnapshot, itemStates: compactSnapshotItems(executiveSnapshot).slice(0, 5000) };
     let snapshotSaved = false;
+    let persistedSnapshotRecord = null;
     let snapshotPersistReason = 'autosave_disabled';
     const snapshotAutosave = autosaveEnabled('NEXUS_SNAPSHOT_AUTOSAVE', 'snapshots');
     let storedSnapshots = [];
@@ -612,11 +641,11 @@ app.get('/api/dashboard/metrics', async (req, res) => {
     }
 
     if (snapshotAutosave && !historyLoadError) {
-      const persistDecision = shouldPersistExecutiveSnapshot(executiveSnapshot, storedSnapshots[0] || null);
+      const persistDecision = shouldPersistExecutiveSnapshot(eventSnapshot, storedSnapshots[0] || null);
       snapshotPersistReason = persistDecision.reason;
       if (persistDecision.save) {
         try {
-          await saveExecutiveSnapshot(executiveSnapshot);
+          persistedSnapshotRecord = await saveExecutiveSnapshot(eventSnapshot);
           snapshotSaved = true;
         } catch (snapshotError) {
           snapshotPersistReason = snapshotError.code || 'save_failed';
@@ -649,7 +678,43 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       };
     }
 
-    const intelligence = await buildExecutiveIntelligence({ snapshot: executiveSnapshot, timeSeries });
+    const eventAutosave = autosaveEnabled('NEXUS_EVENT_AUTOSAVE', 'events');
+    let eventPersistReason = 'autosave_disabled';
+    let eventRecords = [];
+    let eventLoadError = null;
+    try {
+      eventRecords = await listExecutiveEvents({ limit: 180 });
+    } catch (eventError) {
+      eventLoadError = eventError;
+      eventPersistReason = eventError.code || 'event_store_unavailable';
+    }
+    const previousSnapshot = storedSnapshots[0] || null;
+    const derivedEvents = persistedSnapshotRecord && previousSnapshot
+      ? deriveSnapshotEvents(previousSnapshot, persistedSnapshotRecord, persistedSnapshotRecord.capturedAt)
+      : persistedSnapshotRecord
+        ? [createExecutiveEvent({
+            type: 'snapshot_captured',
+            capturedAt: persistedSnapshotRecord.capturedAt,
+            source: persistedSnapshotRecord.source,
+            title: 'Primeiro snapshot executivo persistido',
+            detail: 'A história da operação começou a ser registrada com uma leitura real.',
+            severity: 'low'
+          })]
+        : [];
+    if (eventAutosave && !eventLoadError && derivedEvents.length) {
+      try {
+        await saveExecutiveEvents(derivedEvents);
+        eventPersistReason = 'events_saved';
+      } catch (eventSaveError) {
+        eventPersistReason = eventSaveError.code || 'event_save_failed';
+        console.warn('[API] Eventos executivos não persistidos:', eventSaveError.message);
+      }
+    } else if (!eventAutosave) {
+      eventPersistReason = 'autosave_disabled';
+    } else if (!derivedEvents.length) {
+      eventPersistReason = persistedSnapshotRecord ? 'no_change_detected' : 'snapshot_not_persisted';
+    }
+    const intelligence = await buildExecutiveIntelligence({ snapshot: executiveSnapshot, timeSeries, events: derivedEvents.length ? [...derivedEvents, ...eventRecords] : eventRecords });
 
     // O espelho operacional trabalha com deltas a cada 15 segundos. A CDN do
     // Nexus não pode manter uma resposta por um minuto, caso contrário o gestor
@@ -669,6 +734,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         snapshotSaved,
         snapshotAutosave,
         snapshotPersistReason,
+        eventAutosave,
+        eventPersistReason,
         history,
         timeSeries,
         intelligence,
@@ -775,6 +842,21 @@ app.patch('/api/executive/impacts/:id', requireAdminAccess, async (req, res) => 
     res.json({ success: true, impact });
   } catch (error) {
     const status = error.code === 'INVALID_IMPACT' ? 400 : error.code === 'IMPACT_NOT_FOUND' ? 404 : error.code === 'IMPACT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+app.get('/api/executive/events', async (req, res) => {
+  try {
+    const events = await listExecutiveEvents({
+      limit: req.query.limit,
+      type: typeof req.query.type === 'string' ? req.query.type : null,
+      source: typeof req.query.source === 'string' ? req.query.source : null,
+      client: typeof req.query.client === 'string' ? req.query.client : null
+    });
+    res.json({ success: true, events, meta: { source: 'Nexus Executive Event Timeline', storage: eventStoreDescriptor(), readOnly: true } });
+  } catch (error) {
+    const status = error.code === 'EVENT_PERSISTENCE_NOT_CONFIGURED' ? 503 : 500;
     res.status(status).json({ error: error.message });
   }
 });
