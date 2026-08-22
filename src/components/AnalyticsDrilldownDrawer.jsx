@@ -29,9 +29,13 @@ function matchesPanelFilters(item, filters = {}) {
     && (!filters.status || String(item?.status || '') === filters.status);
 }
 
+function isCompletedStatus(value) {
+  return ['finalizado', 'publicado', 'cancelado', 'feito', 'concluído', 'entregue'].some(label => String(value || '').toLowerCase().includes(label));
+}
+
 function isCompleted(item) {
   if (item?.isCompleted === true) return true;
-  return ['finalizado', 'publicado', 'cancelado', 'feito', 'concluído', 'entregue'].some(label => String(item?.status || '').toLowerCase().includes(label));
+  return isCompletedStatus(item?.status);
 }
 
 function isReady(item) {
@@ -49,7 +53,7 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const [showCompleted, setShowCompleted] = useState(false);
   useEffect(() => {
     setShowAll(false);
-    setShowCompleted(panel?.targetType === 'kpi' && panel?.id === 'completedItems');
+    setShowCompleted((panel?.targetType === 'kpi' && panel?.id === 'completedItems') || (panel?.targetType === 'filter' && panel?.filterKey === 'status' && isCompletedStatus(panel?.id)));
   }, [panel]);
   useEffect(() => {
     if (!panel) return undefined;
@@ -111,7 +115,7 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const owners = new Set(items.flatMap(item => splitOwners(item?.responsavel)));
   const totalDays = delayed.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
   const visibleItems = showAll ? itemsToDisplay : itemsToDisplay.slice(0, 5);
-  const isCompletedOnlyPanel = targetType === 'kpi' && panel?.id === 'completedItems';
+  const isCompletedOnlyPanel = (targetType === 'kpi' && panel?.id === 'completedItems') || (targetType === 'filter' && panel?.filterKey === 'status' && isCompletedStatus(panel?.id));
   const eyebrow = targetType === 'owner' ? 'Analytics · responsável' : targetType === 'client' ? 'Analytics · cliente' : targetType === 'filter' ? `Analytics · ${panel.filterKey === 'stage' ? 'etapa' : 'status'}` : targetType === 'item' ? 'História · item alterado' : 'Analytics · indicador';
   const title = panel.title || 'Investigação analítica';
   const subtitle = targetType === 'owner'

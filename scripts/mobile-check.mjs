@@ -13,58 +13,55 @@ if (await summaryNav.count()) {
   await page.waitForTimeout(160);
 }
 
-let report = await page.evaluate(() => {
+const readSummary = async () => page.evaluate(() => {
   const body = document.body;
-  const rows = [...document.querySelectorAll('.owner-bar-row')].map(row => ({
-    name: row.querySelector('.owner-bar-person-name')?.textContent?.trim() || '',
-    urgency: row.querySelector('.owner-urgency-chip')?.textContent?.trim() || '',
+  const rows = [...document.querySelectorAll('.command-ranking-row:not(.clients)')].map(row => ({
+    name: row.querySelector('span')?.textContent?.trim() || '',
+    urgency: row.querySelector('strong')?.textContent?.trim() || '',
     className: row.className,
   }));
-  const hoverVisible = Boolean(document.querySelector('.owner-bar-hover'));
-  const missionCount = document.querySelectorAll('.mission-card').length || document.querySelectorAll('[class*="mission"]').length;
   return {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     bodyWidth: body.scrollWidth,
     overflow: body.scrollWidth - window.innerWidth,
     ownerRows: rows,
-    hoverVisible,
-    missionCount,
+    missionCount: document.querySelectorAll('.command-decision-card').length,
     kpiCount: document.querySelectorAll('.command-metric').length,
     commandCenter: Boolean(document.querySelector('.command-center')),
     commandDecisionCount: document.querySelectorAll('.command-decision-card').length,
-    nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
+    nestedInteractive: [...document.querySelectorAll('.command-ranking-row')].filter(row => row.querySelector('[role="button"],button,a,select')).length,
     manualRefreshButton: Boolean(document.querySelector('.nexus-topbar-refresh')),
+    readinessKpiCount: document.querySelectorAll('.readiness-kpi-chip').length,
   };
 });
 
+const summaryReport = await readSummary();
 await page.locator('.nexus-mobile-context-nav button').filter({ hasText: /CARTEIRA/i }).first().click();
-await page.waitForSelector('.owner-bar-row', { state: 'visible', timeout: 30000 });
-report = { ...report, ...await page.evaluate(() => ({
-  ownerRows: [...document.querySelectorAll('.owner-bar-row')].map(row => ({
-    name: row.querySelector('.owner-bar-person-name')?.textContent?.trim() || '',
-    urgency: row.querySelector('.owner-urgency-chip')?.textContent?.trim() || '',
-    className: row.className,
-  })),
-  hoverVisible: Boolean(document.querySelector('.owner-bar-hover')),
-  nestedInteractive: [...document.querySelectorAll('.owner-bar-row')].filter(row => row.matches('[role="button"]') || row.querySelector('[role="button"]')).length,
+await page.waitForSelector('.executive-operations-explorer', { state: 'visible', timeout: 30000 });
+const portfolioState = await page.evaluate(() => ({
+  explorer: Boolean(document.querySelector('.executive-operations-explorer')),
+  readinessKpiCount: document.querySelectorAll('.readiness-kpi-chip').length,
   bodyWidth: document.body.scrollWidth,
   viewportWidth: window.innerWidth,
-  readinessKpiCount: document.querySelectorAll('.readiness-kpi-chip').length,
-})) };
+}));
+await page.locator('.nexus-mobile-context-nav button').filter({ hasText: /RESUMO/i }).first().click();
+await page.waitForSelector('.command-center', { state: 'visible', timeout: 30000 });
+const report = { ...summaryReport, portfolioState };
 
-const firstOwner = page.locator('.owner-bar-row').first();
-const firstOwnerSelect = firstOwner.locator('.owner-bar-select');
-await firstOwnerSelect.focus();
-const focusState = await firstOwnerSelect.evaluate(element => ({ active: document.activeElement === element, outlineStyle: getComputedStyle(element).outlineStyle, outlineWidth: getComputedStyle(element).outlineWidth }));
-await firstOwnerSelect.tap();
+const firstOwner = page.locator('.command-ranking-row:not(.clients)').first();
+await firstOwner.focus();
+const focusState = await firstOwner.evaluate(element => ({ active: document.activeElement === element, outlineStyle: getComputedStyle(element).outlineStyle, outlineWidth: getComputedStyle(element).outlineWidth }));
+await firstOwner.tap();
 await page.waitForTimeout(250);
 const selected = await page.evaluate(() => ({
-  selectedOwner: document.querySelector('.owner-bar-row.selected .owner-bar-person-name')?.textContent?.trim() || '',
-  popoverTitle: document.querySelector('.owner-bar-hover-title')?.textContent?.trim() || '',
-  mondayLinks: document.querySelectorAll('.owner-bar-hover-item[href*="monday.com/boards/7829537690/pulses/"]').length,
-    drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
-  }));
-
+  drawerCount: document.querySelectorAll('.investigation-drawer,[role="dialog"]').length,
+  drawerTitle: document.querySelector('.investigation-drawer h3,[role="dialog"] h3')?.textContent?.trim() || '',
+  mondayLinks: document.querySelectorAll('.investigation-drawer a[href*="monday.com/boards/7829537690/pulses/"],[role="dialog"] a[href*="monday.com/boards/7829537690/pulses/"]').length,
+  bodyWidth: document.body.scrollWidth,
+  viewportWidth: window.innerWidth,
+}));
+const closeDrawer = page.locator('.drawer-close').first();
+if (await closeDrawer.count()) await closeDrawer.click();
 await page.locator('.nexus-mobile-context-nav button').filter({ hasText: /RESUMO/i }).first().click();
 await page.waitForSelector('.nexus-topbar-refresh', { state: 'visible', timeout: 30000 });
 const refreshButton = page.locator('.nexus-topbar-refresh');
@@ -93,27 +90,27 @@ if (report.viewport.width !== 390) failures.push(`viewport width esperado 390, o
 if (report.bodyWidth !== 390 || report.overflow !== 0) failures.push(`overflow horizontal: bodyWidth=${report.bodyWidth}, viewport=${report.viewport.width}`);
 const firstOwnerName = report.ownerRows[0]?.name || '';
 if (!firstOwnerName) failures.push('nenhum responsável visível para validar o card mobile');
-if (!/\d+D/.test(report.ownerRows[0]?.urgency || '') || !/(critical-max|critical|high|attention|clear)/.test(report.ownerRows[0]?.className || '')) failures.push(`urgência do primeiro card inesperada: ${report.ownerRows[0]?.urgency}`);
+if (!/^\d+$/.test(report.ownerRows[0]?.urgency || '')) failures.push(`contagem do primeiro responsável inesperada: ${report.ownerRows[0]?.urgency}`);
 if (report.ownerRows.length === 0 || report.ownerRows.length > 5) failures.push(`responsáveis visíveis fora do limite esperado 1–5, obtido ${report.ownerRows.length}`);
-  if (!report.commandCenter) failures.push('novo Command Center não encontrado no Resumo');
-  if (report.kpiCount !== 5) failures.push(`KPIs compactos do Resumo esperados 5, obtido ${report.kpiCount}`);
-  if (report.commandDecisionCount === 0 || report.commandDecisionCount > 3) failures.push(`decisões prioritárias fora do limite 1–3, obtido ${report.commandDecisionCount}`);
-if (report.readinessKpiCount !== 5) failures.push(`chips de Prontidão esperados 5, obtido ${report.readinessKpiCount}`);
-if (selected.selectedOwner !== firstOwnerName) failures.push(`seleção touch não fixou o primeiro responsável: ${selected.selectedOwner}`);
-if (!selected.popoverTitle.includes(firstOwnerName)) failures.push(`popover não identificou o responsável selecionado: ${selected.popoverTitle}`);
-if (selected.mondayLinks === 0) failures.push('popover não apresentou links válidos do Monday');
-if (selected.drawerCount !== 0) failures.push(`seleção abriu drawer inesperado: ${selected.drawerCount}`);
+if (!report.commandCenter) failures.push('novo Command Center não encontrado no Resumo');
+if (report.kpiCount !== 5) failures.push(`KPIs compactos do Resumo esperados 5, obtido ${report.kpiCount}`);
+if (report.commandDecisionCount === 0 || report.commandDecisionCount > 3) failures.push(`decisões prioritárias fora do limite 1–3, obtido ${report.commandDecisionCount}`);
+if (!report.portfolioState?.explorer) failures.push('explorador operacional da Carteira não encontrado');
+if (report.portfolioState?.readinessKpiCount !== 5) failures.push(`chips de Prontidão esperados 5, obtido ${report.portfolioState?.readinessKpiCount}`);
+if (selected.drawerCount === 0) failures.push('clique touch no responsável não abriu investigação');
+if (!selected.drawerTitle.includes(firstOwnerName)) failures.push(`drawer não identificou o responsável selecionado: ${selected.drawerTitle}`);
+if (selected.mondayLinks === 0) failures.push('drawer do responsável não apresentou links válidos do Monday');
+if (selected.bodyWidth !== selected.viewportWidth) failures.push(`overflow após abrir drawer: bodyWidth=${selected.bodyWidth}, viewport=${selected.viewportWidth}`);
 if (analystState.filterCount !== 5) failures.push(`filtros cruzados esperados 5 no ANALISTA, obtidos ${analystState.filterCount}`);
 if (analystState.bodyWidth !== analystState.viewportWidth) failures.push(`overflow no ANALISTA: bodyWidth=${analystState.bodyWidth}, viewport=${analystState.viewportWidth}`);
-  if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
-  if (!report.manualRefreshButton) failures.push('botão ATUALIZAR da topbar não encontrado');
-  if (refreshState.disabled) failures.push('botão ATUALIZAR DADOS permaneceu bloqueado após a leitura');
-  if (refreshState.error) failures.push(`refresh apresentou erro: ${refreshState.error}`);
-  if (!focusState.active) failures.push(`seletor de responsável não recebeu foco: ${JSON.stringify(focusState)}`);
+if (report.nestedInteractive !== 0) failures.push(`cards de responsáveis ainda possuem interação aninhada: ${report.nestedInteractive}`);
+if (!report.manualRefreshButton) failures.push('botão Atualizar da topbar não encontrado');
+if (refreshState.disabled) failures.push('botão Atualizar dados permaneceu bloqueado após a leitura');
+if (refreshState.error) failures.push(`refresh apresentou erro: ${refreshState.error}`);
+if (!focusState.active) failures.push(`card de responsável não recebeu foco: ${JSON.stringify(focusState)}`);
 
-  console.log(JSON.stringify({ ...report, afterTap: selected, analystState, refreshState }, null, 2));
-
-  await browser.close();
+console.log(JSON.stringify({ ...report, afterTap: selected, analystState, refreshState }, null, 2));
+await browser.close();
 if (failures.length) {
   console.error(JSON.stringify({ failures }, null, 2));
   process.exit(1);

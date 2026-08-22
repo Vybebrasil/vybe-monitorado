@@ -86,6 +86,84 @@ export const buildMissions = (snapshot) => {
 };
 
 export const riskTone = (risk) => Number(risk) >= 40 ? 'critical' : Number(risk) >= 20 ? 'warning' : 'stable';
+
+const COMPLETED_ITEM_STATUS = /finalizado|publicado|cancelado|feito|concluído|entregue/i;
+const SCHEDULED_ITEM_STATUS = /agendado|para agendar/i;
+
+export const deriveProductionCohort = (snapshot) => {
+  if (snapshot?.itemRowsComplete !== true || !Array.isArray(snapshot?.itemRows) || snapshot.itemRows.length === 0) return null;
+  const rows = snapshot.itemRows;
+  const isCompleted = item => Boolean(item?.isCompleted ?? item?.isComplete) || COMPLETED_ITEM_STATUS.test(String(item?.status || ''));
+  const isDelayed = item => !isCompleted(item) && (item?.isDelayed === true || item?.isDelayedPrazo === true || item?.isDelayedVeiculacao === true || Number(item?.daysOverdue) > 0);
+  const activeRows = rows.filter(item => !isCompleted(item));
+  const completedRows = rows.filter(isCompleted);
+  const delayedRows = activeRows.filter(isDelayed);
+  const delayedInternalRows = activeRows.filter(item => item?.isDelayedPrazo === true || item?.delayType === 'prazo interno');
+  const delayedPublicationRows = activeRows.filter(item => item?.isDelayedVeiculacao === true || item?.delayType === 'veiculação');
+  const readyRows = activeRows.filter(item => item?.isReady === true || SCHEDULED_ITEM_STATUS.test(String(item?.status || '')));
+  const statusCounts = activeRows.reduce((counts, item) => {
+    const status = String(item?.status || 'Sem status').trim() || 'Sem status';
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
+  const buildRanking = (key) => {
+    const groups = new Map();
+    activeRows.forEach(item => {
+      const label = String(item?.[key] || item?.[key === 'responsible' ? 'responsavel' : 'cliente'] || `Sem ${key === 'responsible' ? 'responsável' : 'cliente'}`).trim();
+      const current = groups.get(label) || { name: label, client: key === 'client' ? label : undefined, open: 0, openItems: 0, posts: 0, delayedItems: 0, delayedTotal: 0, details: [] };
+      current.open += 1;
+      current.openItems += 1;
+      current.posts += 1;
+      if (isDelayed(item)) {
+        current.delayedItems += 1;
+        current.delayedTotal += 1;
+      }
+      current.details.push(item);
+      groups.set(label, current);
+    });
+    return [...groups.values()]
+      .map(row => ({ ...row, client: row.client || (key === 'client' ? row.name : undefined), riskPct: row.open ? Number(((row.delayedItems / row.open) * 100).toFixed(1)) : 0 }))
+      .sort((a, b) => b.delayedItems - a.delayedItems || b.open - a.open || a.name.localeCompare(b.name, 'pt-BR'));
+  };
+  return {
+    rows,
+    activeRows,
+    completedRows,
+    delayedRows,
+    delayedInternalRows,
+    delayedPublicationRows,
+    readyRows,
+    statusCounts,
+    ownerRanking: buildRanking('responsible'),
+    clientRanking: buildRanking('client'),
+    totalRows: rows.length,
+    activeCount: activeRows.length,
+    completedCount: completedRows.length,
+    delayedCount: delayedRows.length,
+    delayedInternalCount: delayedInternalRows.length,
+    delayedPublicationCount: delayedPublicationRows.length,
+    readyCount: readyRows.length
+  };
+};
+
+export const deriveProductionScore = (snapshot, cohort = deriveProductionCohort(snapshot)) => {
+  const baseScore = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
+  if (!Number.isFinite(baseScore) || !cohort) return Number.isFinite(baseScore) ? baseScore : null;
+  const deductions = Array.isArray(snapshot?.portfolioStability?.scoreDeductions) ? snapshot.portfolioStability.scoreDeductions : [];
+  let score = baseScore;
+  const replacements = {
+    'internal-delays': cohort.delayedInternalCount,
+    'publication-risk': cohort.delayedPublicationCount
+  };
+  for (const deduction of deductions) {
+    if (!Object.prototype.hasOwnProperty.call(replacements, deduction?.id)) continue;
+    const previousCount = Number(deduction?.count ?? 0);
+    const pointsPerItem = Number(deduction?.pointsPerItem ?? 0);
+    score += (previousCount - replacements[deduction.id]) * pointsPerItem;
+  }
+  return score;
+};
+
 export const statusTone = (status) => {
   const normalized = String(status || '').toLowerCase();
   if (normalized.includes('finalizado') || normalized.includes('publicado')) return 'complete';

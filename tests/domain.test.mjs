@@ -26,6 +26,29 @@ import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
 import { deriveOperationalMirrorEvents, deriveSnapshotEvents, compactSnapshotItems, summarizeOperationalChanges } from '../server/domain/executive-events.js';
+import { deriveProductionCohort, deriveProductionScore } from '../src/components/executive-helpers.js';
+
+test('Coorte completa deriva ativos, atrasos, status e score da mesma base', () => {
+  const rows = [
+    { id: 'active-1', status: 'Aguardo', responsible: 'Paulo Martins', client: 'João Bacelar', isCompleted: false, isDelayed: true, isDelayedPrazo: true, isReady: false },
+    { id: 'active-2', status: 'Para agendar', responsible: 'Tainara Sodré', client: 'Antonov', isCompleted: false, isDelayed: false, isDelayedPrazo: false, isReady: true },
+    { id: 'done-1', status: 'Finalizado', responsible: 'Paulo Martins', client: 'João Bacelar', isCompleted: true, isDelayed: true, isDelayedPrazo: true, isReady: false }
+  ];
+  const snapshot = {
+    itemRowsComplete: true,
+    itemRows: rows,
+    portfolioStability: { rawScore: -20, scoreDeductions: [{ id: 'internal-delays', count: 1, pointsPerItem: 2 }] }
+  };
+  const cohort = deriveProductionCohort(snapshot);
+  assert.equal(cohort.totalRows, 3);
+  assert.equal(cohort.activeCount, 2);
+  assert.equal(cohort.completedCount, 1);
+  assert.equal(cohort.delayedCount, 1);
+  assert.equal(cohort.readyCount, 1);
+  assert.equal(cohort.ownerRanking[0].name, 'Paulo Martins');
+  assert.equal(cohort.clientRanking[0].name, 'João Bacelar');
+  assert.equal(deriveProductionScore(snapshot, cohort), -20);
+});
 
 test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
   const snapshots = [

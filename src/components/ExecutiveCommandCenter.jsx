@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, BarChart3, Clock3, ShieldAlert, Target, Users } from 'lucide-react';
-import { buildMissions, formatNumber, formatPct, formatPoints } from './executive-helpers.js';
+import { buildMissions, deriveProductionCohort, deriveProductionScore, formatNumber, formatPct, formatPoints } from './executive-helpers.js';
 import { TrendChart } from './ExecutiveAnalyticsCenter.jsx';
 import { ExecutiveDisclosure, ExecutiveInsightHeader, ExecutiveSectionHeader } from './ExecutiveInsightHeader.jsx';
 import { ExecutiveEvidencePreview } from './ExecutiveEvidencePreview.jsx';
@@ -27,20 +27,24 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
   const productivity = snapshot?.productivity || {};
   const summary = snapshot?.summary || {};
   const execution = snapshot?.portfolioExecution || {};
-  const active = Number(productivity.activeItems ?? quantitative.activeItems) || 0;
-  const completed = Number(productivity.completedItems ?? quantitative.completedItems) || 0;
-  const delayed = Number(summary.delayedTeam ?? quantitative.overdueInternal) || 0;
+  const productionCohort = deriveProductionCohort(snapshot);
+  const active = productionCohort?.activeCount ?? (Number(productivity.activeItems ?? quantitative.activeItems) || 0);
+  const completed = productionCohort?.completedCount ?? (Number(productivity.completedItems ?? quantitative.completedItems) || 0);
+  const delayed = productionCohort?.delayedCount ?? (Number(summary.delayedTeam ?? quantitative.overdueInternal) || 0);
   const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : (Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : []);
-  const demands = demandRows.length;
-  const demandDelayed = Number(summary.delayedDemands) || 0;
-  const demandOpenCount = demands > 0 || demandDelayed === 0 ? demands : null;
+  const demandRowsComplete = snapshot?.demandItemRowsComplete === true;
+  const demands = demandRowsComplete ? demandRows.length : null;
+  const demandDelayed = demandRowsComplete ? (Number(summary.delayedDemands) || 0) : null;
+  const demandOpenCount = demandRowsComplete ? demands : null;
   const demandDataNote = demandOpenCount === null ? 'abertas N/D · board não reconciliado' : `${formatNumber(demandOpenCount)} solicitações abertas`;
-  const ready = Number(productivity.readyToSchedule) || 0;
-  const score = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
+  const ready = productionCohort?.readyCount ?? (Number(productivity.readyToSchedule) || 0);
+  const derivedScore = deriveProductionScore(snapshot, productionCohort);
+  const score = Number.isFinite(derivedScore) ? derivedScore : Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
   const total = active + completed;
-  const missions = top(buildMissions(snapshot), 3);
-  const owners = top(productivity.topResponsibles, 3);
-  const clients = top((snapshot?.clientRanking || []).filter(client => Number(client.delayedItems) > 0).sort((a, b) => Number(b.riskPct) - Number(a.riskPct)), 4);
+  const missionSnapshot = { ...snapshot, summary: { ...summary, delayedDemands: demandRowsComplete ? (Number(summary.delayedDemands) || 0) : 0 }, ...(productionCohort ? { quantitative: { ...quantitative, overdueInternal: productionCohort.delayedInternalCount, overduePublication: productionCohort.delayedPublicationCount, activeItems: active, completedItems: completed }, portfolioStability: { ...snapshot?.portfolioStability, rawScore: score, score } } : {}) };
+  const missions = top(buildMissions(missionSnapshot), 3);
+  const owners = top(productionCohort?.ownerRanking || productivity.topResponsibles, 3);
+  const clients = top((productionCohort?.clientRanking || snapshot?.clientRanking || []).filter(client => Number(client.delayedItems) > 0).sort((a, b) => Number(b.riskPct) - Number(a.riskPct)), 4);
   const stalled = Array.isArray(execution.stalled) ? execution.stalled.length : 0;
   const historyReady = timeSeries?.available === true;
   const projection = intelligence?.projections;
@@ -62,7 +66,7 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       recommendation={primaryMission ? `${primaryMission.title} · ${formatNumber(primaryMission.current)} ${primaryMission.unit}.` : 'Acompanhar os sinais que podem mudar a decisão.'}
       impactLabel="Placar atual"
       impactValue={Number.isFinite(score) ? formatPoints(score) : 'N/D'}
-      impactNote={`${delayed + demandDelayed + stalled} sinais de pressão ativos`}
+      impactNote={`${delayed + (demandDelayed ?? 0) + stalled} sinais de pressão ativos`}
       tone={tone}
       primaryAction="Abrir prioridade"
       onPrimary={() => primaryMission && onSelect?.(primaryMission.kpiId, primaryMission.readinessId)}
@@ -74,7 +78,7 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
     <div className="command-metric-grid" aria-label="Indicadores de apoio à decisão">
       <Metric label="Em fluxo" value={formatNumber(active)} note={`${formatPct(total ? active / total * 100 : null)} da base`} onClick={() => onSelect?.('active')} />
       <Metric label="Atrasos · Produção" value={formatNumber(delayed)} note={`${formatPct(active ? delayed / active * 100 : null)} dos ativos`} tone={delayed ? 'critical' : 'stable'} onClick={() => onSelect?.('delays')} priority="primary" />
-      <Metric label="Demandas vencidas" value={formatNumber(demandDelayed)} note={demandDataNote} tone={demandDelayed ? 'warning' : 'stable'} onClick={() => onSelect?.('health')} priority="primary" />
+      <Metric label="Demandas vencidas" value={demandDelayed === null ? 'N/D' : formatNumber(demandDelayed)} note={demandDataNote} tone={demandDelayed ? 'warning' : 'stable'} onClick={() => onSelect?.('health')} priority="primary" />
       <Metric label="Prontos para agendar" value={formatNumber(ready)} note={`${formatPct(active ? ready / active * 100 : null)} dos ativos`} tone="cyan" onClick={() => onSelect?.('ready')} />
       <Metric label="Sem execução" value={formatNumber(stalled)} note="clientes ativos" tone={stalled ? 'warning' : 'stable'} onClick={() => onSelect?.('execution')} priority="primary" />
     </div>
@@ -95,7 +99,7 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       <article className="command-panel command-operations">
         <ExecutiveSectionHeader icon={Target} eyebrow="Contexto" title="Pressão operacional" note="Produção × Solicitações" />
         <div className="command-operation-row"><div><span>Produção de Conteúdo</span><strong>{formatNumber(active)} em fluxo</strong><small>{formatNumber(delayed)} atrasos internos</small></div><i><b className="production" style={{ width: `${Math.min(100, active ? delayed / active * 100 : 0)}%` }} /></i></div>
-        <div className="command-operation-row"><div><span>Solicitações de Demandas</span><strong>{demandOpenCount === null ? 'N/D abertas' : `${formatNumber(demandOpenCount)} abertas`}</strong><small>{formatNumber(demandDelayed)} vencidas · {demandOpenCount === null ? 'board não reconciliado' : 'coorte atual'}</small></div><i><b className="demands" style={{ width: `${Math.min(100, demandOpenCount ? demandDelayed / demandOpenCount * 100 : 0)}%` }} /></i></div>
+        <div className="command-operation-row"><div><span>Solicitações de Demandas</span><strong>{demandOpenCount === null ? 'N/D abertas' : `${formatNumber(demandOpenCount)} abertas`}</strong><small>{demandDelayed === null ? 'N/D vencidas' : `${formatNumber(demandDelayed)} vencidas`} · {demandOpenCount === null ? 'board não reconciliado' : 'coorte atual'}</small></div><i><b className="demands" style={{ width: `${Math.min(100, demandOpenCount && demandDelayed !== null ? demandDelayed / demandOpenCount * 100 : 0)}%` }} /></i></div>
         <div className="command-operation-row"><div><span>Entrega</span><strong>{formatNumber(completed)} concluídos</strong><small>{formatNumber(ready)} prontos para agenda</small></div><i><b className="delivery" style={{ width: `${Math.min(100, total ? completed / total * 100 : 0)}%` }} /></i></div>
       </article>
     </div>

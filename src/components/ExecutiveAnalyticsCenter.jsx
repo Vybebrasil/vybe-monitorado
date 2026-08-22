@@ -1,6 +1,6 @@
 import React from 'react';
 import { Activity, ArrowUpRight, ShieldAlert, Users } from 'lucide-react';
-import { formatNumber, formatPct, formatPoints } from './executive-helpers.js';
+import { deriveProductionCohort, deriveProductionScore, formatNumber, formatPct, formatPoints } from './executive-helpers.js';
 import { statusColorFor } from '../data/status-colors.js';
 import { ExecutiveInsightHeader } from './ExecutiveInsightHeader.jsx';
 
@@ -193,18 +193,20 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
   const quantitative = snapshot?.quantitative || {};
   const summary = snapshot?.summary || {};
   const productivity = snapshot?.productivity || {};
-  const globalActive = Number(productivity.activeItems ?? quantitative.activeItems) || 0;
-  const globalCompleted = Number(productivity.completedItems ?? quantitative.completedItems) || 0;
-  const globalDelayed = Number(productivity.delayedItems ?? summary.delayedTeam ?? quantitative.overdueInternal) || 0;
+  const productionCohort = deriveProductionCohort(snapshot);
+  const globalActive = productionCohort?.activeCount ?? (Number(productivity.activeItems ?? quantitative.activeItems) || 0);
+  const globalCompleted = productionCohort?.completedCount ?? (Number(productivity.completedItems ?? quantitative.completedItems) || 0);
+  const globalDelayed = productionCohort?.delayedCount ?? (Number(productivity.delayedItems ?? summary.delayedTeam ?? quantitative.overdueInternal) || 0);
   const globalDemandDelayed = Number(summary.delayedDemands) || 0;
-  const globalReady = Number(productivity.readyToSchedule) || 0;
+  const globalReady = productionCohort?.readyCount ?? (Number(productivity.readyToSchedule) || 0);
+  const globalScore = deriveProductionScore(snapshot, productionCohort);
   const globalTotalScope = globalActive + globalCompleted;
-  const fallbackOwners = Array.isArray(productivity.topResponsibles) ? productivity.topResponsibles : [];
-  const fallbackStages = Array.isArray(productivity.byStage) ? productivity.byStage : [];
-  const fallbackClients = (Array.isArray(snapshot?.clientRanking) ? snapshot.clientRanking : []).filter(item => Number(item.delayedItems) > 0).slice(0, 8);
-  const fallbackStatuses = Object.entries(quantitative.statusCounts || {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 8);
+  const fallbackOwners = productionCohort ? aggregateOwners(productionCohort.activeRows) : (Array.isArray(productivity.topResponsibles) ? productivity.topResponsibles : []);
+  const fallbackStages = productionCohort ? aggregateStages(productionCohort.rows) : (Array.isArray(productivity.byStage) ? productivity.byStage : []);
+  const fallbackClients = productionCohort ? aggregateClients(productionCohort.rows, true) : (Array.isArray(snapshot?.clientRanking) ? snapshot.clientRanking : []).filter(item => Number(item.delayedItems) > 0).slice(0, 8);
+  const fallbackStatuses = productionCohort ? aggregateStatuses(productionCohort.rows) : Object.entries(quantitative.statusCounts || {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 8);
   const [crossFilters, setCrossFilters] = React.useState({ owner: '', client: '', stage: '', status: '' });
-  const productionRows = Array.isArray(snapshot?.itemRows) ? snapshot.itemRows : (Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : []);
+  const productionRows = productionCohort?.rows || (Array.isArray(snapshot?.itemRows) ? snapshot.itemRows : (Array.isArray(snapshot?.activeItems) ? snapshot.activeItems : []));
   const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : (Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : []);
   const hasCompleteProductionRows = snapshot?.itemRowsComplete === true;
   const hasCompleteDemandRows = snapshot?.demandItemRowsComplete === true;
@@ -251,7 +253,7 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
   const maxStatus = Math.max(...visibleStatuses.map(([, count]) => Number(count) || 0), 1);
   // O score não é recalculado por subconjunto: sua fórmula depende do domínio
   // completo de prontidão, execução e fontes. No recorte, ele é explicitamente N/D.
-  const score = hasCrossFilter ? null : snapshot?.portfolioStability?.score;
+  const score = hasCrossFilter ? null : (Number.isFinite(globalScore) ? globalScore : snapshot?.portfolioStability?.score);
   const historyAvailable = history?.available === true;
   const historyScore = history?.score || {};
   const historyChanges = Array.isArray(history?.changes) ? history.changes.slice(0, 4) : [];
