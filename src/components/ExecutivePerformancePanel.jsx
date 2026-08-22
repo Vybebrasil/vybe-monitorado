@@ -1,5 +1,7 @@
 import React from 'react';
+import { Activity, Users, Workflow } from 'lucide-react';
 import { formatNumber, formatPct } from './executive-helpers.js';
+import { ExecutiveInsightHeader, ExecutiveSectionHeader } from './ExecutiveInsightHeader.jsx';
 
 const COMPLETED_STATUSES = ['finalizado', 'publicado', 'cancelado', 'feito', 'concluído', 'entregue'];
 const ownersOf = item => [...new Set([
@@ -24,6 +26,8 @@ function buildObservableOwners(rows) {
   }));
   return [...map.values()].map(owner => ({
     ...owner,
+    isExact: true,
+    signalCount: owner.delayed,
     completionPct: owner.total ? Number(((owner.completed / owner.total) * 100).toFixed(1)) : null,
     delayedPct: owner.active ? Number(((owner.delayed / owner.active) * 100).toFixed(1)) : null
   })).sort((a, b) => b.delayed - a.delayed || b.active - a.active || a.name.localeCompare(b.name));
@@ -39,7 +43,7 @@ function buildObservableStages(rows) {
     map.set(stage, current);
   });
   return [...map.values()].map(stage => ({ ...stage, delayedPct: stage.active ? Number(((stage.delayed / stage.active) * 100).toFixed(1)) : null }))
-    .sort((a, b) => b.active - a.active || b.delayed - a.delayed);
+    .sort((a, b) => b.delayedPct - a.delayedPct || b.active - a.active);
 }
 
 export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory }) {
@@ -62,23 +66,38 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory
       total: active,
       active,
       completed: null,
-      delayed: Number(owner.delayedTotal) || 0,
+      delayed: null,
+      signalCount: Number(owner.delayedTotal) || 0,
       ready: 0,
+      isExact: false,
       completionPct: null,
-      delayedPct: active ? Number((((Number(owner.delayedTotal) || 0) / active) * 100).toFixed(1)) : null
+      delayedPct: null
     };
   })).slice(0, 6);
 
   const largestLoad = [...topOwners].sort((a, b) => Number(b.active) - Number(a.active))[0];
-  const highestDelay = [...topOwners].filter(owner => Number(owner.active) > 0).sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
-  const bottleneck = [...visibleStages].sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
+  const hasNumeric = value => value !== null && value !== undefined && Number.isFinite(Number(value));
+  const highestDelay = [...topOwners].filter(owner => hasNumeric(owner.delayedPct) && Number(owner.active) > 0).sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
+  const bottleneck = [...visibleStages].filter(stage => hasNumeric(stage.delayedPct)).sort((a, b) => Number(b.delayedPct) - Number(a.delayedPct))[0];
+  const largestStage = [...visibleStages].sort((a, b) => Number(b.active ?? b.count) - Number(a.active ?? a.count))[0];
+  const pressureTone = delayedItems > 0 ? 'critical' : 'stable';
 
   return (
     <section className="executive-module performance-module team-command" aria-label="Visão executiva de time e performance">
-      <header className="team-command-hero">
-        <div><span className="executive-section-kicker">Time · capacidade observável</span><h2>O time está absorvendo a operação?</h2><p>Compare carga, entrega e pressão sem transformar volume em avaliação de valor individual.</p></div>
-        <div className="team-command-answer"><span>Resposta agora</span><strong>{delayedItems > 0 ? `${formatPct(activeItems ? delayedItems / activeItems * 100 : null)} da carteira está atrasada` : 'Sem atraso dominante'}</strong><small>Monday.com · Produção de Conteúdo</small></div>
-      </header>
+      <ExecutiveInsightHeader
+        className="team-command-hero"
+        eyebrow={<><Activity size={14} aria-hidden="true" /> Time · capacidade observável</>}
+        title="Onde a capacidade está pressionada?"
+        description="A leitura combina pressão da operação, concentração por etapa e sinais individuais para indicar onde investigar primeiro."
+        recommendation={bottleneck ? `${bottleneck.stage} concentra ${formatNumber(bottleneck.delayed || 0)} atrasos em ${formatNumber(bottleneck.active ?? bottleneck.count)} itens ativos.` : largestStage ? `${largestStage.stage} concentra ${formatNumber(largestStage.active ?? largestStage.count)} itens ativos; a pressão exata aguarda linhas detalhadas.` : 'Não há uma etapa crítica dominante nesta leitura.'}
+        impactLabel="Pressão atual"
+        impactValue={delayedItems > 0 ? formatPct(activeItems ? delayedItems / activeItems * 100 : null) : '0%'}
+        impactNote={`${formatNumber(delayedItems)} atrasos · ${formatNumber(activeItems)} itens ativos`}
+        tone={pressureTone}
+        primaryAction={highestDelay ? 'Investigar maior pressão' : undefined}
+        onPrimary={() => highestDelay && onOpenOwner?.(highestDelay.name)}
+        context="Concentração aponta onde investigar; não é medição de valor individual."
+      />
 
       <div className="team-command-kpis">
         <div><span>Em execução</span><strong>{formatNumber(activeItems)}</strong><small>itens ativos</small></div>
@@ -89,27 +108,28 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory
 
       <div className="team-command-signals">
         <div><span>Maior carga observada</span><strong>{largestLoad?.name || 'N/D'}</strong><small>{largestLoad ? `${formatNumber(largestLoad.active)} ativos` : 'Sem dados completos'}</small></div>
-        <div><span>Maior pressão relativa</span><strong>{highestDelay?.name || 'N/D'}</strong><small>{highestDelay ? `${formatPct(highestDelay.delayedPct)} dos ativos em atraso` : 'Sem dados completos'}</small></div>
-        <div><span>Etapa mais pressionada</span><strong>{bottleneck?.stage || 'N/D'}</strong><small>{bottleneck ? `${formatNumber(bottleneck.delayed || 0)} atrasos · ${formatPct(bottleneck.delayedPct)}` : 'Sem dados completos'}</small></div>
+        <div><span>Maior pressão relativa</span><strong>{highestDelay?.name || 'N/D'}</strong><small>{highestDelay ? `${formatPct(highestDelay.delayedPct)} dos ativos em atraso` : 'pressão individual N/D sem linhas detalhadas'}</small></div>
+        <div><span>{bottleneck ? 'Etapa mais pressionada' : 'Etapa com maior volume'}</span><strong>{bottleneck?.stage || largestStage?.stage || 'N/D'}</strong><small>{bottleneck ? `${formatNumber(bottleneck.delayed || 0)} atrasos · ${formatPct(bottleneck.delayedPct)}` : largestStage ? `${formatNumber(largestStage.active ?? largestStage.count)} itens · pressão detalhada N/D` : 'Sem dados completos'}</small></div>
       </div>
 
       <div className="team-command-grid">
         <article className="team-capacity-panel">
-          <header><div><span>Mapa de capacidade</span><strong>Pessoas e carga atual</strong></div><small>Clique para investigar</small></header>
+          <ExecutiveSectionHeader icon={Users} eyebrow="Depois da etapa" title="Pessoas e carga atual" note="clique para investigar" />
           {topOwners.length === 0 ? <div className="executive-empty-state"><strong>Dados de responsável não disponíveis.</strong><span>O Nexus não transforma ausência de dados em uma nota individual.</span></div> : <div className="team-capacity-cards">{topOwners.map(owner => {
             const delayed = Number(owner.delayed) || 0;
+            const signalCount = Number(owner.signalCount ?? owner.delayed) || 0;
             const delayedPct = owner.delayedPct;
             return <button type="button" className="team-capacity-card" key={owner.name} onClick={() => onOpenOwner?.(owner.name)}>
               <span className="team-capacity-name">{owner.name}</span><b>{formatPct(delayedPct)}</b>
               <i><em style={{ width: `${Math.min(100, Number(delayedPct) || 0)}%` }} /></i>
-              <div><small>Ativos<strong>{formatNumber(owner.active)}</strong></small><small>Concluídos<strong>{owner.completed === null ? 'N/D' : formatNumber(owner.completed)}</strong></small><small>Atrasos<strong>{formatNumber(delayed)}</strong></small></div>
+              <div><small>Ativos<strong>{formatNumber(owner.active)}</strong></small><small>{owner.isExact ? 'Concluídos' : 'Sinais'}<strong>{owner.isExact ? (owner.completed === null ? 'N/D' : formatNumber(owner.completed)) : formatNumber(signalCount)}</strong></small><small>{owner.isExact ? 'Atrasos' : 'Pressão'}<strong>{owner.isExact ? formatNumber(delayed) : 'N/D'}</strong></small></div>
               <u>Investigar ↗</u>
             </button>;
           })}</div>}
         </article>
 
         <aside className="team-stage-panel">
-          <header><div><span>Gargalos por etapa</span><strong>Pressão do fluxo</strong></div><small>{formatNumber(visibleStages.length)} etapas</small></header>
+          <ExecutiveSectionHeader icon={Workflow} eyebrow="Primeiro diagnóstico" title="Pressão por etapa" note={`${formatNumber(visibleStages.length)} etapas`} />
           <div className="team-stage-list">{visibleStages.slice(0, 6).map(stage => <div className="team-stage-row" key={stage.stage}>
             <div><span>{stage.stage}</span><strong>{formatNumber(stage.active ?? stage.count)}</strong></div>
             <i><b style={{ width: `${Math.min(100, Number(stage.delayedPct) || Number(stage.pctOfActive) || 0)}%` }} /></i>

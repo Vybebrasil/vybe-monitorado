@@ -2,6 +2,7 @@ import React from 'react';
 import { Activity, ArrowUpRight, ShieldAlert, Users } from 'lucide-react';
 import { formatNumber, formatPct, formatPoints } from './executive-helpers.js';
 import { statusColorFor } from '../data/status-colors.js';
+import { ExecutiveInsightHeader } from './ExecutiveInsightHeader.jsx';
 
 function pct(value, total) {
   const numeric = Number(value);
@@ -182,7 +183,7 @@ export function TrendChart({ timeSeries, hasCrossFilter = false }) {
   const last = validPoints.at(-1)?.[metric.key];
   const delta = first !== undefined && last !== undefined ? Number(last) - Number(first) : null;
   return <article className="analytics-panel analytics-trend-panel">
-    <div className="analytics-panel-heading analytics-trend-heading"><div><span><Activity size={13} /> EVOLUÇÃO DA AGÊNCIA</span><strong>{metric.label}</strong><small>{hasCrossFilter ? 'série global · filtros afetam apenas o snapshot atual' : 'série observada · snapshots persistidos'}</small></div><div className="analytics-trend-summary"><strong>{last === undefined ? 'N/D' : metric.formatter(last)}</strong><small>{delta === null ? 'sem comparação' : `${delta > 0 ? '+' : ''}${metric.formatter(delta)} no período`}</small></div></div>
+    <div className="analytics-panel-heading analytics-trend-heading"><div><span><Activity size={13} /> Evolução da agência</span><strong>{metric.label}</strong><small>{hasCrossFilter ? 'série global · filtros afetam apenas o snapshot atual' : 'série observada · snapshots persistidos'}</small></div><div className="analytics-trend-summary"><strong>{last === undefined ? 'N/D' : metric.formatter(last)}</strong><small>{delta === null ? 'sem comparação' : `${delta > 0 ? '+' : ''}${metric.formatter(delta)} no período`}</small></div></div>
     <div className="analytics-trend-controls"><div className="analytics-trend-metrics">{trendMetrics.map(item => <button type="button" key={item.key} className={metric.key === item.key ? 'active' : ''} style={{ '--trend-color': item.color }} onClick={() => setMetricKey(item.key)}>{item.label}</button>)}</div><div className="analytics-trend-ranges">{[7, 30, 90].map(days => <button type="button" key={days} className={rangeDays === days ? 'active' : ''} onClick={() => setRangeDays(days)}>{days}D</button>)}</div></div>
     <TrendPlot points={visiblePoints} metric={metric} />
   </article>;
@@ -235,7 +236,7 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
     status: [...new Set(productionRows.map(rowStatus).concat(demandRows.map(rowStatus)).concat(fallbackStatuses.map(([label]) => label)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   };
   const filteredItemCount = hasCrossFilter ? (hasUsableScope ? filteredProductionRows.length : null) : null;
-  const filterLabels = { owner: 'RESPONSÁVEL', client: 'CLIENTE', stage: 'ETAPA', status: 'STATUS' };
+  const filterLabels = { owner: 'Responsável', client: 'Cliente', stage: 'Etapa', status: 'Status' };
   const updateFilter = (key, value) => setCrossFilters(current => ({ ...current, [key]: value }));
   const clearFilters = () => setCrossFilters({ owner: '', client: '', stage: '', status: '' });
   const visibleOwners = owners;
@@ -262,15 +263,25 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
 
   return (
     <section className="analytics-center" aria-label="Performance e Analytics Center">
-      <header className="analytics-center-header">
-        <div><span className="analytics-kicker">Vybe Nexus · performance & analytics</span><h1>Como a agência está performando?</h1><p>Leitura observável de volume, fluxo, risco e concentração. Clique em qualquer linha para investigar a origem.</p></div><div className="analytics-center-meta">{hasCrossFilter ? <strong className="analytics-filter-active-badge">Recorte ativo</strong> : null}</div>
-        <div className="analytics-center-meta"><span><Activity size={13} /> snapshot atual</span><strong>{historyAvailable ? 'Comparação disponível' : 'Comparação N/D'}</strong><button type="button" className="analytics-history-link" onClick={onOpenHistory}>História e logs ↗</button></div>
-      </header>
+      <ExecutiveInsightHeader
+        className="analytics-center-header analytics-insight"
+        eyebrow={<><Activity size={14} aria-hidden="true" /> Analytics · investigação</>}
+        title={hasCrossFilter ? 'O que este recorte está dizendo?' : 'Onde está a pressão da agência?'}
+        description={hasCrossFilter ? 'O recorte recalcula os indicadores disponíveis e mantém a série histórica da agência inteira.' : 'Comece pelo sinal que merece explicação. O gráfico e as evidências mostram volume, fluxo, risco e concentração.'}
+        recommendation={hasCrossFilter ? `${displayCount(active)} itens ativos no recorte · ${displayCount(delayed)} atrasos de Produção.` : `${displayCount(globalDelayed)} atrasos de Produção e ${displayCount(globalDemandDelayed)} Solicitações de Demandas vencidas na leitura atual.`}
+        impactLabel="Itens em fluxo"
+        impactValue={displayCount(active)}
+        impactNote={`${displayPct(activePct)} do escopo lido · ${historyAvailable ? 'histórico disponível' : 'histórico N/D'}`}
+        tone={globalDelayed > 0 ? 'critical' : 'stable'}
+        secondaryAction="Ver história e logs"
+        onSecondary={onOpenHistory}
+        context={<>{hasCrossFilter ? <strong className="analytics-filter-active-badge">Recorte ativo</strong> : null}<span>{hasCrossFilter ? 'Filtros recalculam o snapshot atual.' : 'A série temporal só usa snapshots reais persistidos.'}</span></>}
+      />
 
       <div className="analytics-filter-bar" aria-label="Filtros cruzados do Analytics Center">
-        <div className="analytics-filter-title"><span>Recorte cruzado</span><strong>{hasCrossFilter ? (filteredItemCount === null ? 'linhas detalhadas indisponíveis' : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'snapshot atual'}</strong></div>
+        <div className="analytics-filter-title"><span>Refinar a investigação</span><strong>{hasCrossFilter ? (filteredItemCount === null ? 'linhas detalhadas indisponíveis' : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'todos os dados do snapshot atual'}</strong></div>
         <div className="analytics-filter-controls">
-          {Object.entries(filterOptions).map(([key, options]) => <label key={key} className="analytics-filter-control"><span>{filterLabels[key]}</span><select value={crossFilters[key]} onChange={event => updateFilter(key, event.target.value)} disabled={!options.length}><option value="">Todos</option>{options.map(option => <option value={option} key={option}>{option}</option>)}</select></label>)}
+          {Object.entries(filterOptions).map(([key, options]) => <label key={key} className="analytics-filter-control"><span>{filterLabels[key].toLowerCase()}</span><select value={crossFilters[key]} onChange={event => updateFilter(key, event.target.value)} disabled={!options.length}><option value="">Todos</option>{options.map(option => <option value={option} key={option}>{option}</option>)}</select></label>)}
           {hasCrossFilter ? <button type="button" className="analytics-filter-clear" onClick={clearFilters}>Limpar filtros</button> : null}
         </div>
       </div>

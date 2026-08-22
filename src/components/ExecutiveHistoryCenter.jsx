@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Activity, ArrowUpRight, Clock3, Filter, ShieldAlert, Target } from 'lucide-react';
 import { formatNumber, formatPoints } from './executive-helpers.js';
 import { TrendChart } from './ExecutiveAnalyticsCenter.jsx';
+import { ExecutiveInsightHeader } from './ExecutiveInsightHeader.jsx';
 
 const EVENT_LABELS = {
   item_entered_scope: 'Item entrou no fluxo',
@@ -78,10 +79,20 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
   ];
 
   return <section className="history-center" aria-label="História e logs executivos">
-    <header className="history-center-hero">
-      <div><span className="history-kicker"><Clock3 size={14} /> História da operação</span><h1>O que mudou, quando mudou e o que precisa ser corrigido.</h1><p>Snapshots mostram a evolução. Eventos mostram a mudança. Decisões e impactos fecham o ciclo.</p></div>
-      <div className="history-hero-status"><strong>{historyReady ? 'Histórico ativo' : 'Histórico pendente'}</strong><span>{historyReady ? `${formatNumber(points.length)} pontos reais disponíveis` : 'sem pontos persistidos na produção'}</span><small>{history?.available ? 'Comparação real da operação' : historyMessage}</small></div>
-    </header>
+    <ExecutiveInsightHeader
+      className="history-center-hero"
+      eyebrow={<><Clock3 size={14} aria-hidden="true" /> História da operação</>}
+      title="O que mudou e qual correção importa?"
+      description="Snapshots mostram evolução; eventos mostram mudanças. Decisões e impactos fecham o ciclo quando a memória executiva está disponível."
+      recommendation={historyReady ? `${formatNumber(eventCount)} eventos e ${formatNumber(points.length)} snapshots reais disponíveis para comparação.` : 'A leitura atual funciona; a comparação temporal e a memória de eventos aguardam persistência.'}
+      impactLabel="Eventos observáveis"
+      impactValue={events.length ? formatNumber(eventCount) : 'N/D'}
+      impactNote={historyReady ? `${formatNumber(points.length)} snapshots persistidos` : 'histórico pendente'}
+      tone={historyReady ? 'stable' : 'warning'}
+      secondaryAction={historyReady ? undefined : 'Ver instruções'}
+      onSecondary={historyReady ? undefined : onOpenAnalyst}
+      context={history?.available ? 'Comparação real da operação.' : historyMessage}
+    />
 
     {historyReady ? <>
       <div className="history-stat-grid">
@@ -108,7 +119,7 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
         <label><span>Etapa</span><select value={eventStage} onChange={event => setEventStage(event.target.value)}><option value="all">Todas</option>{stages.map(stage => <option key={stage} value={stage}>{stage}</option>)}</select></label>
       </div>
       {visibleEvents.length ? <div className="history-event-list">{visibleEvents.map(event => <article key={event.id} className={`history-event-row ${EVENT_TONES[event.type] || 'neutral'}`}><div className="history-event-time">{formatEventDate(event.capturedAt)}</div><div className="history-event-dot" /><div className="history-event-content"><div><strong>{event.title || EVENT_LABELS[event.type] || 'Evento executivo'}</strong><span>{EVENT_LABELS[event.type] || event.type}</span></div><p>{event.detail || 'Mudança observada na leitura operacional.'}</p><small>{[event.source, event.client, event.responsible, event.stage].filter(Boolean).join(' · ')}</small></div>{event.evidenceUrl ? <a href={event.evidenceUrl} target="_blank" rel="noreferrer">Monday ↗</a> : null}</article>)}</div> : <div className="history-log-empty"><strong>{events.length ? 'Nenhum evento corresponde aos filtros.' : 'Nenhum evento executivo persistido ainda.'}</strong><span>{events.length ? 'Amplie o recorte para visualizar outras mudanças.' : 'Quando a persistência estiver ativa, cada captura poderá gerar uma mudança rastreável aqui.'}</span></div>}
-      {filteredEvents.length > 8 ? <button type="button" className="history-more-button" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${filteredEvents.length - 8})`}</button> : null}
+      {filteredEvents.length > 8 ? <button type="button" className="history-more-button" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `Ver mais (${filteredEvents.length - 8})`}</button> : null}
     </div>
   </section>;
 }

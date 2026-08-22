@@ -1,4 +1,6 @@
+import { Activity } from 'lucide-react';
 import { formatNumber, formatPct } from './executive-helpers.js';
+import { ExecutiveSectionHeader } from './ExecutiveInsightHeader.jsx';
 
 function tone(value) {
   if (value === null || value === undefined) return 'unknown';
@@ -27,8 +29,8 @@ export function ExecutivePulseBars({ snapshot }) {
   const executionGap = eligible ? ((Number(execution.stalled?.length) || 0) / eligible) * 100 : null;
 
   return (
-    <section className="executive-pulse-bars data-panel" aria-label="Barras de pressão executiva">
-      <div className="data-panel-title"><span>Pressão executiva · barras comparáveis</span><span className="executive-pulse-note">{formatNumber(quantitative.activeItems || 0)} itens ativos · {formatNumber(eligible)} clientes elegíveis</span></div>
+    <section className="executive-pulse-bars data-panel hierarchy-secondary" aria-label="Barras de pressão executiva">
+      <ExecutiveSectionHeader icon={Activity} eyebrow="Comparação" title="Onde a pressão está proporcionalmente maior?" note={`${formatNumber(quantitative.activeItems || 0)} itens · ${formatNumber(eligible)} clientes`} />
       <div className="executive-pulse-grid">
         <Pulse label="Atraso interno" value={delayedInternal} detail={`${formatNumber(quantitative.overdueInternal || 0)} itens`} source="Produção de Conteúdo" />
         <Pulse label="Risco de veiculação" value={delayedPublication} detail={`${formatNumber(quantitative.overduePublication || 0)} itens`} source="data de veiculação" />

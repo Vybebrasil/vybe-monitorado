@@ -1,4 +1,6 @@
+import { ShieldAlert } from 'lucide-react';
 import { buildMissions, formatNumber, formatPoints } from './executive-helpers.js';
+import { ExecutiveDisclosure, ExecutiveSectionHeader } from './ExecutiveInsightHeader.jsx';
 
 export function MissionBoard({ snapshot, onSelect }) {
   const missions = buildMissions(snapshot);
@@ -35,32 +37,38 @@ export function MissionBoard({ snapshot, onSelect }) {
       </button>
     );
   };
+  const renderMission = (mission, index) => (
+    <button type="button" className={`mission-card ${mission.accent} ${index === 0 ? 'mission-card-primary' : 'mission-card-compact'}`} key={mission.id} onClick={() => onSelect(mission.kpiId, mission.readinessId)} aria-label={`Abrir missão: ${mission.title}`}>
+      <div className="mission-card-top"><span>Missão {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
+      <strong>{mission.title}</strong>
+      <div className="mission-card-meta"><span>{formatNumber(mission.current)} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)} recuperáveis</b></div>
+      <div className="mission-progress" aria-label="Progresso da missão"><i style={{ width: `${mission.progressPct}%` }} /></div>
+      <small>{mission.description}</small>
+      <em>Abrir evidências ↗</em>
+    </button>
+  );
 
   return (
-    <section className="mission-board data-panel" aria-label="Missões da carteira e placar executivo">
-      <div className="mission-board-header">
-        <div className="mission-board-copy"><span className="executive-section-kicker">Vybe OS · missões da carteira</span><h2>Recupere o placar da operação</h2><p>Cada missão nasce de um sinal real do Monday. Não é competição entre pessoas: é recuperação do sistema.</p><div className="mission-objective"><span>Objetivo da leitura</span><strong>Resolver sinais comprovados e devolver pontos ao placar.</strong></div></div>
-        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>Placar bruto atual</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>Meta de recuperação: 100 pts</em></div>
+    <section className="mission-board data-panel hierarchy-secondary" aria-label="Missões da carteira e placar executivo">
+      <ExecutiveSectionHeader icon={ShieldAlert} eyebrow="Recuperação" title="Qual movimento recupera mais pontos?" note={`${missions.length} missões abertas`} />
+      <div className="mission-board-summary">
+        <div className="mission-board-copy"><p>Cada missão nasce de um sinal real do Monday. O placar mede recuperação do sistema, não competição entre pessoas.</p><div className="mission-objective"><span>Próximo passo</span><strong>{missions[0]?.title || 'Acompanhar os sinais disponíveis.'}</strong></div></div>
+        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>Placar bruto</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>base de {scoreBase} pts</em></div>
       </div>
       <div className="mission-layout">
         <div className="mission-list">
-          {missions.map((mission, index) => (
-            <button type="button" className={`mission-card ${mission.accent}`} key={mission.id} onClick={() => onSelect(mission.kpiId, mission.readinessId)} aria-label={`Abrir missão: ${mission.title}`}>
-              <div className="mission-card-top"><span>Missão {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
-              <strong>{mission.title}</strong>
-              <div className="mission-card-meta"><span>{formatNumber(mission.current)} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)} recuperáveis</b></div>
-              <div className="mission-progress" aria-label="Progresso da missão"><i style={{ width: `${mission.progressPct}%` }} /></div>
-              <small>{mission.description}</small>
-              <em>Abrir evidências ↗</em>
-            </button>
-          ))}
+          {missions.length ? <>
+            {renderMission(missions[0], 0)}
+            {missions.length > 1 ? <div className="mission-secondary-list">{missions.slice(1).map((mission, index) => renderMission(mission, index + 1))}</div> : null}
+          </> : <div className="mission-empty">Nenhuma missão crítica nesta leitura.</div>}
         </div>
-        <div className="score-ledger">
-          <div className="score-ledger-header"><div><span>Placar · origem dos descontos</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes · -{formatNumber(lostPoints)} pts perdidos</b></div>
-          <div className="score-ledger-summary"><span>Fechamento do placar</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
-          <div className="score-ledger-group"><span className="score-ledger-group-title">Execução e entrega</span>{operationalDeductions.map(renderDeduction)}</div>
-          <div className="score-ledger-group readiness"><span className="score-ledger-group-title">Prontidão da carteira</span>{readinessDeductions.map(renderDeduction)}</div>
-        </div>
+        {deductions.length ? <ExecutiveDisclosure label="Origem dos descontos" summary={`${deductions.length} fontes · -${formatNumber(lostPoints)} pts`}>
+          <div className="score-ledger">
+            <div className="score-ledger-summary"><span>Fechamento do placar</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
+            <div className="score-ledger-group"><span className="score-ledger-group-title">Execução e entrega</span>{operationalDeductions.map(renderDeduction)}</div>
+            <div className="score-ledger-group readiness"><span className="score-ledger-group-title">Prontidão da carteira</span>{readinessDeductions.map(renderDeduction)}</div>
+          </div>
+        </ExecutiveDisclosure> : null}
       </div>
     </section>
   );

@@ -3,6 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { Activity } from 'lucide-react';
 import { statusColorFor } from '../data/status-colors.js';
 import { PeopleAvatars } from '../components/PeopleAvatars.jsx';
+import { ExecutiveInsightHeader, ExecutiveSectionHeader } from '../components/ExecutiveInsightHeader.jsx';
 
 // Esta estação é o único consumidor do Recharts. Mantê-la em módulo separado
 // permite carregá-la sob demanda e tirar o gráfico do bundle inicial.
@@ -31,9 +32,12 @@ export default function AnalystStation({ snapshot, history, onExit }) {
 
   const fetchPanelSummary = async ({ wait = false, signal } = {}) => {
     const response = await fetch(`/api/executive/vybe-panel?limit=200${wait ? '&wait=1' : ''}`, { cache: 'no-store', signal });
-    return response.ok
-      ? response.json()
-      : response.json().then(body => Promise.reject(new Error(body.message || 'Vybe Painel indisponível.')));
+    const raw = await response.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+    if (!response.ok) throw new Error(body?.message || 'Vybe Painel indisponível nesta leitura.');
+    if (!body || typeof body !== 'object') throw new Error('Vybe Painel retornou uma resposta inválida nesta leitura.');
+    return body;
   };
 
   useEffect(() => {
@@ -148,23 +152,38 @@ export default function AnalystStation({ snapshot, history, onExit }) {
   const sourceQuality = snapshot?.sourceQuality || {};
   const sourceVersion = sourceQuality.mirrorVersion ?? sourceQuality.sync?.version ?? null;
   const historicalChanges = history?.changes || [];
+  const primaryDelay = filteredDelays[0];
+  const primaryDelayText = primaryDelay
+    ? `${primaryDelay.name || 'Item sem nome'} · ${primaryDelay.daysOverdue || 0} dias de atraso · ${primaryDelay.client || 'cliente não informado'}.`
+    : 'Nenhuma evidência de atraso combina com o recorte atual.';
+  const scrollToEvidence = () => document.querySelector('.analyst-evidence-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   return (
     <div className="animate-fade analyst-station" style={{ minHeight: '100vh' }}>
-      <header className="app-header">
-        <div className="app-header-title">
-          <Activity size={24} color="var(--vybe-cyan)" /> <span>Analista · investigação executiva</span> <span className="badge">Foco</span>
-        </div>
-        <div className="app-header-meta">
-          <span>Foco em causas, evidências e impactos</span>
-          <button onClick={onExit}>&larr; Voltar ao JARVIS</button>
-        </div>
+      <header className="analyst-station-header">
+        <div className="analyst-station-brand"><Activity size={20} aria-hidden="true" /><span>Analista · investigação executiva</span><span className="badge">Foco</span></div>
+        <div className="analyst-station-header-actions"><span>causa · impacto · evidência</span><button type="button" onClick={onExit}>&larr; Voltar ao JARVIS</button></div>
       </header>
 
-      <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit e cruza evidências com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
+      <ExecutiveInsightHeader
+        className="analyst-insight"
+        eyebrow={<><Activity size={14} aria-hidden="true" /> Investigação guiada</>}
+        title={filteredDelays.length ? 'Qual é a causa deste sinal?' : 'O que merece ser investigado?'}
+        description="O Analista parte do sinal escolhido no cockpit e organiza a evidência sem substituir a execução no Monday."
+        recommendation={primaryDelayText}
+        impactLabel="Evidências no recorte"
+        impactValue={filteredDelays.length}
+        impactNote={`${activeFilterCount ? `${activeFilterCount} filtros ativos` : 'todos os atrasos observáveis'} · origem Monday`}
+        tone={primaryDelay?.daysOverdue >= 15 ? 'critical' : filteredDelays.length ? 'warning' : 'stable'}
+        primaryAction="Ir para evidências"
+        onPrimary={scrollToEvidence}
+        context="Contexto do Vybe Painel e filtros avançados ficam abaixo como suporte à investigação."
+      />
+
+      <div className="analyst-intro"><Activity size={15} /> Este modo cruza evidências do Monday com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
 
       <section className="analyst-investigation-context data-panel animate-slide delay-1" aria-label="Contexto temporal da investigação">
-        <div className="data-panel-title">Contexto da investigação · versão e mudanças</div>
+        <ExecutiveSectionHeader eyebrow="Contexto" title="Versão e mudanças observadas" note="memória comparável" />
         <div className="analyst-context-metrics">
           <span><b>{sourceVersion ?? 'N/D'}</b> versão do espelho</span>
           <span><b>{Number.isFinite(currentScore) ? currentScore : 'N/D'}</b> placar atual</span>
@@ -176,7 +195,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
       </section>
 
       <section className="analyst-panel-sync data-panel animate-slide delay-1">
-        <div className="data-panel-title">Ponte Vybe Painel · leitura completa</div>
+        <ExecutiveSectionHeader eyebrow="Fonte complementar" title="Ponte Vybe Painel" note="somente leitura" />
         {panelError ? (
           <div className="analyst-source-warning" role="status" aria-live="polite">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
         ) : panelSnapshot ? (
@@ -207,7 +226,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
       </section>
 
       <section className="analyst-filters data-panel animate-slide delay-1" aria-label="Filtros cruzados da investigação">
-        <div className="data-panel-title" aria-live="polite">Filtrar a investigação · {filteredDelays.length} evidências</div>
+        <ExecutiveSectionHeader eyebrow="Refinamento" title={`Filtrar evidências · ${filteredDelays.length}`} note={activeFilterCount ? `${activeFilterCount} filtros ativos` : 'todos os sinais'} />
         <div className="analyst-filter-grid">
           <label>Cliente<select value={filters.client} onChange={event => updateFilter('client', event.target.value)}><option value="">Todos os clientes</option>{filterOptions.clients.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label>Responsável<select value={filters.responsible} onChange={event => updateFilter('responsible', event.target.value)}><option value="">Todos os responsáveis</option>{filterOptions.responsible.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
