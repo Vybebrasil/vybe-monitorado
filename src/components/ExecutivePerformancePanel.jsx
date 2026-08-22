@@ -46,7 +46,7 @@ function buildObservableStages(rows) {
     .sort((a, b) => b.delayedPct - a.delayedPct || b.active - a.active);
 }
 
-export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory }) {
+export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenStage, onOpenHistory }) {
   const productivity = snapshot?.productivity || {};
   const activeItems = Number(productivity.activeItems ?? snapshot?.quantitative?.activeItems) || 0;
   const completedItems = Number(productivity.completedItems ?? snapshot?.quantitative?.completedItems) || 0;
@@ -130,11 +130,11 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory
 
         <aside className="team-stage-panel">
           <ExecutiveSectionHeader icon={Workflow} eyebrow="Primeiro diagnóstico" title="Pressão por etapa" note={`${formatNumber(visibleStages.length)} etapas`} />
-          <div className="team-stage-list">{visibleStages.slice(0, 6).map(stage => <div className="team-stage-row" key={stage.stage}>
+          <div className="team-stage-list">{visibleStages.slice(0, 6).map(stage => <button type="button" className="team-stage-row" key={stage.stage} onClick={() => onOpenStage?.(stage.stage)}>
             <div><span>{stage.stage}</span><strong>{formatNumber(stage.active ?? stage.count)}</strong></div>
             <i><b style={{ width: `${Math.min(100, Number(stage.delayedPct) || Number(stage.pctOfActive) || 0)}%` }} /></i>
             <small>{stage.delayed === null || stage.delayed === undefined ? `${formatPct(stage.pctOfActive)} da carteira` : `${formatNumber(stage.delayed)} atrasos · ${formatPct(stage.delayedPct)}`}</small>
-          </div>)}</div>
+          </button>)}</div>
           <div className="team-command-note"><strong>Como ler</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span><button type="button" onClick={onOpenHistory}>Ver história do fluxo ↗</button></div>
         </aside>
       </div>

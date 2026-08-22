@@ -208,26 +208,28 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
   const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : (Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : []);
   const hasCompleteProductionRows = snapshot?.itemRowsComplete === true;
   const hasCompleteDemandRows = snapshot?.demandItemRowsComplete === true;
+  const partialProductionRows = Array.isArray(snapshot?.delayDetails) ? snapshot.delayDetails : [];
+  const hasPartialProductionSignals = !hasCompleteProductionRows && partialProductionRows.length > 0;
   const hasDetailedRows = hasCompleteProductionRows || hasCompleteDemandRows;
   const hasCrossFilter = Object.values(crossFilters).some(Boolean);
-  const filteredProductionRows = hasCompleteProductionRows ? productionRows.filter(item => rowStatus(item) !== 'Sem status' && matchesRow(item, crossFilters)) : [];
+  const filteredProductionRows = hasCompleteProductionRows ? productionRows.filter(item => rowStatus(item) !== 'Sem status' && matchesRow(item, crossFilters)) : partialProductionRows.filter(item => matchesRow(item, crossFilters));
   const filteredDemandRows = hasCompleteDemandRows ? demandRows.filter(item => rowStatus(item) !== 'Sem status' && matchesRow(item, crossFilters)) : [];
-  const scopeRows = hasCrossFilter && hasDetailedRows ? filteredProductionRows : productionRows.filter(item => rowStatus(item) !== 'Sem status');
-  const scopedActiveRows = scopeRows.filter(item => !rowIsCompleted(item));
-  const scopedCompletedRows = scopeRows.filter(rowIsCompleted);
-  const scopedDelayedRows = scopedActiveRows.filter(rowIsDelayed);
+  const scopeRows = hasCrossFilter && (hasDetailedRows || hasPartialProductionSignals) ? filteredProductionRows : productionRows.filter(item => rowStatus(item) !== 'Sem status');
+  const scopedActiveRows = hasCompleteProductionRows ? scopeRows.filter(item => !rowIsCompleted(item)) : [];
+  const scopedCompletedRows = hasCompleteProductionRows ? scopeRows.filter(rowIsCompleted) : [];
+  const scopedDelayedRows = hasCompleteProductionRows ? scopedActiveRows.filter(rowIsDelayed) : scopeRows.filter(rowIsDelayed);
   const scopedDemandDelayedRows = filteredDemandRows.filter(item => !rowIsCompleted(item) && rowIsDelayed(item));
-  const hasUsableScope = !hasCrossFilter || hasDetailedRows;
-  const active = hasCrossFilter ? (hasUsableScope ? scopedActiveRows.length : null) : globalActive;
-  const completed = hasCrossFilter ? (hasUsableScope ? scopedCompletedRows.length : null) : globalCompleted;
+  const hasUsableScope = !hasCrossFilter || hasCompleteProductionRows || hasCompleteDemandRows || hasPartialProductionSignals;
+  const active = hasCrossFilter ? (hasCompleteProductionRows ? (hasUsableScope ? scopedActiveRows.length : null) : null) : globalActive;
+  const completed = hasCrossFilter ? (hasCompleteProductionRows ? (hasUsableScope ? scopedCompletedRows.length : null) : null) : globalCompleted;
   const delayed = hasCrossFilter ? (hasUsableScope ? scopedDelayedRows.length : null) : globalDelayed;
-  const demandDelayed = hasCrossFilter ? (hasUsableScope ? scopedDemandDelayedRows.length : null) : globalDemandDelayed;
-  const ready = hasCrossFilter ? (hasUsableScope ? scopedActiveRows.filter(rowIsReady).length : null) : globalReady;
+  const demandDelayed = hasCrossFilter ? (hasCompleteDemandRows ? (hasUsableScope ? scopedDemandDelayedRows.length : null) : null) : globalDemandDelayed;
+  const ready = hasCrossFilter ? (hasCompleteProductionRows ? (hasUsableScope ? scopedActiveRows.filter(rowIsReady).length : null) : null) : globalReady;
   const totalScope = active === null || completed === null ? null : active + completed;
   const owners = hasCrossFilter && hasUsableScope ? aggregateOwners(filteredProductionRows) : fallbackOwners;
-  const stages = hasCrossFilter && hasUsableScope ? aggregateStages(filteredProductionRows) : fallbackStages;
-  const clients = hasCrossFilter && hasUsableScope ? aggregateClients(filteredProductionRows, true) : fallbackClients;
-  const statuses = hasCrossFilter && hasUsableScope ? aggregateStatuses(filteredProductionRows) : fallbackStatuses;
+  const stages = hasCrossFilter && hasUsableScope && hasCompleteProductionRows ? aggregateStages(filteredProductionRows) : fallbackStages;
+  const clients = hasCrossFilter && hasUsableScope && hasCompleteProductionRows ? aggregateClients(filteredProductionRows, true) : fallbackClients;
+  const statuses = hasCrossFilter && hasUsableScope && hasCompleteProductionRows ? aggregateStatuses(filteredProductionRows) : fallbackStatuses;
   const filterOptionRows = [...productionRows, ...demandRows];
   const filterOptions = {
     owner: [...new Set(filterOptionRows.flatMap(rowOwnerValues).concat(fallbackOwners.map(item => item.name)).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
@@ -235,7 +237,7 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
     stage: [...new Set(productionRows.map(rowStage).concat(demandRows.map(rowStage)).concat(fallbackStages.map(item => item.stage)).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     status: [...new Set(productionRows.map(rowStatus).concat(demandRows.map(rowStatus)).concat(fallbackStatuses.map(([label]) => label)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   };
-  const filteredItemCount = hasCrossFilter ? (hasUsableScope ? filteredProductionRows.length : null) : null;
+  const filteredItemCount = hasCrossFilter ? (hasCompleteProductionRows && hasUsableScope ? filteredProductionRows.length : null) : null;
   const filterLabels = { owner: 'Responsável', client: 'Cliente', stage: 'Etapa', status: 'Status' };
   const updateFilter = (key, value) => setCrossFilters(current => ({ ...current, [key]: value }));
   const clearFilters = () => setCrossFilters({ owner: '', client: '', stage: '', status: '' });
@@ -260,6 +262,12 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
   const completionPct = totalScope ? pct(completed, totalScope) : null;
   const delayedPct = active ? pct(delayed, active) : null;
   const readyPct = active ? pct(ready, active) : null;
+  const scopeComparisons = [
+    { label: 'Itens ativos', current: active, total: globalActive, tone: 'cyan' },
+    { label: 'Atrasos de Produção', current: delayed, total: globalDelayed, tone: 'red' },
+    { label: 'Demandas vencidas', current: demandDelayed, total: globalDemandDelayed, tone: 'orange' },
+    { label: 'Prontos para agendar', current: ready, total: globalReady, tone: 'purple' }
+  ];
 
   return (
     <section className="analytics-center" aria-label="Performance e Analytics Center">
@@ -279,12 +287,14 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
       />
 
       <div className="analytics-filter-bar" aria-label="Filtros cruzados do Analytics Center">
-        <div className="analytics-filter-title"><span>Refinar a investigação</span><strong>{hasCrossFilter ? (filteredItemCount === null ? 'linhas detalhadas indisponíveis' : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'todos os dados do snapshot atual'}</strong></div>
+        <div className="analytics-filter-title"><span>Refinar a investigação</span><strong>{hasCrossFilter ? (filteredItemCount === null ? (hasPartialProductionSignals ? 'sinais parciais · coorte completa indisponível' : 'linhas detalhadas indisponíveis') : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'todos os dados do snapshot atual'}</strong></div>
         <div className="analytics-filter-controls">
           {Object.entries(filterOptions).map(([key, options]) => <label key={key} className="analytics-filter-control"><span>{filterLabels[key].toLowerCase()}</span><select value={crossFilters[key]} onChange={event => updateFilter(key, event.target.value)} disabled={!options.length}><option value="">Todos</option>{options.map(option => <option value={option} key={option}>{option}</option>)}</select></label>)}
           {hasCrossFilter ? <button type="button" className="analytics-filter-clear" onClick={clearFilters}>Limpar filtros</button> : null}
         </div>
       </div>
+
+      {hasCrossFilter ? <article className="analytics-scope-comparison" aria-label="Comparação do recorte com a agência"><div className="analytics-panel-heading"><div><span>Recorte versus agência</span><strong>Qual é o peso deste contexto no todo?</strong></div><small>snapshot atual · sem tendência inventada</small></div><div className="analytics-scope-comparison-grid">{scopeComparisons.map(item => { const share = item.current === null || item.total === null ? null : pct(item.current, item.total); return <div className={`analytics-scope-comparison-item ${item.tone}`} key={item.label}><span>{item.label}</span><strong>{displayCount(item.current)}</strong><small>{share === null ? 'N/D' : `${formatPct(share)} da agência`}</small><i><b style={{ width: `${share === null ? 0 : Math.min(100, Math.max(0, share))}%` }} /></i><em>agência: {displayCount(item.total)}</em></div>; })}</div></article> : null}
 
       <div className="analytics-kpi-grid">
         <Kpi label="Itens em fluxo" value={displayCount(active)} detail={`${displayPct(activePct)} do escopo lido`} tone="cyan" onClick={() => emitSelection({ type: 'kpi', id: 'activeItems', title: 'Itens em fluxo' })} />

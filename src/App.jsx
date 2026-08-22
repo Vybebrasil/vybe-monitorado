@@ -9,6 +9,9 @@ import { MissionBoard } from './components/MissionBoard.jsx';
 import { ExecutivePulseBars } from './components/ExecutivePulseBars.jsx';
 import { ExecutiveDemandPanel } from './components/ExecutiveDemandPanel.jsx';
 import { ExecutivePerformancePanel } from './components/ExecutivePerformancePanel.jsx';
+import ExecutiveOperationsExplorer from './components/ExecutiveOperationsExplorer.jsx';
+import ExecutiveSourceReconciliation from './components/ExecutiveSourceReconciliation.jsx';
+import ExecutiveEntityProfileDrawer from './components/ExecutiveEntityProfileDrawer.jsx';
 import { ExecutiveDashboardShell } from './components/ExecutiveDashboardShell.jsx';
 import { ExecutiveAnalyticsCenter } from './components/ExecutiveAnalyticsCenter.jsx';
 import ExecutiveCommandCenter from './components/ExecutiveCommandCenter.jsx';
@@ -869,10 +872,15 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
         <ReadinessKpiBand snapshot={snapshot} onSelect={(id) => setDetailPanel({ type: 'kpi', id, title: `KPI: ${id}` })} />
         <ExecutivePulseBars snapshot={snapshot} />
         <MissionBoard snapshot={snapshot} onSelect={(id, readinessId) => setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` })} />
+        <ExecutiveOperationsExplorer snapshot={snapshot} source="production" onOpenItem={(item) => setDetailPanel({ type: 'analytics', targetType: 'item', itemId: item.id, title: `Item: ${item.name}` })} onOpenClient={(client) => setDetailPanel({ type: 'entity', kind: 'client', id: client, title: client })} getItemUrl={item => mondayItemUrl(item.id)} />
+        <ExecutiveSourceReconciliation snapshot={snapshot} onOpenClient={(client) => setDetailPanel({ type: 'entity', kind: 'client', id: client, title: client })} />
       </> : null}
 
-      {activeView === 'demands' ? <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'client', id: client, title: `Visão: ${client}` })} /> : null}
-      {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'owner', id: owner, title: `Gargalos: ${owner}` })} onOpenHistory={() => setActiveView('history')} /> : null}
+      {activeView === 'demands' ? <>
+        <ExecutiveDemandPanel snapshot={snapshot} onSelectClient={(client) => setDetailPanel({ type: 'entity', kind: 'client', id: client, title: client })} />
+        <ExecutiveOperationsExplorer snapshot={snapshot} source="demands" onOpenItem={(item) => setDetailPanel({ type: 'analytics', targetType: 'item', itemId: item.id, title: `Solicitação: ${item.name}` })} onOpenClient={(client) => setDetailPanel({ type: 'entity', kind: 'client', id: client, title: client })} getItemUrl={item => item.id ? `https://gestaovybes-team.monday.com/boards/8385559107/pulses/${item.id}` : null} />
+      </> : null}
+      {activeView === 'team' ? <ExecutivePerformancePanel snapshot={snapshot} onOpenOwner={(owner) => setDetailPanel({ type: 'entity', kind: 'owner', id: owner, title: owner })} onOpenStage={(stage) => setDetailPanel({ type: 'entity', kind: 'stage', id: stage, title: stage })} onOpenHistory={() => setActiveView('history')} /> : null}
       {activeView === 'history' ? <ExecutiveHistoryCenter
         snapshot={snapshot}
         history={history}
@@ -924,6 +932,7 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
         <AnalyticsDrilldownDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
         <DetailDrawer panel={detailPanel} setPanel={setDetailPanel} delayDetails={delayDetails} snapshot={snapshot} />
         <KpiInvestigationDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
+        <ExecutiveEntityProfileDrawer panel={detailPanel} setPanel={setDetailPanel} snapshot={snapshot} />
       </ExecutiveDashboardShell>
     </div>
   );

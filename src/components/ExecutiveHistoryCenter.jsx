@@ -3,6 +3,7 @@ import { Activity, ArrowUpRight, Clock3, Filter, ShieldAlert, Target } from 'luc
 import { formatNumber, formatPoints } from './executive-helpers.js';
 import { TrendChart } from './ExecutiveAnalyticsCenter.jsx';
 import { ExecutiveInsightHeader } from './ExecutiveInsightHeader.jsx';
+import ExecutiveDecisionLoop from './ExecutiveDecisionLoop.jsx';
 
 const EVENT_LABELS = {
   item_entered_scope: 'Item entrou no fluxo',
@@ -104,6 +105,7 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
       <article className="history-chart-panel"><header><div><Activity size={15} /><span>Linha do tempo · agência</span></div><small>{baselineScore} → {currentScore} no período</small></header><TrendChart timeSeries={timeSeries} /></article>
     </> : <section className="history-empty-panel"><div className="history-empty-icon"><Clock3 size={22} /></div><div><strong>A história ainda não começou a ser armazenada.</strong><p>A leitura atual funciona, mas o Nexus não pode desenhar linhas ou comparar períodos sem snapshots persistidos. Logs técnicos não substituem histórico operacional.</p><span>Ative o datastore de snapshots, decisões, impactos, saúde e eventos para transformar cada leitura real em memória executiva.</span></div><button type="button" onClick={onOpenAnalyst}>Abrir instruções <ArrowUpRight size={14} /></button></section>}
 
+    <ExecutiveDecisionLoop intelligence={intelligence} />
     <article className="history-cycle-panel"><header><div><Target size={15} /><span>Ciclo de correção</span></div><small>do sinal ao resultado</small></header><div className="history-cycle-track">{cycleSteps.map((step, index) => <div className={`history-cycle-step ${step.value > 0 ? 'available' : 'pending'}`} key={step.label}><span>{String(index + 1).padStart(2, '0')}</span><strong>{step.label}</strong><b>{step.value > 0 ? formatNumber(step.value) : 'N/D'}</b><small>{step.note}</small></div>)}</div><p className="history-cycle-note">O Nexus só deve considerar uma correção comprovada quando existe decisão, checkpoint e impacto observado. Um log técnico sozinho não prova melhora.</p></article>
 
     <article className="history-alert-panel"><header><div><ShieldAlert size={15} /><span>Alertas acionáveis</span></div><small>{formatNumber(alerts.length)} sinais com próxima ação</small></header>{alerts.length ? <div className="history-alert-list">{alerts.slice(0, 5).map(alert => <div className={`history-alert-row ${alert.severity || 'medium'}`} key={alert.id}><div><strong>{alert.title || alert.label || 'Alerta executivo'}</strong><span>{alert.label || alert.type || 'sinal operacional'}</span></div><p>{alert.reason || 'O Nexus detectou um sinal que merece investigação.'}</p><small>Próximo: {alert.recommendedAction || 'abrir a investigação correspondente.'}</small></div>)}</div> : <div className="history-log-empty"><strong>Nenhum alerta acionável nesta leitura.</strong><span>Alertas aparecerão quando houver atraso, concentração, fonte desatualizada ou decisão sem acompanhamento.</span></div>}</article>

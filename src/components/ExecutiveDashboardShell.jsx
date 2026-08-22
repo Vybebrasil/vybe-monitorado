@@ -35,7 +35,9 @@ export function ExecutiveDashboardShell({
   const consistencyMode = sourceQuality.consistency?.mode || 'mixed';
   const sourceCount = sourceQuality.records?.length || 0;
   const activeItems = snapshot?.quantitative?.activeItems ?? snapshot?.quantitative?.totalItems ?? 0;
-  const demandCount = snapshot?.demandItems?.length ?? 0;
+  const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : [];
+  const demandAvailable = demandRows.length > 0 || snapshot?.demandItemRowsComplete === true || sourceQuality.consistency?.boards?.demands?.complete === true;
+  const demandCount = demandAvailable ? demandRows.length : 'N/D';
   const syncTone = freshness === 'fresh' || freshness === 'live' ? 'is-live' : freshness === 'stale' || freshness === 'fallback' ? 'is-warning' : 'is-unknown';
   const syncError = refreshError || sourceQuality.sync?.error || null;
   const hasSyncWarning = Boolean(syncError) || freshness === 'stale' || freshness === 'fallback';
@@ -62,7 +64,7 @@ export function ExecutiveDashboardShell({
               >
                 <Icon size={16} aria-hidden="true" />
                 <span><strong>{item.short}</strong><small>{item.detail}</small></span>
-                {count !== null ? <b>{formatNumber(count)}</b> : null}
+                {count !== null ? <b>{count === 'N/D' ? count : formatNumber(count)}</b> : null}
               </button>
             );
           })}
