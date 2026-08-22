@@ -3,7 +3,9 @@ import { getCalendarSnapshot } from './calendar.js';
 import { getOperationalMirrorSnapshot } from './operational-mirror.js';
 
 function mirrorIsReady(snapshot) {
-  return snapshot?.ready === true && Array.isArray(snapshot.items);
+  const itemsReady = snapshot?.ready === true && Array.isArray(snapshot.items) && snapshot.items.length > 0;
+  const explicitlyPartial = snapshot?.complete === false || snapshot?.completeness?.complete === false || snapshot?.completeness?.state === 'partial';
+  return itemsReady && !explicitlyPartial;
 }
 
 export function buildExecutiveSourceMeta(operationalMirror) {
@@ -19,6 +21,8 @@ export function buildExecutiveSourceMeta(operationalMirror) {
       complete: !stale,
       sync: operationalMirror.sync,
       mirrorVersion: Number(operationalMirror.version || operationalMirror.sync?.version || 0),
+      mirrorCompleteness: operationalMirror.completeness || null,
+      mirrorItemCount: Array.isArray(operationalMirror.items) ? operationalMirror.items.length : 0,
       versionScope: 'production-mirror',
       versionMonitor: operationalMirror.sync?.versionMonitor || null,
       mirrorReady: true
@@ -32,6 +36,8 @@ export function buildExecutiveSourceMeta(operationalMirror) {
     capturedAt: new Date().toISOString(),
     complete: true,
     mirrorVersion: null,
+    mirrorCompleteness: null,
+    mirrorItemCount: 0,
     versionScope: 'fallback-direct',
     versionMonitor: null,
     sync: {
@@ -77,7 +83,16 @@ export async function getExecutiveSourceBundle({
       mirrorVersion: sourceMeta.mirrorVersion ?? null,
       versionScope: sourceMeta.versionScope || null,
       boards: {
-        production: { source: sourceMeta.name, version: sourceMeta.mirrorVersion ?? null, mode: sourceMeta.mirrorReady ? 'operational-mirror' : 'monday-fallback' },
+        production: {
+          source: sourceMeta.name,
+          version: sourceMeta.mirrorVersion ?? null,
+          mode: sourceMeta.mirrorReady ? 'operational-mirror' : 'monday-fallback',
+          totalReceived: posts?.pagination?.rawCount ?? posts?.pagination?.count ?? null,
+          totalExpected: posts?.pagination?.count ?? null,
+          activeCount: posts?.pagination?.activeCount ?? posts?.quantitative?.activeItems ?? null,
+          completedCount: posts?.pagination?.completedCount ?? posts?.quantitative?.completedItems ?? null,
+          complete: posts?.pagination?.complete ?? null
+        },
         clients: { source: 'Monday.com · direto', version: null, mode: 'direct' },
         demands: { source: 'Monday.com · direto', version: null, mode: 'direct' },
         calendar: { source: includeCalendar ? 'Google Calendar · iCal' : 'não consultado', version: null, mode: includeCalendar ? 'direct' : 'disabled' },

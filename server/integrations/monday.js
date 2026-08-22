@@ -613,6 +613,14 @@ class MondayIntegration {
 
     const totalScope = totalItems + completedItems;
     const readyToSchedule = ['Para agendar', 'Agendado'].reduce((sum, label) => sum + (statusCounts[label] || 0), 0);
+    pagination = {
+      ...pagination,
+      count: Number.isFinite(Number(pagination?.count)) && Number(pagination.count) > 0 ? Number(pagination.count) : items.length,
+      rawCount: items.length,
+      activeCount: totalItems,
+      completedCount: completedItems,
+      complete: pagination?.complete !== false
+    };
     const productivity = {
       activeItems: totalItems,
       completedItems,

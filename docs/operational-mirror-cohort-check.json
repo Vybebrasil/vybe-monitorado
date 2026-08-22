@@ -1,0 +1,68 @@
+{
+  "httpStatus": 200,
+  "keys": [
+    "ready",
+    "board_id",
+    "version",
+    "items",
+    "status_options",
+    "bootstrapped_at",
+    "source"
+  ],
+  "ready": true,
+  "version": 1356,
+  "complete": true,
+  "completeness": {
+    "complete": true,
+    "state": "inferred",
+    "declaredItemCount": null,
+    "receivedItemCount": 1957,
+    "observedCompletedCount": 1670,
+    "activeItemCount": null,
+    "reason": "legacy_full_snapshot_inferred"
+  },
+  "itemCountMeta": null,
+  "items": 1957,
+  "active": 287,
+  "completed": 1670,
+  "statuses": {
+    "Finalizado": 1670,
+    "Aguardo": 94,
+    "Pode Fazer": 118,
+    "Para agendar": 53,
+    "Aguardo Redação": 4,
+    "A Fazer": 11,
+    "Em andamento": 2,
+    "Alteração": 1,
+    "Falta Info": 3,
+    "Ag. Info Cliente": 1
+  },
+  "first": [
+    {
+      "id": "10538391093",
+      "name": "carrossel Look feminino",
+      "status": "Finalizado",
+      "columns": [
+        "lista_suspensa_mkmqnjbv",
+        "person",
+        "status",
+        "data",
+        "data__1",
+        "lista_suspensa0__1"
+      ]
+    },
+    {
+      "id": "10538395258",
+      "name": "Carrossel de produto",
+      "status": "Finalizado",
+      "columns": [
+        "lista_suspensa_mkmqnjbv",
+        "person",
+        "status",
+        "data",
+        "data__1",
+        "lista_suspensa0__1"
+      ]
+    }
+  ]
+}

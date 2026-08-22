@@ -114,15 +114,37 @@ export function applyOperationalMirrorDelta(currentSnapshot = null, delta = {}) 
   };
 }
 
-function normalizeSnapshot(payload) {
+export function normalizeSnapshot(payload) {
   if (!payload?.ready || !Array.isArray(payload.items)) {
     throw new Error('O espelho operacional não retornou uma base pronta.');
   }
   const items = payload.items.map(normalizeItem).filter(Boolean);
+  const declaredComplete = payload.complete ?? payload.completeness?.complete ?? null;
+  const declaredItemCount = Number(payload.item_count ?? payload.itemCount);
+  const countMatches = Number.isFinite(declaredItemCount) && declaredItemCount > 0 && items.length >= declaredItemCount;
+  const statusOf = item => String((item.column_values || []).find(column => column?.id === 'status')?.text || '').trim().toLowerCase();
+  const observedCompletedCount = items.filter(item => /finalizado|publicado|cancelado|feito|concluído|entregue/.test(statusOf(item))).length;
+  const legacyFullSnapshotInferred = declaredComplete == null && !countMatches && observedCompletedCount > 0 && items.length > observedCompletedCount;
+  const complete = declaredComplete === false
+    ? false
+    : declaredComplete === true || countMatches || legacyFullSnapshotInferred;
+  const completeness = {
+    complete,
+    state: complete ? (declaredComplete === true || countMatches ? 'verified' : 'inferred') : 'partial',
+    declaredItemCount: Number.isFinite(declaredItemCount) ? declaredItemCount : null,
+    receivedItemCount: items.length,
+    observedCompletedCount,
+    activeItemCount: Number(payload.active_item_count ?? payload.activeItemCount) || null,
+    reason: complete
+      ? (declaredComplete === true || countMatches ? 'contract_verified' : 'legacy_full_snapshot_inferred')
+      : 'full_cohort_not_verified'
+  };
   return {
     source: 'Vybe Painel · espelho operacional',
     boardId: String(payload.board_id || 7829537690),
     ready: true,
+    complete,
+    completeness,
     version: Number(payload.version) || 0,
     items,
     statusOptions: Array.isArray(payload.status_options) ? payload.status_options : [],
@@ -144,6 +166,7 @@ function syncMeta({ state, snapshot, error = null, pending = false, fallback = f
     ageSeconds: ageMs === null ? null : Math.floor(ageMs / 1000),
     cacheExpiresAt: mirrorCache.expiresAt ? new Date(mirrorCache.expiresAt).toISOString() : null,
     itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+    completeness: snapshot?.completeness || null,
     error: error?.message || mirrorCache.lastError?.message || null,
     versionMonitor: {
       lastVersionChangeAt: mirrorCache.lastVersionChangeAt ? new Date(mirrorCache.lastVersionChangeAt).toISOString() : null,

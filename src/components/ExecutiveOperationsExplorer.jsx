@@ -71,7 +71,7 @@ export default function ExecutiveOperationsExplorer({ snapshot, source = 'produc
   const sourceLabel = source === 'demands' ? 'board Solicitações de Demandas' : 'board Produção de Conteúdo';
 
   return <article className={`executive-operations-explorer ${compact ? 'compact' : ''}`} aria-label={`Explorador de ${title}`}>
-    <ExecutiveSectionHeader icon={SlidersHorizontal} eyebrow="Acompanhamento completo" title={title} note={`${formatNumber(items.length)} itens abertos`} />
+    <ExecutiveSectionHeader icon={SlidersHorizontal} eyebrow={isPartial ? 'Sinais observáveis' : 'Acompanhamento completo'} title={title} note={`${formatNumber(items.length)} ${isPartial ? 'sinais observáveis' : 'itens abertos'}`} />
     <div className="operations-explorer-summary"><div><strong>{formatNumber(items.length)}</strong><span>{isPartial ? 'sinais observáveis' : 'abertos'}</span></div><div className={overdue ? 'critical' : 'stable'}><strong>{formatNumber(overdue)}</strong><span>vencidos ou atrasados</span></div><p>Fonte: {sourceLabel}. {isPartial ? 'Coorte detalhada indisponível; o Nexus mostra apenas os sinais entregues pela fonte.' : 'Itens finalizados ficam fora desta coorte.'}</p></div>
     <div className="operations-explorer-controls">
       <label className="operations-explorer-search"><Search size={15} aria-hidden="true" /><span className="sr-only">Buscar item</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar item, cliente, etapa ou responsável" /></label>

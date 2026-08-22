@@ -27,7 +27,7 @@ async function check(name, selector, expectedText = null) {
 
 await page.getByRole('button', { name: /Carteira capacidade/i }).click();
 await wait(160);
-await check('operations-explorer', '.executive-operations-explorer', 'Acompanhamento completo');
+await check('operations-explorer', '.executive-operations-explorer', 'Produção de Conteúdo');
 await check('source-reconciliation', '.executive-source-reconciliation', 'Produção');
 await check('operations-search', '.operations-explorer-search input');
 

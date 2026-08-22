@@ -19,7 +19,7 @@ import { buildReleaseMetadata } from '../server/release.js';
 import { createRecordStore, describeRecordStore } from '../server/persistence/record-store.js';
 import mondayIntegration from '../server/integrations/monday.js';
 import { getVybePanelProductionSnapshot, getVybePanelExecutiveSnapshot } from '../server/integrations/vybe-panel.js';
-import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, resetOperationalMirrorCacheForTests } from '../server/integrations/operational-mirror.js';
+import { applyOperationalMirrorDelta, getOperationalMirrorSnapshot, normalizeSnapshot, resetOperationalMirrorCacheForTests } from '../server/integrations/operational-mirror.js';
 import { buildExecutiveSourceMeta } from '../server/integrations/executive-sources.js';
 import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
@@ -271,7 +271,8 @@ test('Fonte executiva propaga versão e monitor de estabilidade do espelho', () 
     source: 'Vybe Painel · espelho operacional',
     ready: true,
     version: 42,
-    items: [],
+    complete: true,
+    items: [{ id: 'seed-item' }],
     sync: {
       state: 'fresh',
       version: 42,
@@ -661,6 +662,29 @@ test('Score executivo preserva a dedução de prontidão no resumo e na composi�
   assert.equal(snapshot.portfolioStability.recoveryPointsAvailable, 15);
 });
 
+
+test('Espelho completo é distinguido de subconjunto formado apenas por sinais', () => {
+  const full = normalizeSnapshot({
+    ready: true,
+    version: 1341,
+    items: [
+      { id: 'done', column_values: [{ id: 'status', text: 'Finalizado' }] },
+      { id: 'open', column_values: [{ id: 'status', text: 'A Fazer' }] }
+    ]
+  });
+  const partial = normalizeSnapshot({
+    ready: true,
+    version: 1341,
+    items: [{ id: 'delay', column_values: [{ id: 'status', text: 'A Fazer' }] }]
+  });
+
+  assert.equal(full.complete, true);
+  assert.equal(full.completeness.reason, 'legacy_full_snapshot_inferred');
+  assert.equal(full.completeness.observedCompletedCount, 1);
+  assert.equal(partial.complete, false);
+  assert.equal(partial.completeness.state, 'partial');
+  assert.equal(partial.completeness.reason, 'full_cohort_not_verified');
+});
 
 test('Espelho operacional aplica somente mudanças e exclusões desde a versão anterior', () => {
   const result = applyOperationalMirrorDelta({

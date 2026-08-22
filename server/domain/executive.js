@@ -516,13 +516,17 @@ export function buildExecutiveSnapshot({ bottlenecks = {}, posts = {}, demands =
     // Coorte completa do board atual para recortes executivos. O histórico
     // persistido continua removendo essas linhas em cleanSnapshot().
     itemRows: Array.isArray(posts.itemRows) ? posts.itemRows : null,
-    itemRowsComplete: Array.isArray(posts.itemRows),
+    itemRowsComplete: Array.isArray(posts.itemRows) && posts.itemRows.length > 0,
+    itemRowsCount: Array.isArray(posts.itemRows) ? posts.itemRows.length : 0,
+    activeItemsCount: Array.isArray(posts.activeItems) ? posts.activeItems.length : (Array.isArray(posts.itemRows) ? posts.itemRows.filter(item => !item.isCompleted && item.status !== 'Sem status').length : 0),
+    itemRowsSource: sourceMeta.name || 'Monday.com',
     sourceRelation,
     calendarSignals,
     delayDetails: delayDetails,
     demandItems: openDemandItems,
     demandItemRows: Array.isArray(demands.itemRows) ? demands.itemRows : null,
-    demandItemRowsComplete: Array.isArray(demands.itemRows),
+    demandItemRowsComplete: Array.isArray(demands.itemRows) && demands.itemRows.length > 0,
+    demandItemRowsCount: Array.isArray(demands.itemRows) ? demands.itemRows.length : 0,
     delayedDemandItems: Array.isArray(demands) ? demands : [],
     productivity,
     summary: {
