@@ -3748,3 +3748,20 @@ button:active:not(:disabled), a:active { transform: scale(.985); }
 .runtime-error-panel p { margin: 0 0 1.2rem; color: var(--vybe-text-muted); font-family: var(--font-sans); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
 .runtime-error-panel button { min-height: 38px; padding: .6rem .85rem; border: 1px solid rgba(255,69,58,.35); border-radius: 10px; background: rgba(255,69,58,.1); color: #ff6961; font-family: var(--font-sans); font-size: .68rem; font-weight: 650; cursor: pointer; }
 .runtime-error-panel button:hover { background: rgba(255,69,58,.17); }
+
+
+/* Último override de herança do shell: a orientação visual não é terminal. */
+.nexus-sidebar-caption,
+.nexus-sidebar-link span strong,
+.nexus-topbar-live,
+.nexus-topbar-analyst,
+.nexus-topbar-refresh,
+.data-panel-title {
+  font-family: var(--font-sans) !important;
+  text-transform: none !important;
+}
+.nexus-sidebar-caption { letter-spacing: .08em !important; }
+.nexus-sidebar-link span strong { letter-spacing: -.005em !important; }
+.nexus-topbar-live,
+.nexus-topbar-analyst,
+.nexus-topbar-refresh { letter-spacing: .015em !important; }
