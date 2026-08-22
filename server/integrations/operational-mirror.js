@@ -13,7 +13,8 @@ const mirrorCache = {
   promise: null,
   lastError: null,
   lastVersionChangeAt: 0,
-  pollsWithoutVersionChange: 0
+  pollsWithoutVersionChange: 0,
+  lastChanges: []
 };
 
 function getMirrorUrl() {
@@ -148,7 +149,8 @@ function syncMeta({ state, snapshot, error = null, pending = false, fallback = f
       lastVersionChangeAt: mirrorCache.lastVersionChangeAt ? new Date(mirrorCache.lastVersionChangeAt).toISOString() : null,
       pollsWithoutVersionChange: mirrorCache.pollsWithoutVersionChange,
       observation: mirrorCache.pollsWithoutVersionChange > 0 ? 'stable' : 'changed'
-    }
+    },
+    changes: mirrorCache.lastChanges
   };
 }
 
@@ -169,6 +171,7 @@ async function refreshMirror() {
           mirrorCache.checkedAt = Number(shared.checkedAt) || Date.now();
           mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
           mirrorCache.lastError = null;
+          mirrorCache.lastChanges = Array.isArray(shared.recentChanges) ? shared.recentChanges : [];
           if (mirrorCache.version > previousVersion || !mirrorCache.lastVersionChangeAt) {
             mirrorCache.lastVersionChangeAt = mirrorCache.checkedAt;
             mirrorCache.pollsWithoutVersionChange = 0;
@@ -181,9 +184,11 @@ async function refreshMirror() {
         let nextSnapshot;
         if (!mirrorCache.snapshot || !mirrorCache.version) {
           nextSnapshot = normalizeSnapshot(await requestMirror());
+          mirrorCache.lastChanges = [];
         } else {
           const delta = await requestMirror(`?action=delta&since=${encodeURIComponent(mirrorCache.version)}`);
           const applied = applyOperationalMirrorDelta(mirrorCache.snapshot, delta);
+          mirrorCache.lastChanges = applied.requiresSnapshot ? [] : (Array.isArray(delta?.changes) ? delta.changes : []);
           nextSnapshot = applied.requiresSnapshot ? normalizeSnapshot(await requestMirror()) : (applied.snapshot || mirrorCache.snapshot);
         }
         mirrorCache.snapshot = nextSnapshot;
@@ -197,7 +202,7 @@ async function refreshMirror() {
         }
         mirrorCache.expiresAt = Date.now() + CACHE_TTL_MS;
         mirrorCache.lastError = null;
-        await writeSharedOperationalMirror(nextSnapshot, mirrorCache.checkedAt).catch(error => {
+        await writeSharedOperationalMirror(nextSnapshot, mirrorCache.checkedAt, mirrorCache.lastChanges).catch(error => {
           console.warn('[Mirror] Não foi possível persistir o cache compartilhado:', error.message);
         });
         return nextSnapshot;
@@ -266,4 +271,5 @@ export function resetOperationalMirrorCacheForTests() {
   mirrorCache.lastError = null;
   mirrorCache.lastVersionChangeAt = 0;
   mirrorCache.pollsWithoutVersionChange = 0;
+  mirrorCache.lastChanges = [];
 }

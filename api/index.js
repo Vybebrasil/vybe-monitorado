@@ -23,7 +23,7 @@ import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/e
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
-import { compactSnapshotItems, createExecutiveEvent, deriveSnapshotEvents, listExecutiveEvents, saveExecutiveEvents, eventStoreDescriptor } from '../server/domain/executive-events.js';
+import { compactSnapshotItems, createExecutiveEvent, deriveOperationalMirrorEvents, deriveSnapshotEvents, listExecutiveEvents, saveExecutiveEvents, eventStoreDescriptor } from '../server/domain/executive-events.js';
 import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { securityHeaders, createRateLimiter, rateLimitConfig } from '../server/security.js';
@@ -616,7 +616,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
   const forceRefresh = ['1', 'true'].includes(String(req.query.refresh || '').toLowerCase());
   try {
     console.log('[API] Fetching executive source bundle...');
-    const { sourceMeta, bottlenecks, posts, demands, calendar, meetingLogs } = await getExecutiveSourceBundle({ forceRefresh });
+    const { sourceMeta, operationalChanges, bottlenecks, posts, demands, calendar, meetingLogs } = await getExecutiveSourceBundle({ forceRefresh });
     console.log(`[API] Sources read successfully (${sourceMeta.mirrorReady ? 'operational mirror' : 'Monday fallback'})`);
     const executiveSnapshot = buildExecutiveSnapshot({
       bottlenecks,
@@ -689,7 +689,8 @@ app.get('/api/dashboard/metrics', async (req, res) => {
       eventPersistReason = eventError.code || 'event_store_unavailable';
     }
     const previousSnapshot = storedSnapshots[0] || null;
-    const derivedEvents = persistedSnapshotRecord && previousSnapshot
+    const mirrorEvents = deriveOperationalMirrorEvents(operationalChanges);
+    const snapshotEvents = persistedSnapshotRecord && previousSnapshot
       ? deriveSnapshotEvents(previousSnapshot, persistedSnapshotRecord, persistedSnapshotRecord.capturedAt)
       : persistedSnapshotRecord
         ? [createExecutiveEvent({
@@ -701,6 +702,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
             severity: 'low'
           })]
         : [];
+    const derivedEvents = mirrorEvents.length ? mirrorEvents : snapshotEvents;
     if (eventAutosave && !eventLoadError && derivedEvents.length) {
       try {
         await saveExecutiveEvents(derivedEvents);

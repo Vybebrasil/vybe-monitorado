@@ -12,6 +12,7 @@ const EVENT_LABELS = {
   delay_resolved: 'Atraso resolvido',
   responsible_changed: 'Responsável alterado',
   stage_changed: 'Etapa alterada',
+  operational_update: 'Atualização do Vybe Painel',
   snapshot_captured: 'Snapshot capturado'
 };
 
@@ -19,6 +20,7 @@ const EVENT_TONES = {
   delay_started: 'critical',
   deadline_changed: 'warning',
   status_changed: 'cyan',
+  operational_update: 'cyan',
   delay_resolved: 'positive',
   snapshot_captured: 'neutral'
 };
@@ -88,13 +90,13 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
 
     <div className="history-log-panel">
       <header><div><ShieldAlert size={15} /><span>EVENTOS EXECUTIVOS</span></div><small>{formatNumber(filteredEvents.length)} eventos no recorte</small></header>
-      <div className="history-log-explainer"><Target size={14} /><span><strong>Não são logs técnicos.</strong> São mudanças de operação derivadas de snapshots: status, prazo, atraso, responsável, etapa e recuperação.</span></div>
+      <div className="history-log-explainer"><Target size={14} /><span><strong>Não são logs técnicos.</strong> São mudanças de operação derivadas de snapshots e deltas do Vybe Painel: status, prazo, atraso, responsável, etapa e recuperação.</span></div>
       <div className="history-filter-bar" aria-label="Filtros da história">
         <label><Filter size={13} /><span>TIPO</span><select value={eventType} onChange={event => setEventType(event.target.value)}><option value="all">Todos</option>{types.map(type => <option key={type} value={type}>{EVENT_LABELS[type] || type}</option>)}</select></label>
-        <label><span>FONTE</span><select value={eventSource} onChange={event => setEventSource(event.target.value)}><option value="all">Todas</option><option value="Produção de Conteúdo">Produção de Conteúdo</option><option value="Solicitações de Demandas">Solicitações de Demandas</option></select></label>
+        <label><span>FONTE</span><select value={eventSource} onChange={event => setEventSource(event.target.value)}><option value="all">Todas</option><option value="Vybe Painel · espelho operacional">Vybe Painel</option><option value="Produção de Conteúdo">Produção de Conteúdo</option><option value="Solicitações de Demandas">Solicitações de Demandas</option></select></label>
         <label><span>CLIENTE</span><select value={eventClient} onChange={event => setEventClient(event.target.value)}><option value="all">Todos</option>{clients.map(client => <option key={client} value={client}>{client}</option>)}</select></label>
       </div>
-      {visibleEvents.length ? <div className="history-event-list">{visibleEvents.map(event => <article key={event.id} className={`history-event-row ${EVENT_TONES[event.type] || 'neutral'}`}><div className="history-event-time">{formatEventDate(event.capturedAt)}</div><div className="history-event-dot" /><div className="history-event-content"><div><strong>{event.title || EVENT_LABELS[event.type] || 'Evento executivo'}</strong><span>{EVENT_LABELS[event.type] || event.type}</span></div><p>{event.detail || 'Mudança observada na leitura operacional.'}</p><small>{[event.client, event.responsible, event.stage].filter(Boolean).join(' · ') || event.source}</small></div>{event.evidenceUrl ? <a href={event.evidenceUrl} target="_blank" rel="noreferrer">MONDAY ↗</a> : null}</article>)}</div> : <div className="history-log-empty"><strong>{events.length ? 'Nenhum evento corresponde aos filtros.' : 'Nenhum evento executivo persistido ainda.'}</strong><span>{events.length ? 'Amplie o recorte para visualizar outras mudanças.' : 'Quando a persistência estiver ativa, cada captura poderá gerar uma mudança rastreável aqui.'}</span></div>}
+      {visibleEvents.length ? <div className="history-event-list">{visibleEvents.map(event => <article key={event.id} className={`history-event-row ${EVENT_TONES[event.type] || 'neutral'}`}><div className="history-event-time">{formatEventDate(event.capturedAt)}</div><div className="history-event-dot" /><div className="history-event-content"><div><strong>{event.title || EVENT_LABELS[event.type] || 'Evento executivo'}</strong><span>{EVENT_LABELS[event.type] || event.type}</span></div><p>{event.detail || 'Mudança observada na leitura operacional.'}</p><small>{[event.source, event.client, event.responsible, event.stage].filter(Boolean).join(' · ')}</small></div>{event.evidenceUrl ? <a href={event.evidenceUrl} target="_blank" rel="noreferrer">MONDAY ↗</a> : null}</article>)}</div> : <div className="history-log-empty"><strong>{events.length ? 'Nenhum evento corresponde aos filtros.' : 'Nenhum evento executivo persistido ainda.'}</strong><span>{events.length ? 'Amplie o recorte para visualizar outras mudanças.' : 'Quando a persistência estiver ativa, cada captura poderá gerar uma mudança rastreável aqui.'}</span></div>}
       {filteredEvents.length > 8 ? <button type="button" className="history-more-button" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${filteredEvents.length - 8})`}</button> : null}
     </div>
   </section>;

@@ -17,6 +17,7 @@ export const EXECUTIVE_EVENT_TYPES = Object.freeze([
   'delay_resolved',
   'responsible_changed',
   'stage_changed',
+  'operational_update',
   'snapshot_captured'
 ]);
 
@@ -24,7 +25,9 @@ const text = (value, maxLength = 600) => typeof value === 'string' ? value.trim(
 const eventDate = value => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toISOString() : new Date().toISOString();
 
 function sourceLabel(value) {
-  return value === 'Solicitações de Demandas' ? value : 'Produção de Conteúdo';
+  if (value === 'Solicitações de Demandas') return value;
+  if (value === 'Vybe Painel · espelho operacional') return value;
+  return 'Produção de Conteúdo';
 }
 
 function eventId({ type, source, itemId, capturedAt, previousValue = '', currentValue = '' }) {
@@ -110,6 +113,56 @@ function eventFor({ type, current, previous, capturedAt, title, detail, previous
     currentValue,
     severity,
     evidenceUrl: itemId ? `https://gestaovybes-team.monday.com/boards/${source === 'Solicitações de Demandas' ? '8385559107' : '7829537690'}/pulses/${itemId}` : null
+  });
+}
+
+function rawColumn(raw, id) {
+  return Array.isArray(raw?.column_values) ? raw.column_values.find(column => column?.id === id) || null : null;
+}
+
+function rawColumnChangedAt(column) {
+  if (!column?.value) return null;
+  try {
+    const parsed = JSON.parse(column.value);
+    return parsed?.changed_at || null;
+  } catch {
+    return null;
+  }
+}
+
+export function deriveOperationalMirrorEvents(changes = []) {
+  return changes.slice(0, 300).map(change => {
+    const raw = change?.raw || {};
+    const itemId = change?.item_id || raw.id;
+    const statusColumn = rawColumn(raw, 'status');
+    const dueColumn = rawColumn(raw, 'data');
+    const publicationColumn = rawColumn(raw, 'data__1');
+    const status = text(statusColumn?.text, 120) || 'Sem status';
+    const changedAt = eventDate(change?.source_updated_at || raw.updated_at || rawColumnChangedAt(statusColumn) || change?.created_at);
+    const operation = change?.operation === 'delete' || change?.deleted === true ? 'delete' : 'upsert';
+    const name = text(raw.name, 240) || `Item ${itemId}`;
+    const fields = [
+      statusColumn ? `status atual: ${status}` : null,
+      dueColumn?.text ? `prazo: ${dueColumn.text}` : null,
+      publicationColumn?.text ? `veiculação: ${publicationColumn.text}` : null
+    ].filter(Boolean);
+    return createExecutiveEvent({
+      id: change?.change_id ? `mirror-event-${change.change_id}` : eventId({ type: 'operational_update', source: 'Vybe Painel · espelho operacional', itemId, capturedAt: changedAt }),
+      type: 'operational_update',
+      capturedAt: changedAt,
+      createdAt: change?.created_at || changedAt,
+      source: 'Vybe Painel · espelho operacional',
+      itemId,
+      itemName: name,
+      client: rawColumn(raw, 'lista_suspensa_mkmqnjbv')?.text || null,
+      responsible: rawColumn(raw, 'person')?.text || null,
+      stage: raw?.group?.title || null,
+      severity: status.toLowerCase().includes('finalizado') || status.toLowerCase().includes('publicado') ? 'low' : 'medium',
+      title: operation === 'delete' ? 'Item removido do espelho operacional' : 'Atualização recebida do Vybe Painel',
+      detail: operation === 'delete' ? `${name} foi removido do espelho do Vybe Painel.` : `${name} foi atualizado no Vybe Painel${fields.length ? ` (${fields.join(' · ')}).` : '.'}`,
+      currentValue: operation === 'delete' ? 'fora do espelho' : status,
+      evidenceUrl: itemId ? `https://gestaovybes-team.monday.com/boards/7829537690/pulses/${itemId}` : null
+    });
   });
 }
 

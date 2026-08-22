@@ -41,16 +41,19 @@ export async function readSharedOperationalMirror() {
   try {
     const parsed = typeof value === 'string' ? JSON.parse(value) : value;
     if (!parsed?.snapshot?.ready || !Number.isFinite(Number(parsed.checkedAt))) return null;
-    return parsed;
+    return {
+      ...parsed,
+      recentChanges: Array.isArray(parsed?.recentChanges) ? parsed.recentChanges : []
+    };
   } catch {
     return null;
   }
 }
 
-export async function writeSharedOperationalMirror(snapshot, checkedAt = Date.now()) {
+export async function writeSharedOperationalMirror(snapshot, checkedAt = Date.now(), recentChanges = []) {
   const store = config();
   if (!store.configured || !snapshot?.ready) return false;
   const ttlSeconds = Math.max(15, Number(process.env.NEXUS_OPERATIONAL_MIRROR_STORE_TTL_SECONDS) || 60);
-  await command(['SET', store.key, JSON.stringify({ snapshot, checkedAt }), 'EX', ttlSeconds]);
+  await command(['SET', store.key, JSON.stringify({ snapshot, checkedAt, recentChanges: Array.isArray(recentChanges) ? recentChanges.slice(0, 300) : [] }), 'EX', ttlSeconds]);
   return true;
 }

@@ -25,7 +25,7 @@ import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
-import { deriveSnapshotEvents, compactSnapshotItems } from '../server/domain/executive-events.js';
+import { deriveOperationalMirrorEvents, deriveSnapshotEvents, compactSnapshotItems } from '../server/domain/executive-events.js';
 
 test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
   const snapshots = [
@@ -654,6 +654,35 @@ test('Espelho operacional aplica somente mudanças e exclusões desde a versão 
   assert.deepEqual(result.snapshot.items.map(item => item.name), ['Atualizado', 'Novo']);
 });
 
+test('Delta do Vybe Painel vira evento operacional com timestamp de origem', () => {
+  const events = deriveOperationalMirrorEvents([{
+    change_id: 'change-1',
+    item_id: '12752861676',
+    operation: 'upsert',
+    created_at: '2026-08-18T17:33:12.000Z',
+    source_updated_at: '2026-08-18T17:33:12.000Z',
+    raw: {
+      id: '12752861676',
+      name: 'Reels - Agosto Lilas Zene',
+      updated_at: '2026-08-18T17:33:12.000Z',
+      group: { title: 'Finalizados' },
+      column_values: [
+        { id: 'lista_suspensa_mkmqnjbv', text: 'Copirecê' },
+        { id: 'status', text: 'Finalizado', value: '{"index":3,"changed_at":"2026-08-18T17:33:08Z"}' },
+        { id: 'data__1', text: '2026-08-18', value: '{"date":"2026-08-18","changed_at":"2026-08-18T06:27:25.197Z"}' }
+      ]
+    }
+  }]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'operational_update');
+  assert.equal(events[0].capturedAt, '2026-08-18T17:33:12.000Z');
+  assert.equal(events[0].source, 'Vybe Painel · espelho operacional');
+  assert.equal(events[0].currentValue, 'Finalizado');
+  assert.match(events[0].detail, /Reels - Agosto Lilas Zene/);
+  assert.match(events[0].evidenceUrl, /12752861676/);
+});
+
 test('Espelho operacional solicita snapshot quando a versão local está ausente ou o delta é grande', () => {
   assert.equal(applyOperationalMirrorDelta(null, { version: 1 }).requiresSnapshot, true);
   assert.equal(applyOperationalMirrorDelta({ version: 1, items: [] }, { version: 2, requires_snapshot: true }).requiresSnapshot, true);
@@ -754,6 +783,8 @@ test('Cliente do espelho busca snapshot inicial e depois somente o delta da vers
     assert.equal(second.items[0].name, 'Atualizado');
     assert.match(requests[1], /action=delta&since=5/);
     assert.equal(second.sync.state, 'fresh');
+    assert.equal(second.sync.changes.length, 1);
+    assert.equal(second.sync.changes[0].item_id, '1');
   } finally {
     globalThis.fetch = originalFetch;
     resetOperationalMirrorCacheForTests();

@@ -89,6 +89,7 @@ export async function getExecutiveSourceBundle({
 
   return {
     operationalMirror,
+    operationalChanges: Array.isArray(operationalMirror.sync?.changes) ? operationalMirror.sync.changes : [],
     sourceMeta: effectiveSourceMeta,
     bottlenecks,
     posts,
