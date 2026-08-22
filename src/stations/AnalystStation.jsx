@@ -12,7 +12,7 @@ const CustomTooltip = ({ active, payload }) => {
     return (
       <div className="custom-tooltip">
         <p>{payload[0].payload.name || payload[0].payload.stage}</p>
-        <span>{payload[0].value} ITENS</span>
+        <span>{payload[0].value} itens</span>
       </div>
     );
   }
@@ -150,21 +150,21 @@ export default function AnalystStation({ snapshot, history, onExit }) {
   const historicalChanges = history?.changes || [];
 
   return (
-    <div className="animate-fade" style={{ minHeight: '100vh' }}>
+    <div className="animate-fade analyst-station" style={{ minHeight: '100vh' }}>
       <header className="app-header">
         <div className="app-header-title">
-          <Activity size={28} color="var(--vybe-cyan)" /> <span style={{ color: 'var(--vybe-cyan)' }}>ANALISTA / INVESTIGAÇÃO EXECUTIVA</span> <span className="badge" style={{ background: 'var(--vybe-cyan)' }}>FOCO</span>
+          <Activity size={24} color="var(--vybe-cyan)" /> <span>Analista · investigação executiva</span> <span className="badge">Foco</span>
         </div>
         <div className="app-header-meta">
-          <span>ALVO: CAUSAS, EVIDÊNCIAS E IMPACTOS</span>
-          <button onClick={onExit} style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>&larr; VOLTAR AO JARVIS</button>
+          <span>Foco em causas, evidências e impactos</span>
+          <button onClick={onExit}>&larr; Voltar ao JARVIS</button>
         </div>
       </header>
 
       <div className="analyst-intro"><Activity size={15} /> Este modo investiga os sinais encontrados no cockpit e cruza evidências com a organização do Vybe Painel. Ele não altera o Monday, não cria demanda e não substitui a execução operacional.</div>
 
       <section className="analyst-investigation-context data-panel animate-slide delay-1" aria-label="Contexto temporal da investigação">
-        <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>CONTEXTO DA INVESTIGAÇÃO · VERSÃO E MUDANÇAS</div>
+        <div className="data-panel-title">Contexto da investigação · versão e mudanças</div>
         <div className="analyst-context-metrics">
           <span><b>{sourceVersion ?? 'N/D'}</b> versão do espelho</span>
           <span><b>{Number.isFinite(currentScore) ? currentScore : 'N/D'}</b> placar atual</span>
@@ -175,8 +175,8 @@ export default function AnalystStation({ snapshot, history, onExit }) {
         {sourceQuality.consistency?.mode === 'mixed' ? <div className="analyst-source-warning" role="status">Coorte mista: Produção usa a versão do espelho; demais fontes seguem leitura direta.</div> : null}
       </section>
 
-      <section className="analyst-panel-sync data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
-        <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>PONTE VYBE PAINEL · LEITURA COMPLETA</div>
+      <section className="analyst-panel-sync data-panel animate-slide delay-1">
+        <div className="data-panel-title">Ponte Vybe Painel · leitura completa</div>
         {panelError ? (
           <div className="analyst-source-warning" role="status" aria-live="polite">A fonte do Painel não respondeu: {panelError}. As evidências do Monday continuam disponíveis.</div>
         ) : panelSnapshot ? (
@@ -184,7 +184,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
             <div className="analyst-source-summary" aria-live="polite">
               <strong>{panelSnapshot.pagination?.count || 0}</strong> itens lidos em <strong>{panelSnapshot.pagination?.pages || 0}</strong> páginas · {panelSnapshot.pagination?.complete ? 'leitura completa' : 'leitura parcial'} · somente leitura
                {panelSnapshot.cache?.pending ? ' · atualização em segundo plano' : panelSnapshot.cache?.stale ? ' · usando cache anterior' : panelSnapshot.cache?.hit ? ' · cache executivo' : ''}
-               <button type="button" className="list-expand analyst-panel-refresh" onClick={refreshPanel} disabled={panelRefreshing}>{panelRefreshing ? 'ATUALIZANDO PAINEL…' : 'ATUALIZAR CONTEXTO DO PAINEL'}</button>
+               <button type="button" className="list-expand analyst-panel-refresh" onClick={refreshPanel} disabled={panelRefreshing}>{panelRefreshing ? 'Atualizando painel…' : 'Atualizar contexto do painel'}</button>
              </div>
             {panelSnapshot.warning ? <div className="analyst-source-warning" role="status" aria-live="polite">Contexto parcial: {panelSnapshot.warning} A investigação continua usando o Monday como fonte principal.</div> : null}
             {panelPageError ? <div className="analyst-source-warning" role="status" aria-live="polite">Não foi possível carregar a próxima página do Painel: {panelPageError}</div> : null}
@@ -193,7 +193,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
                 <span key={group} className="analyst-source-chip">{group}: <b>{count}</b></span>
               ))}
             </div>
-            {panelSnapshot.pagination?.nextCursor ? <button type="button" className="list-expand" onClick={loadMorePanel} disabled={panelLoadingMore}>{panelLoadingMore ? 'CARREGANDO…' : `CARREGAR MAIS ITENS DO PAINEL (${panelSnapshot.pagination.count || 0})`}</button> : null}
+            {panelSnapshot.pagination?.nextCursor ? <button type="button" className="list-expand" onClick={loadMorePanel} disabled={panelLoadingMore}>{panelLoadingMore ? 'Carregando…' : `Carregar mais itens do painel (${panelSnapshot.pagination.count || 0})`}</button> : null}
             {panelAffectedItems.length > 0 && (
               <div className="analyst-panel-affected">
                 <span>Itens afetados encontrados também no Painel: <b>{panelAffectedItems.length}</b></span>
@@ -207,29 +207,29 @@ export default function AnalystStation({ snapshot, history, onExit }) {
       </section>
 
       <section className="analyst-filters data-panel animate-slide delay-1" aria-label="Filtros cruzados da investigação">
-        <div className="data-panel-title" aria-live="polite" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>FILTRAR A INVESTIGAÇÃO · {filteredDelays.length} EVIDÊNCIAS</div>
+        <div className="data-panel-title" aria-live="polite">Filtrar a investigação · {filteredDelays.length} evidências</div>
         <div className="analyst-filter-grid">
-          <label>CLIENTE<select value={filters.client} onChange={event => updateFilter('client', event.target.value)}><option value="">Todos os clientes</option>{filterOptions.clients.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>RESPONSÁVEL<select value={filters.responsible} onChange={event => updateFilter('responsible', event.target.value)}><option value="">Todos os responsáveis</option>{filterOptions.responsible.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>ETAPA<select value={filters.stage} onChange={event => updateFilter('stage', event.target.value)}><option value="">Todas as etapas</option>{filterOptions.stages.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>STATUS MONDAY<select value={filters.status} onChange={event => updateFilter('status', event.target.value)}><option value="">Todos os status</option>{filterOptions.statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>FONTE DE EVIDÊNCIA<select value={filters.source} onChange={event => updateFilter('source', event.target.value)}><option value="">Monday + Painel</option><option value="panel">Com contexto do Painel</option><option value="monday">Somente Monday</option></select></label>
+          <label>Cliente<select value={filters.client} onChange={event => updateFilter('client', event.target.value)}><option value="">Todos os clientes</option>{filterOptions.clients.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Responsável<select value={filters.responsible} onChange={event => updateFilter('responsible', event.target.value)}><option value="">Todos os responsáveis</option>{filterOptions.responsible.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Etapa<select value={filters.stage} onChange={event => updateFilter('stage', event.target.value)}><option value="">Todas as etapas</option>{filterOptions.stages.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Status Monday<select value={filters.status} onChange={event => updateFilter('status', event.target.value)}><option value="">Todos os status</option>{filterOptions.statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Fonte de evidência<select value={filters.source} onChange={event => updateFilter('source', event.target.value)}><option value="">Monday + Painel</option><option value="panel">Com contexto do Painel</option><option value="monday">Somente Monday</option></select></label>
         </div>
-        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '', source: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button> : null}
+        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '', source: '' })}>Limpar {activeFilterCount} filtro(s) · mostrar tudo</button> : null}
       </section>
 
       <div className="dashboard-grid full">
 
         {/* GRÁFICO DE FLUXO */}
-        <div className="data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-cyan)' }}>
-          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>FLUXO DA CARTEIRA · POR STATUS</div>
+        <div className="data-panel analyst-flow-panel animate-slide delay-1">
+          <div className="data-panel-title">Fluxo da carteira · por status</div>
           <div style={{ width: '100%', height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={pipelineData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="name" stroke="var(--vybe-text-muted)" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} />
                 <YAxis stroke="var(--vybe-text-muted)" fontSize={11} axisLine={false} tickLine={false} />
-                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,243,255,0.05)' }} />
+                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(100,210,255,0.05)' }} />
                 <Bar dataKey="value" radius={[2, 2, 0, 0]}>
                   {pipelineData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={statusColorFor(entry.name, snapshot.quantitative?.statusColors)} />
@@ -241,11 +241,11 @@ export default function AnalystStation({ snapshot, history, onExit }) {
         </div>
 
         {/* EVIDÊNCIAS DOS ATRASOS */}
-        <div className="data-panel animate-slide delay-2" style={{ borderColor: 'var(--vybe-cyan)' }}>
-          <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)', borderColor: 'rgba(0,243,255,0.2)' }}>EVIDÊNCIAS DO MONDAY · ITENS AFETADOS</div>
+        <div className="data-panel analyst-evidence-panel animate-slide delay-2">
+          <div className="data-panel-title">Evidências do Monday · itens afetados</div>
           <div className="vybe-table-wrapper" style={{ maxHeight: '600px', overflowY: 'auto' }}>
             <table className="vybe-table">
-              <thead style={{ position: 'sticky', top: 0, background: 'rgba(10,10,10,0.95)', zIndex: 1 }}>
+              <thead>
                 <tr>
                   <th>ID Monday</th>
                   <th>Tarefa</th>
@@ -266,12 +266,12 @@ export default function AnalystStation({ snapshot, history, onExit }) {
                     <td><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></td>
                     <td>
                       {item.daysOverdue > 0 ? (
-                        <span className="item-meta critical">-{item.daysOverdue}D</span>
+                        <span className="item-meta critical">-{item.daysOverdue}D em atraso</span>
                       ) : (
-                        <span className="item-meta" style={{ background: 'rgba(0,255,102,0.1)', color: '#00ff66' }}>OK</span>
+                        <span className="item-meta" style={{ background: 'rgba(48,209,88,.12)', color: 'var(--vybe-green)' }}>No prazo</span>
                       )}
                     </td>
-                    <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">MONDAY</a>{item.panelItem && <span className="analyst-panel-match" title="Este item também foi localizado na organização do Vybe Painel"> · PAINEL</span>}</td>
+                    <td><a href={`https://gestaovybes-team.monday.com/boards/7829537690/pulses/${item.id}`} target="_blank" rel="noreferrer" className="analyst-evidence-link">Abrir no Monday</a>{item.panelItem && <span className="analyst-panel-match" title="Este item também foi localizado na organização do Vybe Painel"> · PAINEL</span>}</td>
                   </tr>
                 ))}
                 {filteredDelays.length === 0 && (

@@ -48,10 +48,10 @@ export const scoreComposition = (snapshot) => {
 
 export const delayUrgency = (days) => {
   const value = Number(days) || 0;
-  if (value >= 15) return { tone: 'catastrophic', label: 'CRÍTICO', description: 'Atraso crítico: exige intervenção executiva imediata.' };
-  if (value >= 7) return { tone: 'critical', label: 'SEVERO', description: 'Atraso severo: risco elevado de quebra de previsibilidade.' };
-  if (value >= 3) return { tone: 'high', label: 'ALTO', description: 'Atraso alto: precisa de causa e próximo marco.' };
-  return { tone: 'attention', label: 'ATENÇÃO', description: 'Atraso recente: acompanhar antes que escale.' };
+  if (value >= 15) return { tone: 'catastrophic', label: 'Crítico', description: 'Atraso crítico: exige intervenção executiva imediata.' };
+  if (value >= 7) return { tone: 'critical', label: 'Severo', description: 'Atraso severo: risco elevado de quebra de previsibilidade.' };
+  if (value >= 3) return { tone: 'high', label: 'Alto', description: 'Atraso alto: precisa de causa e próximo marco.' };
+  return { tone: 'attention', label: 'Atenção', description: 'Atraso recente: acompanhar antes que escale.' };
 };
 
 export const buildMissions = (snapshot) => {
@@ -81,7 +81,7 @@ export const buildMissions = (snapshot) => {
     ...mission,
     recoverablePoints: mission.recoverablePoints ?? mission.current * mission.pointsPerItem,
     progressPct: 0,
-    status: 'MISSÃO ABERTA'
+    status: 'Missão aberta'
   }));
 };
 

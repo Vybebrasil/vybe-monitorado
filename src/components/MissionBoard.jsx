@@ -31,7 +31,7 @@ export function MissionBoard({ snapshot, onSelect }) {
           <span className="score-ledger-row-top"><strong>{deduction.label}</strong><b className="score-ledger-penalty">-{formatNumber(deduction.points)} pts perdidos</b></span>
           <small><strong>{populationLabel}</strong> <i>·</i> {ruleLabel} <i>·</i> <b>-{formatNumber(deduction.points)} pts no total</b> <i>·</i> {deduction.source}</small>
         </span>
-        <span className="score-ledger-row-action">ABRIR CAUSA ↗</span>
+        <span className="score-ledger-row-action">Abrir causa ↗</span>
       </button>
     );
   };
@@ -39,27 +39,27 @@ export function MissionBoard({ snapshot, onSelect }) {
   return (
     <section className="mission-board data-panel" aria-label="Missões da carteira e placar executivo">
       <div className="mission-board-header">
-        <div className="mission-board-copy"><span className="executive-section-kicker">VYBE OS · MISSÕES DA CARTEIRA</span><h2>Recupere o placar da operação</h2><p>Cada missão nasce de um sinal real do Monday. Não é competição entre pessoas: é recuperação do sistema.</p><div className="mission-objective"><span>OBJETIVO DA LEITURA</span><strong>Resolver sinais comprovados e devolver pontos ao placar.</strong></div></div>
-        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>PLACAR BRUTO ATUAL</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>Meta de recuperação: 100 pts</em></div>
+        <div className="mission-board-copy"><span className="executive-section-kicker">Vybe OS · missões da carteira</span><h2>Recupere o placar da operação</h2><p>Cada missão nasce de um sinal real do Monday. Não é competição entre pessoas: é recuperação do sistema.</p><div className="mission-objective"><span>Objetivo da leitura</span><strong>Resolver sinais comprovados e devolver pontos ao placar.</strong></div></div>
+        <div className={`mission-score ${score < 0 ? 'negative' : ''}`}><span>Placar bruto atual</span><strong>{formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis</small><em>Meta de recuperação: 100 pts</em></div>
       </div>
       <div className="mission-layout">
         <div className="mission-list">
           {missions.map((mission, index) => (
             <button type="button" className={`mission-card ${mission.accent}`} key={mission.id} onClick={() => onSelect(mission.kpiId, mission.readinessId)} aria-label={`Abrir missão: ${mission.title}`}>
-              <div className="mission-card-top"><span>MISSÃO {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
+              <div className="mission-card-top"><span>Missão {String(index + 1).padStart(2, '0')}</span><b>{mission.status}</b></div>
               <strong>{mission.title}</strong>
               <div className="mission-card-meta"><span>{formatNumber(mission.current)} {mission.unit} restantes</span><b>{formatPoints(mission.recoverablePoints)} recuperáveis</b></div>
               <div className="mission-progress" aria-label="Progresso da missão"><i style={{ width: `${mission.progressPct}%` }} /></div>
               <small>{mission.description}</small>
-              <em>ABRIR EVIDÊNCIAS ↗</em>
+              <em>Abrir evidências ↗</em>
             </button>
           ))}
         </div>
         <div className="score-ledger">
-          <div className="score-ledger-header"><div><span>PLACAR · ORIGEM DOS DESCONTOS</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes · -{formatNumber(lostPoints)} pts perdidos</b></div>
-          <div className="score-ledger-summary"><span>FECHAMENTO DO PLACAR</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
-          <div className="score-ledger-group"><span className="score-ledger-group-title">EXECUÇÃO E ENTREGA</span>{operationalDeductions.map(renderDeduction)}</div>
-          <div className="score-ledger-group readiness"><span className="score-ledger-group-title">PRONTIDÃO DA CARTEIRA</span>{readinessDeductions.map(renderDeduction)}</div>
+          <div className="score-ledger-header"><div><span>Placar · origem dos descontos</span><strong>O que está tirando pontos</strong></div><b>{deductions.length} fontes · -{formatNumber(lostPoints)} pts perdidos</b></div>
+          <div className="score-ledger-summary"><span>Fechamento do placar</span><strong>{formatNumber(scoreBase)} pts base − {formatNumber(lostPoints)} pts perdidos = {formatPoints(score)}</strong><small>{formatPoints(recoverable)} recuperáveis se as missões forem comprovadas.</small></div>
+          <div className="score-ledger-group"><span className="score-ledger-group-title">Execução e entrega</span>{operationalDeductions.map(renderDeduction)}</div>
+          <div className="score-ledger-group readiness"><span className="score-ledger-group-title">Prontidão da carteira</span>{readinessDeductions.map(renderDeduction)}</div>
         </div>
       </div>
     </section>

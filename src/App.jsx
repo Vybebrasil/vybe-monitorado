@@ -101,12 +101,12 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
   };
 
   const statusLabel = freshness === 'fallback'
-    ? 'FALLBACK DIRETO'
+    ? 'Leitura direta'
     : freshness === 'stale'
-      ? 'DADOS DESATUALIZADOS'
+      ? 'Dados desatualizados'
       : complete
-        ? 'LEITURA COMPLETA'
-        : 'LEITURA PARCIAL';
+        ? 'Leitura completa'
+        : 'Leitura parcial';
   const sourceLabel = quality.source || 'Monday.com';
   const syncLabel = sync?.version ? `versão ${sync.version}${sync.ageSeconds !== null && sync.ageSeconds !== undefined ? ` · ${sync.ageSeconds}s` : ''}` : null;
   const stableCycles = Number(sync?.versionMonitor?.pollsWithoutVersionChange) || 0;
@@ -120,9 +120,9 @@ function SourceFreshness({ snapshot, onRefresh, refreshing, refreshError }) {
         <span>{sourceLabel} · capturado {capturedLabel}{syncLabel ? ` · ${syncLabel}` : ''}{monitorLabel}</span>
         <button type="button" className="manual-refresh-button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing} title="Buscar novamente os dados do Monday e da Agenda agora">
           <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'spin' : ''} />
-          {refreshing ? 'ATUALIZANDO DADOS…' : freshness === 'stale' || freshness === 'fallback' ? 'ATUALIZAR AGORA' : 'ATUALIZAR DADOS'}
+          {refreshing ? 'Atualizando dados…' : freshness === 'stale' || freshness === 'fallback' ? 'Atualizar agora' : 'Atualizar dados'}
         </button>
-        {refreshError ? <span className="manual-refresh-error" role="alert">ATUALIZAÇÃO FALHOU · {refreshError}</span> : null}
+        {refreshError ? <span className="manual-refresh-error" role="alert">Atualização falhou · {refreshError}</span> : null}
       </div>
       <div className="source-freshness-stats">
         <span><b>{displaySourceCount(derivedRecordCount)}</b> {recordLabel}</span>
@@ -290,11 +290,11 @@ function StatusComposition({ snapshot }) {
 
 function ownerUrgency(daysOverdue) {
   const days = Number(daysOverdue) || 0;
-  if (days >= 14) return { key: 'critical-max', label: 'CRÍTICO MÁXIMO', short: `${days}D` };
-  if (days >= 7) return { key: 'critical', label: 'CRÍTICO', short: `${days}D` };
-  if (days >= 3) return { key: 'high', label: 'ALTO', short: `${days}D` };
-  if (days >= 1) return { key: 'attention', label: 'ATENÇÃO', short: `${days}D` };
-  return { key: 'clear', label: 'SEM ATRASO', short: '0D' };
+  if (days >= 14) return { key: 'critical-max', label: 'Crítico máximo', short: `${days}D` };
+  if (days >= 7) return { key: 'critical', label: 'Crítico', short: `${days}D` };
+  if (days >= 3) return { key: 'high', label: 'Alto', short: `${days}D` };
+  if (days >= 1) return { key: 'attention', label: 'Atenção', short: `${days}D` };
+  return { key: 'clear', label: 'Sem atraso', short: '0D' };
 }
 
 function OwnerBars({ owners, totalDelays, statusColors, selectedOwnerId, onSelect, onOpen }) {
@@ -345,7 +345,7 @@ function OwnerBars({ owners, totalDelays, statusColors, selectedOwnerId, onSelec
               <button type="button" className="owner-bar-open" onClick={() => onOpen(owner)} aria-label={`Abrir todas as entregas de ${owner.name}`}>ABRIR {formatNumber(owner.count)} ENTREGAS ↗</button>
               {showOwnerPreview ? <div className="owner-bar-hover" role="tooltip">
                 <div className="owner-bar-hover-title">{hoverDetails.length < 5 ? `${hoverDetails.length} DEMANDAS EM RISCO` : '5 DEMANDAS MAIS URGENTES'} · {owner.name}</div>
-                {hoverDetails.length ? hoverDetails.map((item, index) => { const urgency = ownerUrgency(item.daysOverdue); return <a className={`owner-bar-hover-item ${urgency.key}`} key={item.id || `${item.name}-${index}`} href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer" title="Abrir evidência no Monday"><strong>{item.name}</strong><span>{item.client || 'Sem cliente'} · {item.stage || 'Etapa não informada'}</span><small><b>{urgency.short} · {urgency.label}</b>{item.status ? ` · ${item.status}` : ''} <em>ABRIR NO MONDAY ↗</em></small></a>; }) : <span className="owner-bar-hover-empty">Nenhuma demanda detalhada disponível.</span>}
+                {hoverDetails.length ? hoverDetails.map((item, index) => { const urgency = ownerUrgency(item.daysOverdue); return <a className={`owner-bar-hover-item ${urgency.key}`} key={item.id || `${item.name}-${index}`} href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer" title="Abrir evidência no Monday"><strong>{item.name}</strong><span>{item.client || 'Sem cliente'} · {item.stage || 'Etapa não informada'}</span><small><b>{urgency.short} · {urgency.label}</b>{item.status ? ` · ${item.status}` : ''} <em>Abrir no Monday ↗</em></small></a>; }) : <span className="owner-bar-hover-empty">Nenhuma demanda detalhada disponível.</span>}
               </div> : null}
             </div>
           );
@@ -375,7 +375,7 @@ function RiskBars({ clients, showAll, onToggle, onSelect }) {
           );
         })}
       </div>
-      {clients.length > 5 ? <button type="button" className="list-expand" onClick={onToggle}>{showAll ? 'VER MENOS' : `VER MAIS (${clients.length - 5})`}</button> : null}
+      {clients.length > 5 ? <button type="button" className="list-expand" onClick={onToggle}>{showAll ? 'Ver menos' : `VER MAIS (${clients.length - 5})`}</button> : null}
     </section>
   );
 }
@@ -510,12 +510,12 @@ const DetailDrawer = ({ panel, setPanel, delayDetails, snapshot }) => {
               <div className="investigation-evidence-meta"><span>{item.client}</span><span>{item.stage || 'Etapa não informada'}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot?.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot?.quantitative?.statusColors) }}>{item.status}</span> : null}<span>{item.delayType || (delayed ? 'Atraso não classificado' : 'Item aberto dentro do prazo')}</span></div>
               <div className="investigation-evidence-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span className="people-field"><b>Resp.</b><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div>
               {item.editorDesigner && <div className="investigation-evidence-meta"><span className="people-field"><b>Editor/Designer</b><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span></div>}
-              {link ? <a className="investigation-evidence-link" href={link} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
+              {link ? <a className="investigation-evidence-link" href={link} target="_blank" rel="noreferrer">Abrir no Monday ↗</a> : null}
             </li>
           );
         })}
       </ul>
-      {expandable && items.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAllClientItems(value => !value)}>{showAllClientItems ? 'VER MENOS' : `VER MAIS (${items.length - 5})`}</button> : null}
+      {expandable && items.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAllClientItems(value => !value)}>{showAllClientItems ? 'Ver menos' : `VER MAIS (${items.length - 5})`}</button> : null}
     </>;
   };
 
@@ -664,11 +664,11 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
             <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`} title={urgency.description}>{item.daysOverdue ? `ATRASO: ${item.daysOverdue}D · ${urgency.label}` : 'EM ANDAMENTO'}</span><b className="evidence-penalty-chip">-{formatNumber(penalty.points)} pts · {penalty.label}</b></div>
             <div className="kpi-evidence-card-meta"><span>{item.client || 'Sem cliente'}</span><span className="people-field"><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span><span>{item.stage || 'Etapa não informada'}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColor, borderColor: statusColor }}>{item.status}</span> : null}</div>
             <div className="kpi-evidence-card-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span>{item.delayType || 'Atraso não classificado'}</span>{item.editorDesigner ? <span className="people-field"><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span> : null}</div>
-            <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a>
+            <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">Abrir no Monday ↗</a>
           </li>;
         })}
       </ul>
-      {total > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${total - 5})`}</button> : null}
+      {total > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${total - 5})`}</button> : null}
     </>
     );
   };
@@ -687,7 +687,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
             <div className="kpi-client-grid">{readinessKpiWithClients.map(client => <div className="kpi-client-card" key={`with-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Em fase de entrada' : panel.id === 'readiness-agenda' ? 'Evento correspondente na Agenda' : 'Campo/reunião identificado'}</span></div></div>)}</div>
             <div className="kpi-investigation-section-title">CLIENTES SEM O SINAL · {formatNumber(readinessKpiWithoutClients.length)}</div>
             <div className="kpi-client-grid">{readinessKpiWithoutClients.slice(0, showAll ? readinessKpiWithoutClients.length : 5).map(client => <div className="kpi-client-card" key={`without-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{panel.id === 'readiness-onboarding' ? 'Fora da janela de entrada' : panel.id === 'readiness-agenda' ? 'Sem evento correspondente nos próximos 30 dias' : 'Sem evidência no período/campo'}</span></div></div>)}</div>
-            {readinessKpiWithoutClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessKpiWithoutClients.length - 5})`}</button> : null}
+            {readinessKpiWithoutClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${readinessKpiWithoutClients.length - 5})`}</button> : null}
           </>}
         </> : null}
 
@@ -697,14 +697,14 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
            <div className="investigation-callout"><span>REGRA APLICADA</span><p>{readinessDeduction?.mode === 'source_gap' ? 'A cobertura está zerada para esta fonte. O Nexus aplica uma única missão sistêmica, mesmo que todos os clientes apareçam afetados, para não retirar pontos repetidamente pelo mesmo problema estrutural.' : `${readinessDeduction?.observedCount ?? readinessObservedClients.length} clientes foram encontrados sem o campo; ${readinessDeduction?.penalizedCount ?? readinessClients.length} entram no score. ${readinessDeduction?.protectedCount || 0} ficam protegidos por ${readinessDeduction?.explanation || 'regra de não duplicação.'}`}</p></div>
            <div className="kpi-investigation-section-title">CLIENTES OBSERVADOS SEM O CAMPO · {readinessObservedClients.length}</div>
            <div className="kpi-client-grid">{visibleReadinessObservedClients.map(client => { const isPenalized = readinessClients.includes(client); const protectedClient = readinessProtectedClients.find(item => item.client === client); return <div className="kpi-client-card" key={`observed-${client}`}><strong>{client}</strong><div className="kpi-evidence-card-meta"><span>{readinessDeduction?.kind === 'planning' ? 'Planejamento não identificado' : 'Dashboard/calendário não preenchido ou desatualizado'}</span><b className="evidence-penalty-note">{isPenalized ? `ENTRA NO SCORE · -${formatNumber(readinessDeduction?.pointsPerItem || 0)} pts` : `PROTEGIDO · ${protectedClient?.reason || 'regra de não duplicação'}`}</b></div></div>; })}</div>
-           {readinessObservedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${readinessObservedClients.length - 5})`}</button> : null}
+           {readinessObservedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${readinessObservedClients.length - 5})`}</button> : null}
         </> : null}
 
         {panel.id === 'health' ? <>
           <div className="kpi-score-explanation"><div><span>SCORE BRUTO ATUAL</span><strong>{formatPoints(score)}</strong></div><div><span>PONTOS RECUPERÁVEIS</span><strong>{formatPoints(snapshot?.portfolioStability?.recoveryPointsAvailable || 0)}</strong></div></div>
           <div className="investigation-callout"><span>COMO O PLACAR FOI COMPOSTO</span><p>{scoreComposition(snapshot)}</p></div>
           <div className="kpi-factor-grid"><div><strong>-{formatNumber(delayedInternal * 2)} pts</strong><span>{formatNumber(delayedInternal)} itens de Produção de Conteúdo × -2 pts · prazo interno</span></div><div><strong>-{formatNumber(delayedPublication * 5)} pts</strong><span>{formatNumber(delayedPublication)} itens de Produção de Conteúdo × -5 pts · veiculação</span></div><div><strong>-{formatNumber(stalled * 5)} pts</strong><span>{formatNumber(stalled)} clientes sem item em Produção de Conteúdo e sem Solicitação de Demanda × -5 pts</span></div><div><strong>-{formatNumber(delayedDemands * 2)} pts</strong><span>{formatNumber(delayedDemands)} Solicitações de Demandas vencidas × -2 pts</span></div>{(readiness.scoreDeductions || []).map(deduction => <div key={deduction.id}><strong>-{formatNumber(deduction.points)} pts</strong><span>{deduction.mode === 'source_gap' ? `${formatNumber(deduction.observedCount ?? deduction.count)} observados · 1 penalização sistêmica` : `${formatNumber(deduction.observedCount ?? deduction.count)} observados · ${formatNumber(deduction.penalizedCount ?? deduction.count)} penalizados · ${formatNumber(deduction.protectedCount || 0)} protegidos`}</span></div>)}</div>
-          <div className="source-relation-callout"><div className="source-relation-heading"><span>RELAÇÃO ENTRE FONTES</span><strong>{formatNumber(sourceRelation.counts?.overlapClients || 0)} clientes com itens nas duas fontes</strong></div><p>{sourceRelation.note}</p><div className="source-relation-grid"><div><strong>{formatNumber(sourceRelation.counts?.productionOpenClients || 0)}</strong><span>clientes com Produção de Conteúdo aberta</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOpenClients || 0)}</strong><span>clientes com Solicitações abertas</span></div><div><strong>{formatNumber(sourceRelation.counts?.productionOnlyClients || 0)}</strong><span>somente Produção</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOnlyClients || 0)}</strong><span>somente Solicitações</span></div></div>{sourceRelation.overlapDetails?.length ? <><div className="kpi-investigation-section-title">POSSÍVEL SOBREPOSIÇÃO · {sourceRelation.overlapDetails.length} CLIENTES</div><div className="source-relation-list">{sourceRelation.overlapDetails.slice(0, showAll ? sourceRelation.overlapDetails.length : 5).map(item => <div className="source-relation-item" key={item.client}><strong>{item.client}</strong><span>Produção: {formatNumber(item.productionOpen)} abertos · {formatNumber(item.productionDelayed)} atrasados · Demandas: {formatNumber(item.demandOpen)} abertas · {formatNumber(item.demandDelayed)} vencidas</span></div>)}</div>{sourceRelation.overlapDetails.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${sourceRelation.overlapDetails.length - 5})`}</button> : null}</> : null}</div>
+          <div className="source-relation-callout"><div className="source-relation-heading"><span>RELAÇÃO ENTRE FONTES</span><strong>{formatNumber(sourceRelation.counts?.overlapClients || 0)} clientes com itens nas duas fontes</strong></div><p>{sourceRelation.note}</p><div className="source-relation-grid"><div><strong>{formatNumber(sourceRelation.counts?.productionOpenClients || 0)}</strong><span>clientes com Produção de Conteúdo aberta</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOpenClients || 0)}</strong><span>clientes com Solicitações abertas</span></div><div><strong>{formatNumber(sourceRelation.counts?.productionOnlyClients || 0)}</strong><span>somente Produção</span></div><div><strong>{formatNumber(sourceRelation.counts?.demandOnlyClients || 0)}</strong><span>somente Solicitações</span></div></div>{sourceRelation.overlapDetails?.length ? <><div className="kpi-investigation-section-title">POSSÍVEL SOBREPOSIÇÃO · {sourceRelation.overlapDetails.length} CLIENTES</div><div className="source-relation-list">{sourceRelation.overlapDetails.slice(0, showAll ? sourceRelation.overlapDetails.length : 5).map(item => <div className="source-relation-item" key={item.client}><strong>{item.client}</strong><span>Produção: {formatNumber(item.productionOpen)} abertos · {formatNumber(item.productionDelayed)} atrasados · Demandas: {formatNumber(item.demandOpen)} abertas · {formatNumber(item.demandDelayed)} vencidas</span></div>)}</div>{sourceRelation.overlapDetails.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${sourceRelation.overlapDetails.length - 5})`}</button> : null}</> : null}</div>
           <p className="investigation-footnote">Este proxy não mede receita, satisfação ou produtividade individual. Ele sinaliza que a pressão operacional ultrapassou o limite da escala atual.</p>
         </> : null}
 
@@ -715,10 +715,10 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
             <div className="kpi-investigation-section-title">ITENS COM STATUS · {selectedStatus} · {statusItems.length}</div>
             <div className="kpi-status-source-note">Fonte: <strong>Produção de Conteúdo · Monday.com</strong> · {statusItems.length} itens ativos com este status. Itens Finalizado, Publicado e Cancelado ficam fora do recorte.</div>
             <ul className="kpi-status-item-list">
-              {visibleStatusItems.map((item, index) => { const color = statusColorFor(item.status, quantitative.statusColors); return <li className="kpi-status-item-card" key={item.id || `${item.name}-${index}`}><div className="kpi-status-item-head"><strong>{item.name}</strong><span className="monday-status-badge" style={{ color, borderColor: color }}>{item.status}</span></div><div className="kpi-status-item-meta"><span>{item.client || 'Sem cliente'}</span><span>{item.stage || 'Etapa não informada'}</span><span className="people-field"><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div><div className="kpi-status-item-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span></div><a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a></li>; })}
+              {visibleStatusItems.map((item, index) => { const color = statusColorFor(item.status, quantitative.statusColors); return <li className="kpi-status-item-card" key={item.id || `${item.name}-${index}`}><div className="kpi-status-item-head"><strong>{item.name}</strong><span className="monday-status-badge" style={{ color, borderColor: color }}>{item.status}</span></div><div className="kpi-status-item-meta"><span>{item.client || 'Sem cliente'}</span><span>{item.stage || 'Etapa não informada'}</span><span className="people-field"><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div><div className="kpi-status-item-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span></div><a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">Abrir no Monday ↗</a></li>; })}
             </ul>
-            {statusItems.length === 0 ? <div className="investigation-callout"><span>ITENS NÃO DISPONÍVEIS NESTA LEITURA</span><p>O status foi recebido no agregado, mas os detalhes ainda não chegaram no snapshot. Use ATUALIZAR DADOS para reconsultar o Monday.</p></div> : null}
-            {statusItems.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${statusItems.length - 5})`}</button> : null}
+            {statusItems.length === 0 ? <div className="investigation-callout"><span>Itens não disponíveis nesta leitura</span><p>O status foi recebido no agregado, mas os detalhes ainda não chegaram no snapshot. Use Atualizar dados para reconsultar o Monday.</p></div> : null}
+            {statusItems.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `VER MAIS (${statusItems.length - 5})`}</button> : null}
           </> : null}
           <div className="kpi-investigation-section-title">ETAPAS EXECUTIVAS</div><div className="kpi-status-grid">{stageRows.map(([stage, count]) => <div key={stage}><span className="status-dot" style={{ backgroundColor: 'var(--vybe-cyan)' }} /><span>{canonicalStage(stage)}</span><strong>{formatNumber(count)}</strong><small>{formatPct((count / (quantitative.activeItems || 1)) * 100)}</small></div>)}</div>
         </> : null}
@@ -728,7 +728,7 @@ function KpiInvestigationDrawer({ panel, setPanel, snapshot }) {
         {panel.id === 'health' ? evidenceList(visibleDelays, 'EVIDÊNCIAS QUE PENALIZAM O SCORE', delays.length, delays) : null}
 
         {panel.id === 'exposure' ? <>
-          <div className="kpi-investigation-section-title">CLIENTES EXPOSTOS · {exposedClients.length}</div><div className="kpi-client-grid">{visibleClients.map(client => <div className="kpi-client-card" key={client.client}><div className="kpi-evidence-card-head"><strong>{client.client}</strong><span className={`risk-pct ${riskTone(client.riskPct)}`}>{formatPct(client.riskPct)}</span></div><div className="risk-bar-track"><span style={{ width: `${clampPct(client.riskPct)}%` }} /></div><div className="kpi-evidence-card-meta"><span>{client.delayedItems} atrasos / {client.openItems} abertos</span><span>{client.internalDelays} internos · {client.publicationDelays} veiculação</span></div><button type="button" className="kpi-inline-action" onClick={() => { setPanel({ type: 'client', id: client.client, title: `Evidências: ${client.client}` }); }}>ABRIR CAUSA ↗</button></div>)}</div>{exposedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${exposedClients.length - 5})`}</button> : null}</> : null}
+          <div className="kpi-investigation-section-title">Clientes expostos · {exposedClients.length}</div><div className="kpi-client-grid">{visibleClients.map(client => <div className="kpi-client-card" key={client.client}><div className="kpi-evidence-card-head"><strong>{client.client}</strong><span className={`risk-pct ${riskTone(client.riskPct)}`}>{formatPct(client.riskPct)}</span></div><div className="risk-bar-track"><span style={{ width: `${clampPct(client.riskPct)}%` }} /></div><div className="kpi-evidence-card-meta"><span>{client.delayedItems} atrasos / {client.openItems} abertos</span><span>{client.internalDelays} internos · {client.publicationDelays} veiculação</span></div><button type="button" className="kpi-inline-action" onClick={() => { setPanel({ type: 'client', id: client.client, title: `Evidências: ${client.client}` }); }}>Abrir causa ↗</button></div>)}</div>{exposedClients.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `Ver mais (${exposedClients.length - 5})`}</button> : null}</> : null}
 
         {panel.id === 'execution' ? <>
           <div className="kpi-investigation-section-title">CLIENTES SEM EXECUÇÃO · {execution.stalled?.length || 0}</div><div className="kpi-client-grid">{(execution.stalled || []).map(client => <div className="kpi-client-card" key={client.client}><strong>{client.client}</strong><div className="kpi-evidence-card-meta"><span>{client.daysSinceEntry === null ? 'Tempo na carteira não informado' : `${client.daysSinceEntry} dias na carteira`}</span><span>Sem conteúdo em produção</span><span>Sem demanda aberta</span></div><button type="button" className="kpi-inline-action" onClick={() => setPanel({ type: 'client', id: client.client, title: `Visão: ${client.client}` })}>ABRIR CONTEXTO ↗</button></div>)}</div><div className="investigation-callout"><span>ONBOARDING SEPARADO</span><p>{(execution.onboarding || []).length} cliente(s) ainda estão na janela de implantação de {execution.onboardingWindowDays} dias e não entram no indicador de cliente parado.</p></div></> : null}
@@ -746,24 +746,24 @@ function JarvisCopilot({ message, nextCommand }) {
     <section className="jarvis-copilot" aria-live="polite">
       <div className="jarvis-copilot-presence">
         <div className="jarvis-mini-orb" aria-hidden="true"><Target size={21} /></div>
-        <div><strong>JARVIS</strong><span>ATIVO · GUIANDO</span></div>
+        <div><strong>JARVIS</strong><span>Ativo · guiando</span></div>
       </div>
       <div className="jarvis-copilot-speech">
-        <div className="jarvis-copilot-label"><span /> JARVIS · AGORA</div>
+        <div className="jarvis-copilot-label"><span /> JARVIS · agora</div>
         <p>{message.text}</p>
         <small>{message.hint}</small>
       </div>
-      <div className="jarvis-copilot-next"><span>PRÓXIMO COMANDO</span><strong>{nextCommand}</strong></div>
+      <div className="jarvis-copilot-next"><span>Próximo comando</span><strong>{nextCommand}</strong></div>
     </section>
   );
 }
 
 function ExecutiveViewNav({ activeView, onChange, snapshot }) {
   const tabs = [
-    { id: 'summary', label: 'RESUMO EXECUTIVO', detail: 'decisão e risco' },
-    { id: 'portfolio', label: 'CARTEIRA', detail: `${formatNumber(snapshot?.quantitative?.activeItems || 0)} itens ativos` },
-    { id: 'demands', label: 'DEMANDAS', detail: `${formatNumber(snapshot?.demandItems?.length || 0)} solicitações` },
-    { id: 'team', label: 'TIME & PERFORMANCE', detail: 'capacidade observável' }
+    { id: 'summary', label: 'Resumo executivo', detail: 'decisão e risco' },
+    { id: 'portfolio', label: 'Carteira', detail: `${formatNumber(snapshot?.quantitative?.activeItems || 0)} itens ativos` },
+    { id: 'demands', label: 'Demandas', detail: `${formatNumber(snapshot?.demandItems?.length || 0)} solicitações` },
+    { id: 'team', label: 'Time & performance', detail: 'capacidade observável' }
   ];
   return <nav className="executive-view-nav" aria-label="Contextos executivos">
     {tabs.map(tab => <button type="button" key={tab.id} className={`executive-view-tab ${activeView === tab.id ? 'active' : ''}`} aria-selected={activeView === tab.id} onClick={() => onChange(tab.id)}><strong>{tab.label}</strong><span>{tab.detail}</span></button>)}
@@ -948,7 +948,7 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
                   <div className="item-meta critical">{person.count} ATRASOS</div>
                 </li>
               ))}
-              {topBlame.length > 5 && <button type="button" className="list-expand" onClick={() => setShowAllOwners(value => !value)}>{showAllOwners ? 'VER MENOS' : `VER MAIS (${topBlame.length - 5})`}</button>}
+              {topBlame.length > 5 && <button type="button" className="list-expand" onClick={() => setShowAllOwners(value => !value)}>{showAllOwners ? 'Ver menos' : `VER MAIS (${topBlame.length - 5})`}</button>}
             </ul>
           </div>
 
@@ -1024,14 +1024,14 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
                     <td>{c.internalDelays} atraso(s)</td>
                     <td>{c.publicationDelays} veiculação</td>
                     <td>
-                      <span className="item-meta">{c.riskPct >= 40 ? 'CRÍTICO' : 'ATENÇÃO'}</span>
+                      <span className="item-meta">{c.riskPct >= 40 ? 'Crítico' : 'Atenção'}</span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {worstClients.length > 5 && <button type="button" className="list-expand table-expand" onClick={() => setShowAllClients(value => !value)}>{showAllClients ? 'VER MENOS' : `VER MAIS (${worstClients.length - 5})`}</button>}
+          {worstClients.length > 5 && <button type="button" className="list-expand table-expand" onClick={() => setShowAllClients(value => !value)}>{showAllClients ? 'Ver menos' : `VER MAIS (${worstClients.length - 5})`}</button>}
         </div>
       </div> : null}
 
@@ -1078,26 +1078,26 @@ function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
             <div className="jarvis-orb-core"><Target size={34} /></div>
             <i className="jarvis-orb-ring ring-one" /><i className="jarvis-orb-ring ring-two" /><i className="jarvis-orb-ring ring-three" />
           </div>
-          <div className="jarvis-presence-status"><span className="jarvis-live-dot" /> FALANDO COM A LIDERANÇA</div>
+          <div className="jarvis-presence-status"><span className="jarvis-live-dot" /> Falando com a liderança</div>
           <div className="jarvis-voice-wave" aria-hidden="true">{[1,2,3,4,5,6,7,8].map(bar => <i key={bar} />)}</div>
         </section>
 
         <section className="jarvis-clean-conversation">
-          <div className="jarvis-clean-kicker">JARVIS <span>·</span> LEITURA EXECUTIVA</div>
+          <div className="jarvis-clean-kicker">JARVIS <span>·</span> leitura executiva</div>
           <h1>{getGreeting()}, liderança.</h1>
           <p className="jarvis-clean-lead">Já li a carteira. Encontrei um ponto para começarmos.</p>
           <div className={`jarvis-clean-insight ${priorityClass}`}>
-            <span>ATENÇÃO AGORA</span>
+            <span>Atenção agora</span>
             <strong>{firstPriority}</strong>
           </div>
           <p className="jarvis-clean-explanation">Vou mostrar a evidência e conduzir a próxima decisão. Nada será alterado no Monday.</p>
           <div className="jarvis-clean-question">Quer que eu conduza?</div>
           <div className="jarvis-clean-actions">
-            <button type="button" className="jarvis-clean-primary" onClick={onOpenJarvis}><Target size={17} /> CONTINUAR COM O JARVIS</button>
+            <button type="button" className="jarvis-clean-primary" onClick={onOpenJarvis}><Target size={17} /> Continuar com o JARVIS</button>
             <button type="button" className="jarvis-clean-analyst" onClick={onOpenAnalyst}><Activity size={15} /> Explorar no Analista <span>investigação profunda</span></button>
           </div>
           <div className="jarvis-clean-context"><span>{overdue} atrasos internos</span><i /> <span>{clientRisks} clientes expostos</span><i /> <span>{stalled > 0 ? stalled : decisions} próximo(s) comando(s)</span></div>
-          <div className="jarvis-clean-boundary"><Info size={13} /> JARVIS conduz. ANALISTA investiga. Vybe Painel executa.</div>
+          <div className="jarvis-clean-boundary"><Info size={13} /> JARVIS conduz. Analista investiga. Vybe Painel executa.</div>
         </section>
       </main>
     </div>
@@ -1106,10 +1106,10 @@ function JarvisHome({ snapshot, onOpenJarvis, onOpenAnalyst }) {
 
 function JarvisWakeScreen({ stage }) {
   const stages = [
-    { label: 'ACORDANDO O NÚCLEO', detail: 'Inicializando presença executiva.' },
-    { label: 'LENDO A CARTEIRA', detail: 'Conectando Monday.com, Vybe Painel e agenda.' },
-    { label: 'CRUZANDO OS SINAIS', detail: 'Separando ruído de decisão.' },
-    { label: 'JARVIS ONLINE', detail: `${getGreeting()}, liderança. Estou pronto.` }
+    { label: 'Acordando o núcleo', detail: 'Inicializando presença executiva.' },
+    { label: 'Lendo a carteira', detail: 'Conectando Monday.com, Vybe Painel e agenda.' },
+    { label: 'Cruzando os sinais', detail: 'Separando ruído de decisão.' },
+    { label: 'JARVIS online', detail: `${getGreeting()}, liderança. Estou pronto.` }
   ];
   const current = stages[Math.min(stage, stages.length - 1)];
   const progress = `${Math.min(100, 18 + stage * 27)}%`;
@@ -1117,20 +1117,20 @@ function JarvisWakeScreen({ stage }) {
   return (
     <div className="jarvis-wake-screen" aria-live="polite">
       <div className="jarvis-wake-grid" />
-      <div className="jarvis-wake-brand"><Target size={15} /> VYBE NEXUS <span>// BOOT SEQUENCE</span></div>
+      <div className="jarvis-wake-brand"><Target size={15} /> Vybe Nexus <span>· leitura executiva</span></div>
       <main className="jarvis-wake-core">
         <div className="jarvis-wake-orb" aria-hidden="true">
           <div className="jarvis-wake-orb-core"><Target size={42} /></div>
           <i className="jarvis-wake-ring wake-ring-one" /><i className="jarvis-wake-ring wake-ring-two" /><i className="jarvis-wake-ring wake-ring-three" />
         </div>
-        <div className="jarvis-wake-status"><span className="jarvis-live-dot" /> JARVIS {stage >= 3 ? 'ONLINE' : 'DESPERTANDO'}</div>
+        <div className="jarvis-wake-status"><span className="jarvis-live-dot" /> JARVIS {stage >= 3 ? 'online' : 'despertando'}</div>
         <div className="jarvis-wake-kicker">{current.label}</div>
         <h1>{stage >= 3 ? `${getGreeting()}, liderança.` : 'Despertando.'}</h1>
         <p>{current.detail}</p>
         <div className="jarvis-wake-progress"><span style={{ width: progress }} /></div>
-        <div className="jarvis-wake-log"><span className={stage >= 0 ? 'done' : ''}>NÚCLEO DE PRESENÇA</span><span className={stage >= 1 ? 'done' : ''}>FONTES EXECUTIVAS</span><span className={stage >= 2 ? 'done' : ''}>LEITURA DE CONTEXTO</span></div>
+        <div className="jarvis-wake-log"><span className={stage >= 0 ? 'done' : ''}>Núcleo de presença</span><span className={stage >= 1 ? 'done' : ''}>Fontes executivas</span><span className={stage >= 2 ? 'done' : ''}>Leitura de contexto</span></div>
       </main>
-      <div className="jarvis-wake-footer">UMA LIDERANÇA · UM COMANDO · UMA LEITURA</div>
+      <div className="jarvis-wake-footer">Uma liderança · um comando · uma leitura</div>
     </div>
   );
 }
@@ -1159,8 +1159,8 @@ class RuntimeErrorBoundary extends React.Component {
       <div className="runtime-error-screen" role="alert">
         <div className="runtime-error-panel">
           <ShieldAlert size={42} color="var(--vybe-red)" aria-hidden="true" />
-          <span className="runtime-error-kicker">VYBE NEXUS · RECUPERAÇÃO</span>
-          <h1>O JARVIS PRECISA REINICIAR ESTA LEITURA</h1>
+          <span className="runtime-error-kicker">Vybe Nexus · recuperação</span>
+          <h1>O JARVIS precisa reiniciar esta leitura</h1>
           <p>Uma interação encontrou um erro inesperado. Os dados do Monday não foram alterados.</p>
           <code>{message}</code>
           <button type="button" onClick={this.handleReload}>RECARREGAR LEITURA</button>
@@ -1293,12 +1293,12 @@ function App() {
 
   if (error) {
     return (
-      <div className="vybe-os-grid">
-        <div className="loading-wrapper" style={{ textAlign: 'center' }}>
-          <ShieldAlert size={60} color="var(--vybe-red)" style={{ marginBottom: '2rem' }} />
-          <h2 style={{ fontFamily: 'var(--font-mono)', color: 'var(--vybe-red)', letterSpacing: '4px' }}>SINAL PERDIDO</h2>
-          <p style={{ color: 'var(--vybe-text-muted)', margin: '1rem 0 2rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{error}</p>
-          <button onClick={loadMetrics} style={{ background: 'transparent', border: '1px solid var(--vybe-red)', color: 'var(--vybe-red)', padding: '1rem 2rem', fontFamily: 'var(--font-mono)', cursor: 'pointer', letterSpacing: '2px' }}>TENTAR RECONEXÃO</button>
+      <div className="vybe-os-grid runtime-error-screen">
+        <div className="loading-wrapper runtime-error-panel">
+          <ShieldAlert size={42} color="var(--vybe-red)" aria-hidden="true" />
+          <h2>Não foi possível atualizar a leitura</h2>
+          <p>{error}</p>
+          <button type="button" onClick={loadMetrics}>Tentar reconexão</button>
         </div>
       </div>
     );
@@ -1314,7 +1314,7 @@ function App() {
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">
-            <div className="loading-text">CARREGANDO CONSOLE DO ANALISTA</div>
+            <div className="loading-text">Carregando o modo Analista</div>
             <div className="loading-bar"></div>
           </div>
         )}>

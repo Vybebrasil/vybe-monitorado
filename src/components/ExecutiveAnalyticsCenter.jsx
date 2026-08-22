@@ -140,7 +140,7 @@ function aggregateStatuses(rows) {
 
 function TrendPlot({ points, metric }) {
   const valid = points.filter(point => Number.isFinite(Number(point[metric.key])));
-  if (valid.length < 2) return <div className="analytics-trend-empty"><Activity size={18} /><strong>LINHA TEMPORAL INDISPONÍVEL</strong><span>São necessários pelo menos dois snapshots persistidos para desenhar uma tendência real.</span></div>;
+  if (valid.length < 2) return <div className="analytics-trend-empty"><Activity size={18} /><strong>Linha temporal indisponível</strong><span>São necessários pelo menos dois snapshots persistidos para desenhar uma tendência real.</span></div>;
   const width = 720;
   const height = 238;
   const pad = { top: 20, right: 18, bottom: 34, left: 52 };
@@ -167,10 +167,10 @@ export function TrendChart({ timeSeries, hasCrossFilter = false }) {
   const [metricKey, setMetricKey] = React.useState('score');
   const [rangeDays, setRangeDays] = React.useState(30);
   const [showSetup, setShowSetup] = React.useState(false);
-  const setupDialog = showSetup ? <div className="analytics-history-setup" role="dialog" aria-modal="true" aria-label="Como ativar o histórico executivo"><div><div className="analytics-history-setup-header"><strong>ATIVAR EVOLUÇÃO REAL</strong><button type="button" onClick={() => setShowSetup(false)} aria-label="Fechar instruções">×</button></div><p>O Nexus só desenha tendências depois de guardar pelo menos dois snapshots executivos reais.</p><ol><li>Na Vercel, abra <b>Settings → Environment Variables</b>.</li><li>Configure <code>NEXUS_SNAPSHOT_STORE_URL</code> e <code>NEXUS_SNAPSHOT_STORE_TOKEN</code>, ou o par compartilhado <code>UPSTASH_REDIS_REST_URL</code> e <code>UPSTASH_REDIS_REST_TOKEN</code>.</li><li>Defina <code>NEXUS_SNAPSHOT_AUTOSAVE=true</code> e faça um novo deploy.</li><li>Aguarde duas leituras do Nexus. Sem pelo menos dois snapshots persistidos, a série continua N/D.</li></ol><p className="analytics-history-setup-warning">O filtro atual não altera esta série: ela representa a agência inteira. O recorte individual só altera o snapshot atual.</p><button type="button" className="analytics-filter-clear" onClick={() => setShowSetup(false)}>FECHAR</button></div></div> : null;
+  const setupDialog = showSetup ? <div className="analytics-history-setup" role="dialog" aria-modal="true" aria-label="Como ativar o histórico executivo"><div><div className="analytics-history-setup-header"><strong>Ativar evolução real</strong><button type="button" onClick={() => setShowSetup(false)} aria-label="Fechar instruções">×</button></div><p>O Nexus só desenha tendências depois de guardar pelo menos dois snapshots executivos reais.</p><ol><li>Na Vercel, abra <b>Settings → Environment Variables</b>.</li><li>Configure <code>NEXUS_SNAPSHOT_STORE_URL</code> e <code>NEXUS_SNAPSHOT_STORE_TOKEN</code>, ou o par compartilhado <code>UPSTASH_REDIS_REST_URL</code> e <code>UPSTASH_REDIS_REST_TOKEN</code>.</li><li>Defina <code>NEXUS_SNAPSHOT_AUTOSAVE=true</code> e faça um novo deploy.</li><li>Aguarde duas leituras do Nexus. Sem pelo menos dois snapshots persistidos, a série continua N/D.</li></ol><p className="analytics-history-setup-warning">O filtro atual não altera esta série: ela representa a agência inteira. O recorte individual só altera o snapshot atual.</p><button type="button" className="analytics-filter-clear" onClick={() => setShowSetup(false)}>Fechar</button></div></div> : null;
   if (!timeSeries?.available) return <article className="analytics-trend-unavailable">
-    <div><Activity size={16} /><span>EVOLUÇÃO DA AGÊNCIA</span><strong>Histórico ainda não ativo</strong><small>A leitura atual funciona normalmente. As comparações aparecem após dois snapshots reais.</small></div>
-    <button type="button" className="analytics-history-setup-button" onClick={() => setShowSetup(true)}>ATIVAR HISTÓRICO</button>
+    <div><Activity size={16} /><span>Evolução da agência</span><strong>Histórico ainda não ativo</strong><small>A leitura atual funciona normalmente. As comparações aparecem após dois snapshots reais.</small></div>
+    <button type="button" className="analytics-history-setup-button" onClick={() => setShowSetup(true)}>Ativar histórico</button>
     {setupDialog}
   </article>;
   const metric = trendMetrics.find(item => item.key === metricKey) || trendMetrics[0];
@@ -263,60 +263,60 @@ export function ExecutiveAnalyticsCenter({ snapshot, history, timeSeries, onSele
   return (
     <section className="analytics-center" aria-label="Performance e Analytics Center">
       <header className="analytics-center-header">
-        <div><span className="analytics-kicker">VYBE NEXUS · PERFORMANCE & ANALYTICS</span><h1>Como a agência está performando?</h1><p>Leitura observável de volume, fluxo, risco e concentração. Clique em qualquer linha para investigar a origem.</p></div><div className="analytics-center-meta">{hasCrossFilter ? <strong className="analytics-filter-active-badge">RECORTE ATIVO</strong> : null}</div>
-        <div className="analytics-center-meta"><span><Activity size={13} /> snapshot atual</span><strong>{historyAvailable ? 'COMPARAÇÃO DISPONÍVEL' : 'COMPARAÇÃO N/D'}</strong><button type="button" className="analytics-history-link" onClick={onOpenHistory}>HISTÓRIA & LOGS ↗</button></div>
+        <div><span className="analytics-kicker">Vybe Nexus · performance & analytics</span><h1>Como a agência está performando?</h1><p>Leitura observável de volume, fluxo, risco e concentração. Clique em qualquer linha para investigar a origem.</p></div><div className="analytics-center-meta">{hasCrossFilter ? <strong className="analytics-filter-active-badge">Recorte ativo</strong> : null}</div>
+        <div className="analytics-center-meta"><span><Activity size={13} /> snapshot atual</span><strong>{historyAvailable ? 'Comparação disponível' : 'Comparação N/D'}</strong><button type="button" className="analytics-history-link" onClick={onOpenHistory}>História e logs ↗</button></div>
       </header>
 
       <div className="analytics-filter-bar" aria-label="Filtros cruzados do Analytics Center">
-        <div className="analytics-filter-title"><span>RECORTE CRUZADO</span><strong>{hasCrossFilter ? (filteredItemCount === null ? 'linhas detalhadas indisponíveis' : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'snapshot atual'}</strong></div>
+        <div className="analytics-filter-title"><span>Recorte cruzado</span><strong>{hasCrossFilter ? (filteredItemCount === null ? 'linhas detalhadas indisponíveis' : `${formatNumber(filteredItemCount)} itens de Produção no recorte`) : 'snapshot atual'}</strong></div>
         <div className="analytics-filter-controls">
-          {Object.entries(filterOptions).map(([key, options]) => <label key={key} className="analytics-filter-control"><span>{filterLabels[key]}</span><select value={crossFilters[key]} onChange={event => updateFilter(key, event.target.value)} disabled={!options.length}><option value="">TODOS</option>{options.map(option => <option value={option} key={option}>{option}</option>)}</select></label>)}
-          {hasCrossFilter ? <button type="button" className="analytics-filter-clear" onClick={clearFilters}>LIMPAR FILTROS</button> : null}
+          {Object.entries(filterOptions).map(([key, options]) => <label key={key} className="analytics-filter-control"><span>{filterLabels[key]}</span><select value={crossFilters[key]} onChange={event => updateFilter(key, event.target.value)} disabled={!options.length}><option value="">Todos</option>{options.map(option => <option value={option} key={option}>{option}</option>)}</select></label>)}
+          {hasCrossFilter ? <button type="button" className="analytics-filter-clear" onClick={clearFilters}>Limpar filtros</button> : null}
         </div>
       </div>
 
       <div className="analytics-kpi-grid">
-        <Kpi label="ITENS EM FLUXO" value={displayCount(active)} detail={`${displayPct(activePct)} do escopo lido`} tone="cyan" onClick={() => emitSelection({ type: 'kpi', id: 'activeItems', title: 'Itens em fluxo' })} />
-        <Kpi label="CONCLUÍDOS" value={displayCount(completed)} detail={`${displayPct(completionPct)} do escopo lido`} tone="green" onClick={() => emitSelection({ type: 'kpi', id: 'completedItems', title: 'Itens concluídos' })} />
-        <Kpi label="ATRASOS DE PRODUÇÃO" value={displayCount(delayed)} detail={`${displayPct(delayedPct)} dos ativos`} tone="red" onClick={() => emitSelection({ type: 'kpi', id: 'internal-delays', title: 'Atrasos em Produção de Conteúdo' })} />
-        <Kpi label="DEMANDAS VENCIDAS" value={displayCount(demandDelayed)} detail="Solicitações de Demandas" tone="orange" onClick={() => emitSelection({ type: 'kpi', id: 'overdue-demands', title: 'Solicitações de Demandas vencidas' })} />
-        <Kpi label="PRONTOS PARA AGENDAR" value={displayCount(ready)} detail={`${displayPct(readyPct)} dos ativos`} tone="purple" onClick={() => emitSelection({ type: 'kpi', id: 'readyItems', title: 'Itens prontos para agendar' })} />
-        <Kpi label="PLACAR BRUTO" value={score === null || score === undefined ? 'N/D' : formatPoints(score)} detail={hasCrossFilter ? 'indisponível em recorte parcial' : 'pressão operacional atual'} tone={score === null ? 'purple' : Number(score) < 0 ? 'red' : 'green'} onClick={() => emitSelection({ type: 'kpi', id: 'health', title: 'Saúde Executiva' })} />
+        <Kpi label="Itens em fluxo" value={displayCount(active)} detail={`${displayPct(activePct)} do escopo lido`} tone="cyan" onClick={() => emitSelection({ type: 'kpi', id: 'activeItems', title: 'Itens em fluxo' })} />
+        <Kpi label="Concluídos" value={displayCount(completed)} detail={`${displayPct(completionPct)} do escopo lido`} tone="green" onClick={() => emitSelection({ type: 'kpi', id: 'completedItems', title: 'Itens concluídos' })} />
+        <Kpi label="Atrasos de Produção" value={displayCount(delayed)} detail={`${displayPct(delayedPct)} dos ativos`} tone="red" onClick={() => emitSelection({ type: 'kpi', id: 'internal-delays', title: 'Atrasos em Produção de Conteúdo' })} />
+        <Kpi label="Demandas vencidas" value={displayCount(demandDelayed)} detail="Solicitações de Demandas" tone="orange" onClick={() => emitSelection({ type: 'kpi', id: 'overdue-demands', title: 'Solicitações de Demandas vencidas' })} />
+        <Kpi label="Prontos para agendar" value={displayCount(ready)} detail={`${displayPct(readyPct)} dos ativos`} tone="purple" onClick={() => emitSelection({ type: 'kpi', id: 'readyItems', title: 'Itens prontos para agendar' })} />
+        <Kpi label="Placar bruto" value={score === null || score === undefined ? 'N/D' : formatPoints(score)} detail={hasCrossFilter ? 'indisponível em recorte parcial' : 'pressão operacional atual'} tone={score === null ? 'purple' : Number(score) < 0 ? 'red' : 'green'} onClick={() => emitSelection({ type: 'kpi', id: 'health', title: 'Saúde Executiva' })} />
       </div>
 
       <TrendChart timeSeries={timeSeries} hasCrossFilter={hasCrossFilter} />
 
       <div className="analytics-grid analytics-grid-main">
         <article className="analytics-panel analytics-flow-panel">
-          <div className="analytics-panel-heading"><div><span>FLUXO DE ENTREGA</span><strong>Volume atual por estado</strong></div><small>não é tendência histórica</small></div>
+          <div className="analytics-panel-heading"><div><span>Fluxo de entrega</span><strong>Volume atual por estado</strong></div><small>não é tendência histórica</small></div>
           {[['Ativos', active, 'cyan'], ['Concluídos', completed, 'green'], ['Atrasados', delayed, 'red'], ['Prontos para agendar', ready, 'purple']].map(([label, value, tone]) => <div className="analytics-flow-row" key={label}><div><span>{label}</span><strong>{displayCount(value)}</strong></div><Bar value={Number(value) || 0} max={Math.max(Number(active) || 0, Number(completed) || 0, Number(delayed) || 0, Number(ready) || 0, 1)} tone={tone} /><small>{displayPct(pct(value, totalScope || active))}</small></div>)}
-          <div className="analytics-panel-note"><strong>LEITURA</strong><span>{hasCrossFilter ? (hasUsableScope ? 'O fluxo foi recalculado exclusivamente para o recorte selecionado. A série temporal abaixo continua sendo da agência inteira.' : 'O snapshot atual não entregou linhas detalhadas suficientes para recalcular este recorte; os KPIs ficam em N/D para evitar números enganosos.') : 'O fluxo mostra estoque e distribuição da carteira nesta leitura. A comparação temporal permanece N/D enquanto não houver histórico disponível.'}</span></div>
+          <div className="analytics-panel-note"><strong>Leitura</strong><span>{hasCrossFilter ? (hasUsableScope ? 'O fluxo foi recalculado exclusivamente para o recorte selecionado. A série temporal abaixo continua sendo da agência inteira.' : 'O snapshot atual não entregou linhas detalhadas suficientes para recalcular este recorte; os KPIs ficam em N/D para evitar números enganosos.') : 'O fluxo mostra estoque e distribuição da carteira nesta leitura. A comparação temporal permanece N/D enquanto não houver histórico disponível.'}</span></div>
         </article>
 
         <article className="analytics-panel analytics-owner-panel">
-          <div className="analytics-panel-heading"><div><span><Users size={13} /> CONCENTRAÇÃO POR RESPONSÁVEL</span><strong>Sinais de capacidade observável</strong></div><small>não é ranking de valor individual</small></div>
+          <div className="analytics-panel-heading"><div><span><Users size={13} /> Concentração por responsável</span><strong>Sinais de capacidade observável</strong></div><small>não é ranking de valor individual</small></div>
           {visibleOwners.length === 0 ? <div className="analytics-empty"><ShieldAlert size={16} /><span>Responsáveis não disponíveis neste recorte.</span></div> : visibleOwners.slice(0, 6).map(owner => { const total = Array.isArray(owner.posts) ? owner.posts.length : Number(owner.posts ?? owner.totalItems) || 0; const ownerDelayed = Number(owner.delayedTotal) || 0; return <button type="button" className="analytics-owner-row" key={owner.name} onClick={() => { updateFilter('owner', owner.name); emitSelection({ type: 'owner', id: owner.name, title: `Performance observável: ${owner.name}` }, { ...crossFilters, owner: owner.name }); }}><span className="analytics-owner-name">{owner.name}</span><Bar value={ownerDelayed} max={maxOwner} tone={ownerDelayed > 0 ? 'red' : 'green'} /><strong>{formatNumber(ownerDelayed)}</strong><small>{formatNumber(total)} itens · {formatNumber(ownerDelayed)} sinais associados</small><ArrowUpRight size={13} /></button>; })}
         </article>
       </div>
 
       <div className="analytics-grid analytics-grid-secondary">
         <article className="analytics-panel">
-          <div className="analytics-panel-heading"><div><span>RISCO POR CLIENTE</span><strong>Onde a previsibilidade está exposta?</strong></div><small>atrasos / itens abertos</small></div>
+          <div className="analytics-panel-heading"><div><span>Risco por cliente</span><strong>Onde a previsibilidade está exposta?</strong></div><small>atrasos / itens abertos</small></div>
           {visibleClients.length === 0 ? <div className="analytics-empty"><span>Nenhum cliente com atraso neste recorte.</span></div> : visibleClients.map(client => <button type="button" className="analytics-client-row" key={client.client} onClick={() => { updateFilter('client', client.client); emitSelection({ type: 'client', id: client.client, title: `Performance observável: ${client.client}` }, { ...crossFilters, client: client.client }); }}><span>{client.client}</span><Bar value={Number(client.delayedItems) || 0} max={maxClient} tone="orange" /><strong>{formatNumber(client.delayedItems)}</strong><small>{formatPct(client.riskPct)} exposição · {formatNumber(client.openItems ?? 0)} abertos</small><ArrowUpRight size={13} /></button>)}
         </article>
 
         <article className="analytics-panel">
-          <div className="analytics-panel-heading"><div><span>ETAPAS DA PRODUÇÃO</span><strong>Onde o trabalho está acumulado?</strong></div><small>{formatNumber(stages.length)} etapas{hasCrossFilter ? ' no recorte' : ''}</small></div>
+          <div className="analytics-panel-heading"><div><span>Etapas da Produção</span><strong>Onde o trabalho está acumulado?</strong></div><small>{formatNumber(stages.length)} etapas{hasCrossFilter ? ' no recorte' : ''}</small></div>
           {visibleStages.length === 0 ? <div className="analytics-empty"><span>Etapas não disponíveis neste recorte.</span></div> : visibleStages.slice(0, 8).map(stage => <button type="button" className="analytics-stage-row" key={stage.stage} onClick={() => { updateFilter('stage', stage.stage); emitSelection({ type: 'filter', filterKey: 'stage', id: stage.stage, title: `Etapa: ${stage.stage}` }, { ...crossFilters, stage: stage.stage }); }}><span>{stage.stage}</span><Bar value={Number(stage.count) || 0} max={maxStage} tone="cyan" /><strong>{formatNumber(stage.count)}</strong><small>{formatPct(stage.pctOfActive)}</small><ArrowUpRight size={13} /></button>)}
         </article>
 
         <article className="analytics-panel">
-          <div className="analytics-panel-heading"><div><span>MIX DE STATUS</span><strong>Como a carteira está distribuída?</strong></div><small>{displayCount(active)} ativos{hasCrossFilter ? ' no recorte' : ''}</small></div>
+          <div className="analytics-panel-heading"><div><span>Mix de status</span><strong>Como a carteira está distribuída?</strong></div><small>{displayCount(active)} ativos{hasCrossFilter ? ' no recorte' : ''}</small></div>
           {visibleStatuses.length === 0 ? <div className="analytics-empty"><span>Status não disponíveis neste recorte.</span></div> : visibleStatuses.map(([label, count]) => { const color = quantitative.statusColors?.[label] || statusColorFor(label) || '#5eead4'; return <button type="button" className="analytics-status-row" key={label} onClick={() => { updateFilter('status', label); emitSelection({ type: 'filter', filterKey: 'status', id: label, title: `Status: ${label}` }, { ...crossFilters, status: label }); }}><span><i style={{ background: color }} />{label}</span><Bar value={Number(count) || 0} max={maxStatus} tone="status" /><strong>{formatNumber(count)}</strong><ArrowUpRight size={13} /></button>; })}
         </article>
       </div>
 
-      <div className="analytics-comparison-card"><span className="analytics-comparison-dot" /><div><strong>{historyAvailable ? 'COMPARAÇÃO TEMPORAL PRONTA' : 'COMPARAÇÃO TEMPORAL AINDA NÃO DISPONÍVEL'}</strong><p>{historyAvailable ? `Score ${formatPoints(historyScore.current)} · variação ${formatPoints(historyScore.delta)} desde a última leitura.` : 'Configure a persistência executiva para comparar esta leitura com ontem, semana anterior ou último snapshot. O Nexus não fabrica tendências.'}</p>{historyAvailable && historyChanges.length > 0 ? <div className="analytics-history-changes">{historyChanges.map(change => <span key={change.key}><b>{change.label}</b><em>{change.previous} → {change.current}</em></span>)}</div> : null}</div><span className="analytics-comparison-badge">{historyAvailable ? 'LIVE' : 'N/D'}</span></div>
+      <div className="analytics-comparison-card"><span className="analytics-comparison-dot" /><div><strong>{historyAvailable ? 'Comparação temporal pronta' : 'Comparação temporal ainda não disponível'}</strong><p>{historyAvailable ? `Score ${formatPoints(historyScore.current)} · variação ${formatPoints(historyScore.delta)} desde a última leitura.` : 'Configure a persistência executiva para comparar esta leitura com ontem, semana anterior ou último snapshot. O Nexus não fabrica tendências.'}</p>{historyAvailable && historyChanges.length > 0 ? <div className="analytics-history-changes">{historyChanges.map(change => <span key={change.key}><b>{change.label}</b><em>{change.previous} → {change.current}</em></span>)}</div> : null}</div><span className="analytics-comparison-badge">{historyAvailable ? 'Ao vivo' : 'N/D'}</span></div>
     </section>
   );
 }

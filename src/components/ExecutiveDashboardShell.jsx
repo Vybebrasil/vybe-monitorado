@@ -47,7 +47,7 @@ export function ExecutiveDashboardShell({
           <span className="nexus-brand-mark"><Activity size={16} /></span>
           <span><strong>VYBE</strong><small>NEXUS</small></span>
         </div>
-        <div className="nexus-sidebar-caption">COMMAND CENTER</div>
+        <div className="nexus-sidebar-caption">Command center</div>
         <nav className="nexus-sidebar-nav">
           {NAV_ITEMS.map(item => {
             const Icon = item.icon;
@@ -69,11 +69,11 @@ export function ExecutiveDashboardShell({
         </nav>
         <div className="nexus-sidebar-spacer" />
         <div className={`nexus-sync-card ${syncTone}`}>
-          <div className="nexus-sync-card-top"><span className="nexus-sync-dot" /><span>{freshness === 'fresh' || freshness === 'live' ? 'SISTEMA ONLINE' : 'VERIFICAR LEITURA'}</span></div>
+          <div className="nexus-sync-card-top"><span className="nexus-sync-dot" /><span>{freshness === 'fresh' || freshness === 'live' ? 'Sistema online' : 'Verificar leitura'}</span></div>
           <strong>{version === null ? 'N/D' : `v${version}`}</strong>
           <small>{version === null ? (consistencyMode === 'mixed' ? 'fontes mistas' : 'sem versão') : `${consistencyMode === 'mixed' ? 'espelho + fontes diretas' : 'espelho operacional'}`}</small>
         </div>
-        <button type="button" className="nexus-sidebar-analyst" onClick={onOpenAnalyst}><Search size={15} /> Abrir ANALISTA <span>↗</span></button>
+        <button type="button" className="nexus-sidebar-analyst" onClick={onOpenAnalyst}><Search size={15} /> Abrir analista <span>↗</span></button>
         <button type="button" className="nexus-sidebar-exit" onClick={onExit}>Sair do JARVIS</button>
       </aside>
 
@@ -81,13 +81,13 @@ export function ExecutiveDashboardShell({
         <header className="nexus-topbar">
           <div className="nexus-breadcrumb"><span>VYBE NEXUS</span><i>/</i><strong>{activeItem.label}</strong></div>
           <div className="nexus-topbar-actions">
-            <span className="nexus-topbar-live"><Wifi size={13} /> {freshness === 'fresh' || freshness === 'live' ? 'DADOS AO VIVO' : freshness.toUpperCase()}</span>
-            <button type="button" className="nexus-topbar-analyst" onClick={onOpenAnalyst}><Search size={13} /> ANALISTA</button>
-            <button type="button" className="nexus-topbar-refresh" onClick={onRefresh} disabled={refreshing} aria-label="Atualizar dados executivos"><RefreshCw size={14} className={refreshing ? 'is-spinning' : ''} /> {refreshing ? 'LENDO' : 'ATUALIZAR'}</button>
+            <span className="nexus-topbar-live"><Wifi size={13} /> {freshness === 'fresh' || freshness === 'live' ? 'Dados ao vivo' : freshness === 'stale' ? 'Leitura desatualizada' : freshness === 'fallback' ? 'Leitura de contingência' : 'Leitura pendente'}</span>
+            <button type="button" className="nexus-topbar-analyst" onClick={onOpenAnalyst}><Search size={13} /> Analista</button>
+            <button type="button" className="nexus-topbar-refresh" onClick={onRefresh} disabled={refreshing} aria-label="Atualizar dados executivos"><RefreshCw size={14} className={refreshing ? 'is-spinning' : ''} /> {refreshing ? 'Lendo' : 'Atualizar'}</button>
           </div>
         </header>
         <div className="nexus-dashboard-content">
-          {hasSyncWarning ? <div className="nexus-source-alert" role="status"><span className="nexus-source-alert-dot" /><strong>LEITURA PARCIAL</strong><span>{syncError || 'A fonte operacional precisa ser verificada antes de concluir a leitura.'}</span><button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'ATUALIZANDO…' : 'VERIFICAR AGORA'}</button></div> : null}
+          {hasSyncWarning ? <div className="nexus-source-alert" role="status"><span className="nexus-source-alert-dot" /><strong>Leitura parcial</strong><span>{syncError || 'A fonte operacional precisa ser verificada antes de concluir a leitura.'}</span><button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'Atualizando…' : 'Verificar agora'}</button></div> : null}
           <div className="nexus-mobile-context-nav" aria-label="Contextos executivos no mobile">
             {NAV_ITEMS.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} onClick={() => onChange(item.id)}>{item.short}</button>)}
           </div>

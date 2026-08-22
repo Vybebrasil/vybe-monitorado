@@ -76,46 +76,46 @@ export function ExecutivePerformancePanel({ snapshot, onOpenOwner, onOpenHistory
   return (
     <section className="executive-module performance-module team-command" aria-label="Visão executiva de time e performance">
       <header className="team-command-hero">
-        <div><span className="executive-section-kicker">TIME · CAPACIDADE OBSERVÁVEL</span><h2>O time está absorvendo a operação?</h2><p>Compare carga, entrega e pressão sem transformar volume em avaliação de valor individual.</p></div>
-        <div className="team-command-answer"><span>RESPOSTA AGORA</span><strong>{delayedItems > 0 ? `${formatPct(activeItems ? delayedItems / activeItems * 100 : null)} da carteira está atrasada` : 'Sem atraso dominante'}</strong><small>Monday.com · Produção de Conteúdo</small></div>
+        <div><span className="executive-section-kicker">Time · capacidade observável</span><h2>O time está absorvendo a operação?</h2><p>Compare carga, entrega e pressão sem transformar volume em avaliação de valor individual.</p></div>
+        <div className="team-command-answer"><span>Resposta agora</span><strong>{delayedItems > 0 ? `${formatPct(activeItems ? delayedItems / activeItems * 100 : null)} da carteira está atrasada` : 'Sem atraso dominante'}</strong><small>Monday.com · Produção de Conteúdo</small></div>
       </header>
 
       <div className="team-command-kpis">
-        <div><span>EM EXECUÇÃO</span><strong>{formatNumber(activeItems)}</strong><small>itens ativos</small></div>
-        <div><span>CONCLUÍDOS</span><strong>{formatNumber(completedItems)}</strong><small>{formatPct(totalScope ? completedItems / totalScope * 100 : null)} da base</small></div>
-        <div className="critical"><span>ATRASADOS</span><strong>{formatNumber(delayedItems)}</strong><small>{formatPct(activeItems ? delayedItems / activeItems * 100 : null)} dos ativos</small></div>
-        <div className="cyan"><span>PRONTOS PARA AGENDA</span><strong>{formatNumber(readyToSchedule)}</strong><small>próxima entrega</small></div>
+        <div><span>Em execução</span><strong>{formatNumber(activeItems)}</strong><small>itens ativos</small></div>
+        <div><span>Concluídos</span><strong>{formatNumber(completedItems)}</strong><small>{formatPct(totalScope ? completedItems / totalScope * 100 : null)} da base</small></div>
+        <div className="critical"><span>Atrasados</span><strong>{formatNumber(delayedItems)}</strong><small>{formatPct(activeItems ? delayedItems / activeItems * 100 : null)} dos ativos</small></div>
+        <div className="cyan"><span>Prontos para agenda</span><strong>{formatNumber(readyToSchedule)}</strong><small>próxima entrega</small></div>
       </div>
 
       <div className="team-command-signals">
-        <div><span>MAIOR CARGA OBSERVADA</span><strong>{largestLoad?.name || 'N/D'}</strong><small>{largestLoad ? `${formatNumber(largestLoad.active)} ativos` : 'Sem dados completos'}</small></div>
-        <div><span>MAIOR PRESSÃO RELATIVA</span><strong>{highestDelay?.name || 'N/D'}</strong><small>{highestDelay ? `${formatPct(highestDelay.delayedPct)} dos ativos em atraso` : 'Sem dados completos'}</small></div>
-        <div><span>ETAPA MAIS PRESSIONADA</span><strong>{bottleneck?.stage || 'N/D'}</strong><small>{bottleneck ? `${formatNumber(bottleneck.delayed || 0)} atrasos · ${formatPct(bottleneck.delayedPct)}` : 'Sem dados completos'}</small></div>
+        <div><span>Maior carga observada</span><strong>{largestLoad?.name || 'N/D'}</strong><small>{largestLoad ? `${formatNumber(largestLoad.active)} ativos` : 'Sem dados completos'}</small></div>
+        <div><span>Maior pressão relativa</span><strong>{highestDelay?.name || 'N/D'}</strong><small>{highestDelay ? `${formatPct(highestDelay.delayedPct)} dos ativos em atraso` : 'Sem dados completos'}</small></div>
+        <div><span>Etapa mais pressionada</span><strong>{bottleneck?.stage || 'N/D'}</strong><small>{bottleneck ? `${formatNumber(bottleneck.delayed || 0)} atrasos · ${formatPct(bottleneck.delayedPct)}` : 'Sem dados completos'}</small></div>
       </div>
 
       <div className="team-command-grid">
         <article className="team-capacity-panel">
-          <header><div><span>MAPA DE CAPACIDADE</span><strong>Pessoas e carga atual</strong></div><small>clique para investigar</small></header>
+          <header><div><span>Mapa de capacidade</span><strong>Pessoas e carga atual</strong></div><small>Clique para investigar</small></header>
           {topOwners.length === 0 ? <div className="executive-empty-state"><strong>Dados de responsável não disponíveis.</strong><span>O Nexus não transforma ausência de dados em uma nota individual.</span></div> : <div className="team-capacity-cards">{topOwners.map(owner => {
             const delayed = Number(owner.delayed) || 0;
             const delayedPct = owner.delayedPct;
             return <button type="button" className="team-capacity-card" key={owner.name} onClick={() => onOpenOwner?.(owner.name)}>
               <span className="team-capacity-name">{owner.name}</span><b>{formatPct(delayedPct)}</b>
               <i><em style={{ width: `${Math.min(100, Number(delayedPct) || 0)}%` }} /></i>
-              <div><small>ATIVOS<strong>{formatNumber(owner.active)}</strong></small><small>CONCLUÍDOS<strong>{owner.completed === null ? 'N/D' : formatNumber(owner.completed)}</strong></small><small>ATRASOS<strong>{formatNumber(delayed)}</strong></small></div>
-              <u>INVESTIGAR ↗</u>
+              <div><small>Ativos<strong>{formatNumber(owner.active)}</strong></small><small>Concluídos<strong>{owner.completed === null ? 'N/D' : formatNumber(owner.completed)}</strong></small><small>Atrasos<strong>{formatNumber(delayed)}</strong></small></div>
+              <u>Investigar ↗</u>
             </button>;
           })}</div>}
         </article>
 
         <aside className="team-stage-panel">
-          <header><div><span>GARGALOS POR ETAPA</span><strong>Pressão do fluxo</strong></div><small>{formatNumber(visibleStages.length)} etapas</small></header>
+          <header><div><span>Gargalos por etapa</span><strong>Pressão do fluxo</strong></div><small>{formatNumber(visibleStages.length)} etapas</small></header>
           <div className="team-stage-list">{visibleStages.slice(0, 6).map(stage => <div className="team-stage-row" key={stage.stage}>
             <div><span>{stage.stage}</span><strong>{formatNumber(stage.active ?? stage.count)}</strong></div>
             <i><b style={{ width: `${Math.min(100, Number(stage.delayedPct) || Number(stage.pctOfActive) || 0)}%` }} /></i>
             <small>{stage.delayed === null || stage.delayed === undefined ? `${formatPct(stage.pctOfActive)} da carteira` : `${formatNumber(stage.delayed)} atrasos · ${formatPct(stage.delayedPct)}`}</small>
           </div>)}</div>
-          <div className="team-command-note"><strong>COMO LER</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span><button type="button" onClick={onOpenHistory}>VER HISTÓRIA DO FLUXO ↗</button></div>
+          <div className="team-command-note"><strong>Como ler</strong><span>Pressão pode vir de prioridade, dependência, prazo, cadastro ou capacidade. O nome aponta onde investigar, não quem culpar.</span><button type="button" onClick={onOpenHistory}>Ver história do fluxo ↗</button></div>
         </aside>
       </div>
     </section>

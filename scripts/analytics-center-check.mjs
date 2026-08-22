@@ -51,7 +51,7 @@ if (ownerRows) {
   await page.locator('.analytics-owner-row').first().click();
   await page.waitForSelector('.analytics-drilldown-drawer', { state: 'visible', timeout: 5000 });
   const text = await page.locator('.analytics-drilldown-drawer').innerText();
-  if (!text.includes('PERFORMANCE OBSERVÁVEL')) failures.push('drilldown de responsável sem contexto analítico');
+  if (!text.toLocaleLowerCase('pt-BR').includes('performance observável')) failures.push('drilldown de responsável sem contexto analítico');
   if (text.includes('EVIDÊNCIAS · 27 ITEM')) failures.push('drilldown de responsável caiu em drawer genérico de atrasos');
   await close();
 }
@@ -63,7 +63,7 @@ for (const selector of ['.analytics-stage-row', '.analytics-status-row']) {
     await page.locator(selector).first().click();
     await page.waitForSelector('.analytics-drilldown-drawer', { state: 'visible', timeout: 5000 });
     const text = await page.locator('.analytics-drilldown-drawer').innerText();
-    if (!text.includes('PERFORMANCE OBSERVÁVEL')) failures.push(`filtro ${selector} sem drawer analítico`);
+    if (!text.toLocaleLowerCase('pt-BR').includes('performance observável')) failures.push(`filtro ${selector} sem drawer analítico`);
     await close();
   }
 }

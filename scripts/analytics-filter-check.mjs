@@ -70,12 +70,12 @@ if (after.join('|') !== expected.join('|')) failures.push(`recorte inesperado: $
     const drawer = page.locator('.analytics-drilldown-drawer');
     const hiddenText = await drawer.innerText();
     if (hiddenText.includes('Post finalizado')) failures.push('finalizado apareceu antes do comando explícito');
-    const toggle = drawer.getByRole('button', { name: /MOSTRAR FINALIZADOS/ });
-    if (!(await toggle.count())) failures.push('controle MOSTRAR FINALIZADOS ausente');
+    const toggle = drawer.getByRole('button', { name: /Mostrar finalizados/i });
+    if (!(await toggle.count())) failures.push('controle Mostrar finalizados ausente');
     if (await toggle.count()) {
       await toggle.click();
       const shownText = await drawer.innerText();
-      if (!shownText.includes('Post finalizado')) failures.push('finalizado não apareceu após MOSTRAR FINALIZADOS');
+      if (!shownText.includes('Post finalizado')) failures.push('finalizado não apareceu após Mostrar finalizados');
     }
   }
   if (pageErrors.length) failures.push(`page errors: ${pageErrors.join('; ')}`);

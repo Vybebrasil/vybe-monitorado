@@ -28,11 +28,11 @@ export function ExecutivePulseBars({ snapshot }) {
 
   return (
     <section className="executive-pulse-bars data-panel" aria-label="Barras de pressão executiva">
-      <div className="data-panel-title"><span>PRESSÃO EXECUTIVA · BARRAS COMPARÁVEIS</span><span className="executive-pulse-note">{formatNumber(quantitative.activeItems || 0)} itens ativos · {formatNumber(eligible)} clientes elegíveis</span></div>
+      <div className="data-panel-title"><span>Pressão executiva · barras comparáveis</span><span className="executive-pulse-note">{formatNumber(quantitative.activeItems || 0)} itens ativos · {formatNumber(eligible)} clientes elegíveis</span></div>
       <div className="executive-pulse-grid">
-        <Pulse label="ATRASO INTERNO" value={delayedInternal} detail={`${formatNumber(quantitative.overdueInternal || 0)} itens`} source="Produção de Conteúdo" />
-        <Pulse label="RISCO DE VEICULAÇÃO" value={delayedPublication} detail={`${formatNumber(quantitative.overduePublication || 0)} itens`} source="data de veiculação" />
-        <Pulse label="GAP DE EXECUÇÃO" value={executionGap} detail={`${formatNumber(execution.stalled?.length || 0)} clientes`} source="sem conteúdo/demanda" />
+        <Pulse label="Atraso interno" value={delayedInternal} detail={`${formatNumber(quantitative.overdueInternal || 0)} itens`} source="Produção de Conteúdo" />
+        <Pulse label="Risco de veiculação" value={delayedPublication} detail={`${formatNumber(quantitative.overduePublication || 0)} itens`} source="data de veiculação" />
+        <Pulse label="Gap de execução" value={executionGap} detail={`${formatNumber(execution.stalled?.length || 0)} clientes`} source="sem conteúdo/demanda" />
       </div>
     </section>
   );
