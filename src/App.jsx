@@ -860,6 +860,7 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
         onSelect={(id, readinessId) => {
           if (id.startsWith('owner:')) return setDetailPanel({ type: 'owner', id: id.replace(/^owner:/, ''), title: `Gargalos: ${id.replace(/^owner:/, '')}` });
           if (id.startsWith('client:')) return setDetailPanel({ type: 'client', id: id.replace(/^client:/, ''), title: `Investigação: ${id.replace(/^client:/, '')}` });
+          if (id.startsWith('item:')) return setDetailPanel({ type: 'analytics', targetType: 'item', itemId: id.replace(/^item:/, ''), title: `Item alterado: ${id.replace(/^item:/, '')}` });
           setDetailPanel({ type: 'kpi', id, readinessId, title: id === 'readiness' ? `Prontidão: ${readinessId}` : `KPI: ${id}` });
         }}
       /> : null}

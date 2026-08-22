@@ -25,7 +25,7 @@ import { securityHeaders, createRateLimiter } from '../server/security.js';
 import { createVersionedAuditRecord } from '../server/domain/audit-records.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
-import { deriveOperationalMirrorEvents, deriveSnapshotEvents, compactSnapshotItems } from '../server/domain/executive-events.js';
+import { deriveOperationalMirrorEvents, deriveSnapshotEvents, compactSnapshotItems, summarizeOperationalChanges } from '../server/domain/executive-events.js';
 
 test('Série temporal executiva calcula pontos e comparação 7D com snapshots reais', () => {
   const snapshots = [
@@ -182,6 +182,36 @@ test('Risco persistente detecta decisão sem checkpoint e Health Score recorrent
 
   assert.ok(risks.some(risk => risk.type === 'decision_checkpoint'));
   assert.ok(risks.some(risk => risk.type === 'persistent_health'));
+});
+
+test('Alertas live distinguem atraso, concentração e mudança do espelho', () => {
+  const alerts = buildExecutiveAlerts({
+    snapshot: {
+      summary: { delayedTeam: 8, delayedDemands: 2 },
+      productivity: { byStage: [{ stage: 'Produção', count: 8, pctOfActive: 50 }] },
+      portfolioExecution: { stalled: [{ client: 'Cliente A' }] }
+    },
+    liveChanges: { available: true, version: 12, count: 3 },
+    effectiveness: { negativeCount: 0 },
+    freshness: 'live'
+  });
+  assert.ok(alerts.some(alert => alert.type === 'operational_overdue'));
+  assert.ok(alerts.some(alert => alert.type === 'stage_concentration'));
+  assert.ok(alerts.some(alert => alert.type === 'client_no_execution'));
+  assert.ok(alerts.some(alert => alert.type === 'live_update'));
+});
+
+test('Resumo do delta informa itens afetados e finalizados sem histórico inventado', () => {
+  const summary = summarizeOperationalChanges([
+    { item_id: '1', operation: 'update', source_updated_at: '2026-08-22T10:00:00.000Z', raw: { id: '1', name: 'Finalizado', column_values: [{ id: 'status', text: 'Finalizado' }] } },
+    { item_id: '2', operation: 'delete', created_at: '2026-08-22T09:00:00.000Z', raw: { id: '2', name: 'Removido', column_values: [] } }
+  ], { version: 12 });
+  assert.equal(summary.available, true);
+  assert.equal(summary.count, 2);
+  assert.equal(summary.completed, 1);
+  assert.equal(summary.removed, 1);
+  assert.equal(summary.version, 12);
+  assert.equal(summary.affectedItems[0].itemName, 'Finalizado');
 });
 
 test('Alertas são deduplicados e preservam ciclo de vida', () => {

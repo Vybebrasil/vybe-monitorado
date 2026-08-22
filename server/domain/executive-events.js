@@ -130,6 +130,37 @@ function rawColumnChangedAt(column) {
   }
 }
 
+export function summarizeOperationalChanges(changes = [], { version = null } = {}) {
+  const rows = Array.isArray(changes) ? changes.filter(change => change?.raw || change?.item_id || change?.id) : [];
+  const items = rows.map(change => {
+    const raw = change.raw || {};
+    const statusColumn = rawColumn(raw, 'status');
+    const status = text(statusColumn?.text, 120) || null;
+    const operation = change?.operation === 'delete' || change?.deleted === true ? 'removed' : 'updated';
+    const itemId = String(change?.item_id || change?.id || raw.id || '');
+    const itemName = text(raw.name, 240) || (itemId ? `Item ${itemId}` : 'Item sem identificação');
+    const changedAt = eventDate(change?.source_updated_at || raw.updated_at || rawColumnChangedAt(statusColumn) || change?.created_at);
+    const completed = Boolean(status && ['finalizado', 'publicado', 'cancelado'].includes(status.toLowerCase()));
+    return { itemId, itemName, operation, status, completed, changedAt, client: rawColumn(raw, 'lista_suspensa_mkmqnjbv')?.text || null, stage: raw?.group?.title || null };
+  });
+  const completed = items.filter(item => item.completed).length;
+  const removed = items.filter(item => item.operation === 'removed').length;
+  const updated = items.length - removed;
+  const ordered = items.sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt));
+  return {
+    available: items.length > 0,
+    version: version ?? null,
+    count: items.length,
+    updated,
+    removed,
+    completed,
+    active: items.length - completed,
+    affectedItems: ordered.slice(0, 8),
+    capturedAt: ordered[0]?.changedAt || null,
+    message: items.length ? `${items.length} mudança(s) recebida(s) do Vybe Painel desde a última sincronização.` : 'Nenhuma mudança nova recebida do Vybe Painel nesta sincronização.'
+  };
+}
+
 export function deriveOperationalMirrorEvents(changes = []) {
   return changes.slice(0, 300).map(change => {
     const raw = change?.raw || {};

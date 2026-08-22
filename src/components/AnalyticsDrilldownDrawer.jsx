@@ -71,6 +71,9 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
       const key = panel.filterKey;
       rows = productionItems.filter(item => key === 'stage' ? itemStage(item) === panel.id : String(item?.status || '') === panel.id);
     }
+    if (targetType === 'item') {
+      rows = [...productionItems, ...demandRows].filter(item => String(item?.id || '') === String(panel.itemId || panel.id || ''));
+    }
     if (targetType === 'kpi') {
       if (panel.id === 'internal-delays') rows = delayDetails.filter(item => String(item.delayType || '').includes('prazo interno'));
       if (panel.id === 'publication') rows = delayDetails.filter(item => String(item.delayType || '').includes('veiculação'));
@@ -104,7 +107,7 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const totalDays = delayed.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
   const visibleItems = showAll ? itemsToDisplay : itemsToDisplay.slice(0, 5);
   const isCompletedOnlyPanel = targetType === 'kpi' && panel?.id === 'completedItems';
-  const eyebrow = targetType === 'owner' ? 'ANALYTICS · RESPONSÁVEL' : targetType === 'client' ? 'ANALYTICS · CLIENTE' : targetType === 'filter' ? `ANALYTICS · ${panel.filterKey === 'stage' ? 'ETAPA' : 'STATUS'}` : 'ANALYTICS · INDICADOR';
+  const eyebrow = targetType === 'owner' ? 'ANALYTICS · RESPONSÁVEL' : targetType === 'client' ? 'ANALYTICS · CLIENTE' : targetType === 'filter' ? `ANALYTICS · ${panel.filterKey === 'stage' ? 'ETAPA' : 'STATUS'}` : targetType === 'item' ? 'HISTÓRIA · ITEM ALTERADO' : 'ANALYTICS · INDICADOR';
   const title = panel.title || 'Investigação analítica';
   const subtitle = targetType === 'owner'
     ? 'Carteira e sinais operacionais associados à pessoa selecionada. Esta leitura não é avaliação causal de produtividade.'
@@ -112,7 +115,9 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
       ? 'Itens ativos, atrasos, prazos e concentração observável do cliente nesta leitura.'
       : targetType === 'filter'
         ? 'Itens que pertencem exatamente ao filtro selecionado, mantendo a fonte e o status original.'
-        : 'Evidências que compõem o indicador selecionado, sem misturar Produção de Conteúdo e Solicitações de Demandas.';
+        : targetType === 'item'
+          ? 'Evidência atual do item que sofreu uma mudança no Vybe Painel. O horário do evento vem do delta operacional.'
+          : 'Evidências que compõem o indicador selecionado, sem misturar Produção de Conteúdo e Solicitações de Demandas.';
 
   return <div className="drawer-overlay analytics-drawer-overlay" onClick={() => setPanel(null)}>
     <aside className="drawer investigation-drawer analytics-drilldown-drawer" onClick={event => event.stopPropagation()}>
@@ -121,6 +126,7 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
         <section className="analytics-drilldown-hero"><span><BarChart3 size={14} /> PERFORMANCE OBSERVÁVEL</span><h4>{title}</h4><p>{subtitle}</p></section>
         <div className="analytics-drilldown-metrics"><div><strong>{formatNumber(items.length)}</strong><span>ITENS NO RECORTE</span></div><div><strong>{formatNumber(delayed.length)}</strong><span>COM SINAL DE ATRASO</span></div><div><strong>{formatNumber(clients.size)}</strong><span>CLIENTES</span></div><div><strong>{formatNumber(owners.size)}</strong><span>RESPONSÁVEIS</span></div><div><strong>{formatNumber(totalDays)}D</strong><span>DIAS ACUMULADOS</span></div></div>
         {targetType === 'owner' ? <div className="investigation-callout"><span>LEITURA CORRETA</span><p>Volume e atraso podem refletir concentração de carteira, etapa, prioridade e complexidade. O Nexus mostra sinais para investigação, não uma nota individual.</p></div> : null}
+        {targetType === 'item' ? <div className="investigation-callout"><span>FONTE DO EVENTO</span><p>Este item foi aberto a partir de uma mudança recebida do delta do Vybe Painel. O card abaixo mostra o estado atual e o link direto para a evidência no Monday.</p></div> : null}
         {targetType === 'kpi' && panel.id === 'health' ? <div className="investigation-callout"><span>COMPOSIÇÃO</span><p>{snapshot?.portfolioStability?.explanation || 'O placar combina sinais de atraso, execução e prontidão observados no snapshot.'}</p></div> : null}
         {items.length === 0 ? <div className="investigation-empty"><strong>Sem evidência suficiente.</strong><span>Esta seleção não trouxe itens no recorte atual. O Nexus mantém N/D ou zero sem fabricar dados.</span></div> : <>
           {!isCompletedOnlyPanel && completedItems.length > 0 ? <div className="analytics-evidence-controls"><div><span>FINALIZADOS</span><strong>{formatNumber(completedItems.length)} itens concluídos ficam ocultos por padrão.</strong></div><button type="button" className="analytics-completed-toggle" onClick={() => { setShowCompleted(value => !value); setShowAll(false); }}>{showCompleted ? 'OCULTAR FINALIZADOS' : `MOSTRAR FINALIZADOS (${formatNumber(completedItems.length)})`}</button></div> : null}

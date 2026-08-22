@@ -28,7 +28,8 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
   const active = Number(productivity.activeItems ?? quantitative.activeItems) || 0;
   const completed = Number(productivity.completedItems ?? quantitative.completedItems) || 0;
   const delayed = Number(summary.delayedTeam ?? quantitative.overdueInternal) || 0;
-  const demands = Array.isArray(snapshot?.demandItems) ? snapshot.demandItems.length : 0;
+  const demandRows = Array.isArray(snapshot?.demandItemRows) ? snapshot.demandItemRows : (Array.isArray(snapshot?.demandItems) ? snapshot.demandItems : []);
+  const demands = demandRows.length;
   const demandDelayed = Number(summary.delayedDemands) || 0;
   const ready = Number(productivity.readyToSchedule) || 0;
   const score = Number(snapshot?.portfolioStability?.rawScore ?? snapshot?.portfolioStability?.score);
@@ -43,6 +44,8 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
   const alerts = Array.isArray(intelligence?.alerts) ? intelligence.alerts.length : null;
   const clientRiskCount = Number.isFinite(Number(intelligence?.clientHealth?.atRiskCount)) ? Number(intelligence.clientHealth.atRiskCount) : null;
   const evaluatedDecisions = Number.isFinite(Number(intelligence?.effectiveness?.evaluatedDecisions)) ? Number(intelligence.effectiveness.evaluatedDecisions) : null;
+  const liveChanges = intelligence?.liveChanges || null;
+  const changedItems = Array.isArray(liveChanges?.affectedItems) ? liveChanges.affectedItems.slice(0, 4) : [];
 
   return <section className="command-center" aria-label="Resumo executivo da agência">
     <header className="command-hero">
@@ -69,6 +72,11 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       <Metric label="PRONTOS PARA AGENDAR" value={formatNumber(ready)} note={`${formatPct(active ? ready / active * 100 : null)} dos ativos`} tone="cyan" onClick={() => onSelect?.('ready')} />
       <Metric label="SEM EXECUÇÃO" value={formatNumber(stalled)} note="clientes ativos" tone={stalled ? 'warning' : 'stable'} onClick={() => onSelect?.('execution')} />
     </div>
+
+    <section className={`command-live-changes${liveChanges?.available ? ' available' : ''}`} aria-label="Mudanças desde a última sincronização">
+      <div className="command-live-changes-heading"><div><Clock3 size={15} /><span>MUDANÇAS DESDE A ÚLTIMA SINCRONIZAÇÃO</span></div><small>{liveChanges?.version ? `espelho v${liveChanges.version}` : 'delta do Vybe Painel'}</small></div>
+      {liveChanges?.available ? <><div className="command-live-change-metrics"><strong>{formatNumber(liveChanges.count)} <small>itens afetados</small></strong><strong>{formatNumber(liveChanges.completed)} <small>finalizados</small></strong><strong>{formatNumber(liveChanges.removed)} <small>removidos</small></strong></div><div className="command-live-change-list">{changedItems.map(item => <button type="button" key={`${item.itemId}-${item.changedAt}`} onClick={() => onSelect?.(`item:${item.itemId}`)}><span>{item.itemName}</span><small>{[item.status, item.client, item.stage].filter(Boolean).join(' · ') || 'mudança operacional'}</small><ArrowUpRight size={13} /></button>)}</div></> : <p className="command-live-changes-empty">Nenhuma mudança nova recebida nesta sincronização. O Nexus está acompanhando o delta sem reconsultar o histórico operacional.</p>}
+    </section>
 
     <div className="command-core-grid">
       <article className="command-panel command-decisions">

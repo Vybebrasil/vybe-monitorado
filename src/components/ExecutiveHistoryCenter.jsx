@@ -41,14 +41,20 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
   const [eventType, setEventType] = useState('all');
   const [eventSource, setEventSource] = useState('all');
   const [eventClient, setEventClient] = useState('all');
+  const [eventResponsible, setEventResponsible] = useState('all');
+  const [eventStage, setEventStage] = useState('all');
   const [showAll, setShowAll] = useState(false);
   const events = Array.isArray(intelligence?.events) ? intelligence.events : [];
   const clients = [...new Set(events.map(event => event.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const responsibles = [...new Set(events.map(event => event.responsible).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const stages = [...new Set(events.map(event => event.stage).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const types = [...new Set(events.map(event => event.type).filter(Boolean))];
   const filteredEvents = events
     .filter(event => eventType === 'all' || event.type === eventType)
     .filter(event => eventSource === 'all' || event.source === eventSource)
-    .filter(event => eventClient === 'all' || event.client === eventClient);
+    .filter(event => eventClient === 'all' || event.client === eventClient)
+    .filter(event => eventResponsible === 'all' || event.responsible === eventResponsible)
+    .filter(event => eventStage === 'all' || event.stage === eventStage);
   const visibleEvents = showAll ? filteredEvents : filteredEvents.slice(0, 8);
   const points = Array.isArray(timeSeries?.points) ? timeSeries.points : [];
   const current = points.at(-1) || null;
@@ -62,6 +68,7 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
   const learning = intelligence?.learning || {};
   const persistentRiskCount = Array.isArray(intelligence?.persistentRisks) ? intelligence.persistentRisks.length : 0;
   const eventCount = events.length;
+  const alerts = Array.isArray(intelligence?.alerts) ? intelligence.alerts : [];
   const cycleSteps = [
     { label: 'OBSERVADO', value: eventCount, note: eventCount ? `${eventCount} mudanças registradas` : 'aguarda eventos persistidos' },
     { label: 'INVESTIGADO', value: persistentRiskCount, note: persistentRiskCount ? `${persistentRiskCount} riscos persistentes` : 'sem memória de risco' },
@@ -88,6 +95,8 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
 
     <article className="history-cycle-panel"><header><div><Target size={15} /><span>CICLO DE CORREÇÃO</span></div><small>do sinal ao resultado</small></header><div className="history-cycle-track">{cycleSteps.map((step, index) => <div className={`history-cycle-step ${step.value > 0 ? 'available' : 'pending'}`} key={step.label}><span>{String(index + 1).padStart(2, '0')}</span><strong>{step.label}</strong><b>{step.value > 0 ? formatNumber(step.value) : 'N/D'}</b><small>{step.note}</small></div>)}</div><p className="history-cycle-note">O Nexus só deve considerar uma correção comprovada quando existe decisão, checkpoint e impacto observado. Um log técnico sozinho não prova melhora.</p></article>
 
+    <article className="history-alert-panel"><header><div><ShieldAlert size={15} /><span>ALERTAS ACIONÁVEIS</span></div><small>{formatNumber(alerts.length)} sinais com próxima ação</small></header>{alerts.length ? <div className="history-alert-list">{alerts.slice(0, 5).map(alert => <div className={`history-alert-row ${alert.severity || 'medium'}`} key={alert.id}><div><strong>{alert.title || alert.label || 'Alerta executivo'}</strong><span>{alert.label || alert.type || 'sinal operacional'}</span></div><p>{alert.reason || 'O Nexus detectou um sinal que merece investigação.'}</p><small>PRÓXIMO: {alert.recommendedAction || 'abrir a investigação correspondente.'}</small></div>)}</div> : <div className="history-log-empty"><strong>Nenhum alerta acionável nesta leitura.</strong><span>Alertas aparecerão quando houver atraso, concentração, fonte desatualizada ou decisão sem acompanhamento.</span></div>}</article>
+
     <div className="history-log-panel">
       <header><div><ShieldAlert size={15} /><span>EVENTOS EXECUTIVOS</span></div><small>{formatNumber(filteredEvents.length)} eventos no recorte</small></header>
       <div className="history-log-explainer"><Target size={14} /><span><strong>Não são logs técnicos.</strong> São mudanças de operação derivadas de snapshots e deltas do Vybe Painel: status, prazo, atraso, responsável, etapa e recuperação.</span></div>
@@ -95,6 +104,8 @@ export default function ExecutiveHistoryCenter({ snapshot, timeSeries, history, 
         <label><Filter size={13} /><span>TIPO</span><select value={eventType} onChange={event => setEventType(event.target.value)}><option value="all">Todos</option>{types.map(type => <option key={type} value={type}>{EVENT_LABELS[type] || type}</option>)}</select></label>
         <label><span>FONTE</span><select value={eventSource} onChange={event => setEventSource(event.target.value)}><option value="all">Todas</option><option value="Vybe Painel · espelho operacional">Vybe Painel</option><option value="Produção de Conteúdo">Produção de Conteúdo</option><option value="Solicitações de Demandas">Solicitações de Demandas</option></select></label>
         <label><span>CLIENTE</span><select value={eventClient} onChange={event => setEventClient(event.target.value)}><option value="all">Todos</option>{clients.map(client => <option key={client} value={client}>{client}</option>)}</select></label>
+        <label><span>RESPONSÁVEL</span><select value={eventResponsible} onChange={event => setEventResponsible(event.target.value)}><option value="all">Todos</option>{responsibles.map(responsible => <option key={responsible} value={responsible}>{responsible}</option>)}</select></label>
+        <label><span>ETAPA</span><select value={eventStage} onChange={event => setEventStage(event.target.value)}><option value="all">Todas</option>{stages.map(stage => <option key={stage} value={stage}>{stage}</option>)}</select></label>
       </div>
       {visibleEvents.length ? <div className="history-event-list">{visibleEvents.map(event => <article key={event.id} className={`history-event-row ${EVENT_TONES[event.type] || 'neutral'}`}><div className="history-event-time">{formatEventDate(event.capturedAt)}</div><div className="history-event-dot" /><div className="history-event-content"><div><strong>{event.title || EVENT_LABELS[event.type] || 'Evento executivo'}</strong><span>{EVENT_LABELS[event.type] || event.type}</span></div><p>{event.detail || 'Mudança observada na leitura operacional.'}</p><small>{[event.source, event.client, event.responsible, event.stage].filter(Boolean).join(' · ')}</small></div>{event.evidenceUrl ? <a href={event.evidenceUrl} target="_blank" rel="noreferrer">MONDAY ↗</a> : null}</article>)}</div> : <div className="history-log-empty"><strong>{events.length ? 'Nenhum evento corresponde aos filtros.' : 'Nenhum evento executivo persistido ainda.'}</strong><span>{events.length ? 'Amplie o recorte para visualizar outras mudanças.' : 'Quando a persistência estiver ativa, cada captura poderá gerar uma mudança rastreável aqui.'}</span></div>}
       {filteredEvents.length > 8 ? <button type="button" className="history-more-button" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${filteredEvents.length - 8})`}</button> : null}

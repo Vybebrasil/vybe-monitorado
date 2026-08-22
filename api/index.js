@@ -23,7 +23,7 @@ import { buildDecisionMemory, buildExecutiveScenarios } from '../server/domain/e
 import { buildOutcomeLearning } from '../server/domain/outcome-learning.js';
 import { buildExecutiveProjections } from '../server/domain/executive-projections.js';
 import { buildClientHealthPortfolio } from '../server/domain/executive-client-health.js';
-import { compactSnapshotItems, createExecutiveEvent, deriveOperationalMirrorEvents, deriveSnapshotEvents, listExecutiveEvents, saveExecutiveEvents, eventStoreDescriptor } from '../server/domain/executive-events.js';
+import { compactSnapshotItems, createExecutiveEvent, deriveOperationalMirrorEvents, deriveSnapshotEvents, listExecutiveEvents, saveExecutiveEvents, eventStoreDescriptor, summarizeOperationalChanges } from '../server/domain/executive-events.js';
 import { describeRecordStore, getPersistenceHealth } from '../server/persistence/record-store.js';
 import { buildReleaseMetadata } from '../server/release.js';
 import { securityHeaders, createRateLimiter, rateLimitConfig } from '../server/security.js';
@@ -51,7 +51,7 @@ const autosaveEnabled = (envName, storeName) => {
   return isProduction && describeRecordStore(storeName).ready;
 };
 
-async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null, events = null } = {}) {
+async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null, events = null, liveChanges = null } = {}) {
   const [decisionsResult, impactsResult, healthResult, eventsResult] = await Promise.allSettled([
     listDecisionRecords(),
     listImpactRecords(),
@@ -67,7 +67,7 @@ async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null, ev
   const liveRisks = Array.isArray(snapshot.executiveRisks) ? snapshot.executiveRisks : [];
   const patterns = summarizePortfolioPatterns({ decisions, impacts, healthSnapshots });
   const briefing = buildExecutiveBriefing({ snapshot, effectiveness, risks: [...liveRisks, ...persistentRisks], patterns });
-  const alerts = buildExecutiveAlerts({ risks: [...liveRisks, ...persistentRisks], effectiveness, freshness: snapshot.sourceQuality?.freshness || 'live' });
+  const alerts = buildExecutiveAlerts({ risks: [...liveRisks, ...persistentRisks], effectiveness, freshness: snapshot.sourceQuality?.freshness || 'live', snapshot, liveChanges });
   const learning = buildOutcomeLearning({ decisions, impacts, persistentRisks });
   const stores = {
     decisions: decisionsResult.status === 'fulfilled',
@@ -84,6 +84,7 @@ async function buildExecutiveIntelligence({ snapshot = {}, timeSeries = null, ev
     alerts,
     learning,
     events: executiveEvents,
+    liveChanges,
     eventStore: eventStoreDescriptor(),
     memory: buildDecisionMemory({ decisions, impacts }),
     scenarios: buildExecutiveScenarios({ decisions, impacts, healthSnapshots, risks: persistentRisks }),
@@ -703,6 +704,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
           })]
         : [];
     const derivedEvents = mirrorEvents.length ? mirrorEvents : snapshotEvents;
+    const liveChangeSummary = summarizeOperationalChanges(operationalChanges, { version: sourceMeta.mirrorVersion });
     if (eventAutosave && !eventLoadError && derivedEvents.length) {
       try {
         await saveExecutiveEvents(derivedEvents);
@@ -716,7 +718,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
     } else if (!derivedEvents.length) {
       eventPersistReason = persistedSnapshotRecord ? 'no_change_detected' : 'snapshot_not_persisted';
     }
-    const intelligence = await buildExecutiveIntelligence({ snapshot: executiveSnapshot, timeSeries, events: derivedEvents.length ? [...derivedEvents, ...eventRecords] : eventRecords });
+    const intelligence = await buildExecutiveIntelligence({ snapshot: executiveSnapshot, timeSeries, events: derivedEvents.length ? [...derivedEvents, ...eventRecords] : eventRecords, liveChanges: liveChangeSummary });
 
     // O espelho operacional trabalha com deltas a cada 15 segundos. A CDN do
     // Nexus não pode manter uma resposta por um minuto, caso contrário o gestor
@@ -738,6 +740,7 @@ app.get('/api/dashboard/metrics', async (req, res) => {
         snapshotPersistReason,
         eventAutosave,
         eventPersistReason,
+        liveChanges: liveChangeSummary,
         history,
         timeSeries,
         intelligence,
