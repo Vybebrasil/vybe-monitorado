@@ -39,6 +39,11 @@ function isReady(item) {
   return ['agendado', 'para agendar'].some(label => String(item?.status || '').toLowerCase().includes(label));
 }
 
+function displayUrgencyLabel(label) {
+  const value = String(label || '').toLowerCase();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
 export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const [showAll, setShowAll] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -107,7 +112,7 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
   const totalDays = delayed.reduce((sum, item) => sum + (Number(item.daysOverdue) || 0), 0);
   const visibleItems = showAll ? itemsToDisplay : itemsToDisplay.slice(0, 5);
   const isCompletedOnlyPanel = targetType === 'kpi' && panel?.id === 'completedItems';
-  const eyebrow = targetType === 'owner' ? 'ANALYTICS · RESPONSÁVEL' : targetType === 'client' ? 'ANALYTICS · CLIENTE' : targetType === 'filter' ? `ANALYTICS · ${panel.filterKey === 'stage' ? 'ETAPA' : 'STATUS'}` : targetType === 'item' ? 'HISTÓRIA · ITEM ALTERADO' : 'ANALYTICS · INDICADOR';
+  const eyebrow = targetType === 'owner' ? 'Analytics · responsável' : targetType === 'client' ? 'Analytics · cliente' : targetType === 'filter' ? `Analytics · ${panel.filterKey === 'stage' ? 'etapa' : 'status'}` : targetType === 'item' ? 'História · item alterado' : 'Analytics · indicador';
   const title = panel.title || 'Investigação analítica';
   const subtitle = targetType === 'owner'
     ? 'Carteira e sinais operacionais associados à pessoa selecionada. Esta leitura não é avaliação causal de produtividade.'
@@ -121,29 +126,29 @@ export function AnalyticsDrilldownDrawer({ panel, setPanel, snapshot }) {
 
   return <div className="drawer-overlay analytics-drawer-overlay" onClick={() => setPanel(null)}>
     <aside className="drawer investigation-drawer analytics-drilldown-drawer" onClick={event => event.stopPropagation()}>
-      <div className="drawer-header"><div><h3>{title}</h3><p>{eyebrow} · SOMENTE LEITURA</p></div><button type="button" className="drawer-close" aria-label="Fechar análise" onClick={() => setPanel(null)}><X size={32} /></button></div>
+      <div className="drawer-header"><div><h3>{title}</h3><p>{eyebrow} · somente leitura</p></div><button type="button" className="drawer-close" aria-label="Fechar análise" onClick={() => setPanel(null)}><X size={32} /></button></div>
       <div className="drawer-content">
-        <section className="analytics-drilldown-hero"><span><BarChart3 size={14} /> PERFORMANCE OBSERVÁVEL</span><h4>{title}</h4><p>{subtitle}</p></section>
-        <div className="analytics-drilldown-metrics"><div><strong>{formatNumber(items.length)}</strong><span>ITENS NO RECORTE</span></div><div><strong>{formatNumber(delayed.length)}</strong><span>COM SINAL DE ATRASO</span></div><div><strong>{formatNumber(clients.size)}</strong><span>CLIENTES</span></div><div><strong>{formatNumber(owners.size)}</strong><span>RESPONSÁVEIS</span></div><div><strong>{formatNumber(totalDays)}D</strong><span>DIAS ACUMULADOS</span></div></div>
-        {targetType === 'owner' ? <div className="investigation-callout"><span>LEITURA CORRETA</span><p>Volume e atraso podem refletir concentração de carteira, etapa, prioridade e complexidade. O Nexus mostra sinais para investigação, não uma nota individual.</p></div> : null}
-        {targetType === 'item' ? <div className="investigation-callout"><span>FONTE DO EVENTO</span><p>Este item foi aberto a partir de uma mudança recebida do delta do Vybe Painel. O card abaixo mostra o estado atual e o link direto para a evidência no Monday.</p></div> : null}
-        {targetType === 'kpi' && panel.id === 'health' ? <div className="investigation-callout"><span>COMPOSIÇÃO</span><p>{snapshot?.portfolioStability?.explanation || 'O placar combina sinais de atraso, execução e prontidão observados no snapshot.'}</p></div> : null}
+        <section className="analytics-drilldown-hero"><span><BarChart3 size={14} /> Performance observável</span><h4>{title}</h4><p>{subtitle}</p></section>
+        <div className="analytics-drilldown-metrics"><div><strong>{formatNumber(items.length)}</strong><span>Itens no recorte</span></div><div><strong>{formatNumber(delayed.length)}</strong><span>Com sinal de atraso</span></div><div><strong>{formatNumber(clients.size)}</strong><span>Clientes</span></div><div><strong>{formatNumber(owners.size)}</strong><span>Responsáveis</span></div><div><strong>{formatNumber(totalDays)}D</strong><span>Dias acumulados</span></div></div>
+        {targetType === 'owner' ? <div className="investigation-callout"><span>Leitura correta</span><p>Volume e atraso podem refletir concentração de carteira, etapa, prioridade e complexidade. O Nexus mostra sinais para investigação, não uma nota individual.</p></div> : null}
+        {targetType === 'item' ? <div className="investigation-callout"><span>Fonte do evento</span><p>Este item foi aberto a partir de uma mudança recebida do delta do Vybe Painel. O card abaixo mostra o estado atual e o link direto para a evidência no Monday.</p></div> : null}
+        {targetType === 'kpi' && panel.id === 'health' ? <div className="investigation-callout"><span>Composição</span><p>{snapshot?.portfolioStability?.explanation || 'O placar combina sinais de atraso, execução e prontidão observados no snapshot.'}</p></div> : null}
         {items.length === 0 ? <div className="investigation-empty"><strong>Sem evidência suficiente.</strong><span>Esta seleção não trouxe itens no recorte atual. O Nexus mantém N/D ou zero sem fabricar dados.</span></div> : <>
-          {!isCompletedOnlyPanel && completedItems.length > 0 ? <div className="analytics-evidence-controls"><div><span>FINALIZADOS</span><strong>{formatNumber(completedItems.length)} itens concluídos ficam ocultos por padrão.</strong></div><button type="button" className="analytics-completed-toggle" onClick={() => { setShowCompleted(value => !value); setShowAll(false); }}>{showCompleted ? 'OCULTAR FINALIZADOS' : `MOSTRAR FINALIZADOS (${formatNumber(completedItems.length)})`}</button></div> : null}
-          <div className="kpi-investigation-section-title"><span>EVIDÊNCIAS · {formatNumber(itemsToDisplay.length)} EXIBIDAS{itemsToDisplay.length !== items.length ? ` · ${formatNumber(items.length)} NO RECORTE` : ''}</span><strong>{delayed.length ? `${formatNumber(delayed.length)} com sinal` : 'sem atraso no recorte'}</strong></div>
-          {itemsToDisplay.length === 0 ? <div className="investigation-empty"><strong>Nenhum item aberto neste recorte.</strong><span>Os itens encontrados estão finalizados. Use MOSTRAR FINALIZADOS para consultar o histórico.</span></div> : <ul className="kpi-evidence-list analytics-evidence-list">{visibleItems.map((item, index) => {
+          {!isCompletedOnlyPanel && completedItems.length > 0 ? <div className="analytics-evidence-controls"><div><span>Finalizados</span><strong>{formatNumber(completedItems.length)} itens concluídos ficam ocultos por padrão.</strong></div><button type="button" className="analytics-completed-toggle" onClick={() => { setShowCompleted(value => !value); setShowAll(false); }}>{showCompleted ? 'Ocultar finalizados' : `Mostrar finalizados (${formatNumber(completedItems.length)})`}</button></div> : null}
+          <div className="kpi-investigation-section-title"><span>Evidências · {formatNumber(itemsToDisplay.length)} exibidas{itemsToDisplay.length !== items.length ? ` · ${formatNumber(items.length)} no recorte` : ''}</span><strong>{delayed.length ? `${formatNumber(delayed.length)} com sinal` : 'sem atraso no recorte'}</strong></div>
+          {itemsToDisplay.length === 0 ? <div className="investigation-empty"><strong>Nenhum item aberto neste recorte.</strong><span>Os itens encontrados estão finalizados. Use “Mostrar finalizados” para consultar o histórico.</span></div> : <ul className="kpi-evidence-list analytics-evidence-list">{visibleItems.map((item, index) => {
             const delayedItem = isDelayed(item);
-            const urgency = delayedItem ? delayUrgency(item.daysOverdue) : { tone: 'stable', label: 'DENTRO DO PRAZO', description: 'O prazo não aparece vencido nesta leitura.' };
+            const urgency = delayedItem ? delayUrgency(item.daysOverdue) : { tone: 'stable', label: 'Dentro do prazo', description: 'O prazo não aparece vencido nesta leitura.' };
             const statusColor = statusColorFor(item.status, snapshot?.quantitative?.statusColors);
             return <li key={item.id || `${item.name}-${index}`} className={`kpi-evidence-card urgency-${urgency.tone}${isCompleted(item) ? ' item-completed' : ''}`}>
-              <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`}>{delayedItem ? `ATRASO: ${item.daysOverdue || 0}D · ${urgency.label}` : 'DENTRO DO PRAZO'}</span></div>
+              <div className="kpi-evidence-card-head"><strong>{item.name}</strong><span className={`item-meta urgency-chip ${urgency.tone}`}>{delayedItem ? `Atraso: ${item.daysOverdue || 0}D · ${displayUrgencyLabel(urgency.label)}` : 'Dentro do prazo'}</span></div>
               <div className="kpi-evidence-card-meta"><span>{itemClient(item)}</span><span>{itemStage(item)}</span>{item.status ? <span className="monday-status-badge" style={{ color: statusColor, borderColor: statusColor }}>{item.status}</span> : null}</div>
               <div className="kpi-evidence-card-meta"><span>Prazo: {formatDate(item.prazo)}</span><span>Veiculação: {formatDate(item.veiculacao)}</span><span className="people-field"><b>Resp.</b><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></span></div>
               {item.editorDesigner ? <div className="kpi-evidence-card-meta"><span className="people-field"><b>Editor/Designer</b><PeopleAvatars people={item.editorDesignerPeople} names={item.editorDesigner} label="Editor/Designer" /></span></div> : null}
-              {item.id ? <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">ABRIR NO MONDAY ↗</a> : null}
+              {item.id ? <a className="investigation-evidence-link" href={mondayItemUrl(item.id)} target="_blank" rel="noreferrer">Abrir no Monday ↗</a> : null}
             </li>;
           })}</ul>}
-          {itemsToDisplay.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'VER MENOS' : `VER MAIS (${itemsToDisplay.length - 5})`}</button> : null}
+          {itemsToDisplay.length > 5 ? <button type="button" className="list-expand" onClick={() => setShowAll(value => !value)}>{showAll ? 'Ver menos' : `Ver mais (${itemsToDisplay.length - 5})`}</button> : null}
         </>}
       </div>
     </aside>

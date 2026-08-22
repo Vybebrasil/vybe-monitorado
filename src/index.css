@@ -3177,3 +3177,208 @@ button:active:not(:disabled), a:active { transform: scale(.985); }
   .history-alert-panel > header { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
   .history-alert-row > div { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
 }
+
+/* --- Apple-like drawer refinement: remove remaining HUD residue --- */
+.analytics-drawer-overlay { background: rgba(0, 0, 0, .58); backdrop-filter: blur(18px) saturate(115%); }
+.analytics-drilldown-drawer {
+  width: min(720px, 100vw);
+  background: #1c1c1e;
+  border-left: 1px solid rgba(255,255,255,.08);
+  box-shadow: -24px 0 70px rgba(0,0,0,.42);
+}
+.analytics-drilldown-drawer .drawer-header {
+  padding: 2rem 2.25rem 1.35rem;
+  border-bottom: 0;
+  background: transparent;
+}
+.analytics-drilldown-drawer .drawer-header h3 {
+  max-width: 32rem;
+  color: #f5f5f7;
+  font-family: var(--font-sans);
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1.08;
+}
+.analytics-drilldown-drawer .drawer-header p {
+  margin-top: .7rem;
+  color: #8e8e93;
+  font-family: var(--font-sans);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .13em;
+}
+.analytics-drilldown-drawer .drawer-close {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  background: #2c2c2e;
+  color: #a1a1a6;
+  font-size: 0;
+}
+.analytics-drilldown-drawer .drawer-close:hover { background: #3a3a3c; color: #f5f5f7; transform: scale(1.03); }
+.analytics-drilldown-drawer .drawer-close svg { width: 22px; height: 22px; }
+.analytics-drilldown-drawer .drawer-content { padding: .35rem 2.25rem 2.5rem; }
+.analytics-drilldown-drawer .analytics-drilldown-hero {
+  display: grid;
+  gap: .8rem;
+  padding: 1.35rem 1.5rem 1.5rem;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 20px !important;
+  background: linear-gradient(145deg, #242426, #202023) !important;
+  box-shadow: none;
+}
+.analytics-drilldown-drawer .analytics-drilldown-hero > span {
+  color: #64d2ff;
+  font-family: var(--font-sans);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.analytics-drilldown-drawer .analytics-drilldown-hero h4 {
+  color: #f5f5f7;
+  font-family: var(--font-sans);
+  font-size: 1.22rem;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+.analytics-drilldown-drawer .analytics-drilldown-hero p {
+  max-width: 52rem;
+  color: #a1a1a6;
+  font-family: var(--font-sans);
+  font-size: .86rem;
+  line-height: 1.55;
+}
+.analytics-drilldown-drawer .analytics-drilldown-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .6rem;
+  margin: 1rem 0;
+}
+.analytics-drilldown-drawer .analytics-drilldown-metrics > div {
+  min-width: 0;
+  padding: .95rem .9rem;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: #242426;
+}
+.analytics-drilldown-drawer .analytics-drilldown-metrics strong {
+  display: block;
+  color: #f5f5f7;
+  font-family: var(--font-sans);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -.04em;
+}
+.analytics-drilldown-drawer .analytics-drilldown-metrics span {
+  display: block;
+  margin-top: .35rem;
+  color: #8e8e93;
+  font-family: var(--font-sans);
+  font-size: .58rem;
+  font-weight: 650;
+  letter-spacing: .06em;
+  line-height: 1.2;
+}
+.analytics-drilldown-drawer .investigation-callout {
+  margin: 1rem 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(255,255,255,.07);
+  border-left: 3px solid #0a84ff;
+  border-radius: 16px;
+  background: #242426;
+}
+.analytics-drilldown-drawer .investigation-callout span,
+.analytics-drilldown-drawer .kpi-investigation-section-title span,
+.analytics-drilldown-drawer .analytics-evidence-controls span {
+  color: #8e8e93;
+  font-family: var(--font-sans);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+.analytics-drilldown-drawer .investigation-callout p {
+  margin-top: .45rem;
+  color: #d1d1d6;
+  font-family: var(--font-sans);
+  font-size: .82rem;
+  line-height: 1.55;
+}
+.analytics-drilldown-drawer .analytics-evidence-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0 .8rem;
+  padding: .85rem 0;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.analytics-drilldown-drawer .analytics-evidence-controls strong {
+  display: block;
+  margin-top: .25rem;
+  color: #a1a1a6;
+  font-family: var(--font-sans);
+  font-size: .75rem;
+  font-weight: 500;
+}
+.analytics-drilldown-drawer .analytics-completed-toggle,
+.analytics-drilldown-drawer .list-expand {
+  border: 1px solid rgba(100,210,255,.24);
+  border-radius: 999px;
+  background: rgba(100,210,255,.08);
+  color: #64d2ff;
+  font-family: var(--font-sans);
+  font-size: .66rem;
+  font-weight: 650;
+  letter-spacing: .02em;
+  padding: .58rem .8rem;
+}
+.analytics-drilldown-drawer .kpi-investigation-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: .65rem 0;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.analytics-drilldown-drawer .kpi-investigation-section-title strong {
+  color: #a1a1a6;
+  font-family: var(--font-sans);
+  font-size: .7rem;
+  font-weight: 550;
+}
+.analytics-drilldown-drawer .kpi-evidence-list { display: grid; gap: .65rem; margin-top: .7rem; }
+.analytics-drilldown-drawer .kpi-evidence-card {
+  display: grid;
+  gap: .65rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-left: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 17px !important;
+  background: #242426 !important;
+  box-shadow: none;
+}
+.analytics-drilldown-drawer .kpi-evidence-card:hover { border-color: rgba(100,210,255,.28) !important; background: #2a2a2c !important; transform: translateY(-1px); }
+.analytics-drilldown-drawer .kpi-evidence-card-head { align-items: flex-start; gap: .75rem; }
+.analytics-drilldown-drawer .kpi-evidence-card-head strong { color: #f5f5f7; font-family: var(--font-sans); font-size: .94rem; font-weight: 650; letter-spacing: -.015em; line-height: 1.25; }
+.analytics-drilldown-drawer .kpi-evidence-card .urgency-chip { flex: 0 0 auto; border: 0; border-radius: 999px; background: rgba(255,255,255,.08); color: #a1a1a6; font-family: var(--font-sans); font-size: .58rem; font-weight: 700; letter-spacing: .03em; padding: .35rem .5rem; }
+.analytics-drilldown-drawer .kpi-evidence-card .urgency-chip.critical,
+.analytics-drilldown-drawer .kpi-evidence-card .urgency-chip.critical-max { background: rgba(255,69,58,.14); color: #ff6961; }
+.analytics-drilldown-drawer .kpi-evidence-card .urgency-chip.high { background: rgba(255,159,10,.14); color: #ffb340; }
+.analytics-drilldown-drawer .kpi-evidence-card-meta { gap: .45rem .8rem; color: #a1a1a6; font-family: var(--font-sans); font-size: .72rem; }
+.analytics-drilldown-drawer .kpi-evidence-card-meta span { color: #a1a1a6; }
+.analytics-drilldown-drawer .kpi-evidence-card-meta .monday-status-badge { border-width: 1px; border-radius: 999px; background: rgba(255,255,255,.045); padding: .22rem .48rem; font-size: .62rem; font-weight: 650; }
+.analytics-drilldown-drawer .investigation-evidence-link { justify-self: start; margin-top: .15rem; padding: .48rem .7rem; border-radius: 999px; background: rgba(100,210,255,.08); color: #64d2ff; font-family: var(--font-sans); font-size: .64rem; font-weight: 650; letter-spacing: .02em; }
+.analytics-drilldown-drawer .investigation-evidence-link:hover { background: rgba(100,210,255,.16); color: #f5f5f7; }
+@media (max-width: 680px) {
+  .analytics-drilldown-drawer .drawer-header { padding: 1.35rem 1rem 1rem; }
+  .analytics-drilldown-drawer .drawer-content { padding: .35rem 1rem 1.5rem; }
+  .analytics-drilldown-drawer .analytics-drilldown-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-drilldown-drawer .analytics-evidence-controls { align-items: flex-start; flex-direction: column; }
+  .analytics-drilldown-drawer .kpi-evidence-card-head { flex-direction: column; }
+}
