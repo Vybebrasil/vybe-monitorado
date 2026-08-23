@@ -377,6 +377,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                   <th>Tarefa</th>
                   <th>Cliente</th>
                   <th>Status (Etapa)</th>
+                  <th>Tempo Parado</th>
                   <th>Responsável</th>
                   <th>Atraso</th>
                   <th>Evidência</th>
@@ -389,6 +390,13 @@ export default function AnalystStation({ snapshot, onExit }) {
                     <td className="item-primary">{item.name}</td>
                     <td style={{ color: 'var(--vybe-cyan)' }}>{item.client}</td>
                     <td><span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot.quantitative?.statusColors) }}>{item.status || item.stage}</span></td>
+                    <td>
+                      {item.daysInStatus !== null && item.daysInStatus !== undefined ? (
+                        <span className={`item-meta ${item.daysInStatus >= 10 ? 'critical' : item.daysInStatus >= 5 ? 'warning' : ''}`} title={`Mudou em ${item.statusChangedAt}`}>
+                          {item.daysInStatus}D
+                        </span>
+                      ) : <span className="item-meta">N/A</span>}
+                    </td>
                     <td><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></td>
                     <td>
                       {item.daysOverdue > 0 ? (
@@ -402,7 +410,7 @@ export default function AnalystStation({ snapshot, onExit }) {
                 ))}
                 {filteredDelays.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>{activeFilterCount ? 'Nenhuma evidência combina com os filtros selecionados.' : 'Nenhum atraso encontrado nesta leitura do Monday.'}</td>
+                    <td colSpan="8" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>{activeFilterCount ? 'Nenhuma evidência combina com os filtros selecionados.' : 'Nenhum atraso encontrado nesta leitura do Monday.'}</td>
                   </tr>
                 )}
               </tbody>

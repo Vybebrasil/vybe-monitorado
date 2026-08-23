@@ -284,7 +284,7 @@ class MondayIntegration {
         id
         name
         group { title }
-        column_values { id text value }
+        column_values { id text value updated_at }
       `
     });
 
@@ -324,10 +324,14 @@ class MondayIntegration {
       let editorDesigner = '';
       let responsavelRefs = [];
       let editorDesignerRefs = [];
+      let statusChangedAt = null;
 
       item.column_values.forEach(c => {
         if (c.id === 'lista_suspensa_mkmqnjbv') cliente = normalizeClientName(c.text);
-        if (c.id === 'status') status = c.text || '';
+        if (c.id === 'status') {
+          status = c.text || '';
+          statusChangedAt = c.updated_at || null;
+        }
         if (c.id === 'person') {
           responsavel = c.text || '';
           responsavelRefs = parsePeopleColumn(c);
@@ -420,11 +424,14 @@ class MondayIntegration {
           totalDelayed += 1;
         }
 
+        const daysInStatus = statusChangedAt ? daysSince(statusChangedAt, today) : null;
         postsByClient[cliente].details.push({
           id: item.id,
           name: item.name,
           quadro: item.group ? item.group.title : 'Sem Quadro',
           status,
+          statusChangedAt,
+          daysInStatus,
           prazo: prazoStr,
           veiculacao: veiculacaoStr,
           responsavel,
@@ -507,6 +514,8 @@ class MondayIntegration {
           name: post.name,
           stage: post.quadro,
           status: post.status,
+          statusChangedAt: post.statusChangedAt,
+          daysInStatus: post.daysInStatus,
           prazo: post.prazo,
           veiculacao: post.veiculacao,
           responsavel: post.responsavel,

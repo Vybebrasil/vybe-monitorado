@@ -358,7 +358,7 @@ function OwnerBars({ owners, totalDelays, statusColors, selectedOwnerId, onSelec
                 aria-expanded={showOwnerPreview}
                 aria-label={`${isSelected ? 'Pessoa selecionada' : 'Selecionar'} ${owner.name}`}
               >
-                <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><div className="owner-bar-person-summary"><span className="owner-bar-person-name">{owner.name}</span><strong>{formatNumber(owner.count)} atrasos</strong><span>{owner.publication ? `${owner.publication} veiculação` : 'sem veiculação'}</span><em className={`owner-urgency-chip ${owner.urgency.key}`}>{owner.urgency.short} · {owner.urgency.label}</em></div><span className="owner-bar-share">{formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
+                <div className="owner-bar-heading"><PeopleAvatars people={owner.people} names={owner.name} label={`Responsável ${owner.name}`} size="md" /><div className="owner-bar-person-summary"><span className="owner-bar-person-name">{owner.name}</span><strong>{formatNumber(owner.count)} atrasos</strong><span>{owner.publication ? `${owner.publication} veiculação` : 'sem veiculação'}</span>{owner.avgDaysInStatus !== null && <span title="Tempo médio que os itens atrasados estão no status atual" style={{ color: 'var(--vybe-text-muted)' }}>Parado: {owner.avgDaysInStatus}D/méd</span>}<em className={`owner-urgency-chip ${owner.urgency.key}`}>{owner.urgency.short} · {owner.urgency.label}</em></div><span className="owner-bar-share">{formatPct(totalDelays ? (owner.count / totalDelays) * 100 : null)}</span></div>
                 <div className={`owner-bar-track ${owner.urgency.key}`}><span style={{ width: `${(owner.count / max) * 100}%` }} /></div>
                 <small className="owner-bar-instruction"><strong>Maior atraso: {owner.maxDays} dia(s)</strong> · {isSelected ? 'selecionado · abrir abaixo' : 'selecione para fixar'}</small>
               </button>
@@ -396,6 +396,49 @@ function RiskBars({ clients, showAll, onToggle, onSelect }) {
         })}
       </div>
       {clients.length > 5 ? <button type="button" className="list-expand" onClick={onToggle}>{showAll ? 'VER MENOS' : `VER MAIS (${clients.length - 5})`}</button> : null}
+    </section>
+  );
+}
+
+function ActiveDecisionsPanel() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/executive/decisions')
+      .then(res => res.json())
+      .then(payload => { if (!cancelled) setData(payload); })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!data?.decisions) return null;
+  const now = Date.now();
+  const active = data.decisions.filter(d => !['normalized', 'dismissed'].includes(d.status));
+  const atRisk = active.filter(d => !d.checkpointAt || new Date(d.checkpointAt).getTime() < now);
+  
+  if (atRisk.length === 0) return null;
+
+  return (
+    <section className="data-panel animate-slide delay-1" style={{ borderColor: 'var(--vybe-orange, #ff9d00)' }}>
+      <div className="data-panel-title" style={{ color: 'var(--vybe-orange, #ff9d00)', borderColor: 'rgba(255,157,0,0.25)' }}>
+        DECISÕES VENCIDAS · CHECKPOINT
+      </div>
+      <ul className="data-list">
+        {atRisk.map(decision => (
+          <li key={decision.id} className="data-list-item" style={{ cursor: 'default' }}>
+            <div>
+              <div className="item-primary">{decision.title}</div>
+              <div className="item-sub">
+                {decision.checkpointAt ? `Vencido (marcado para ${new Date(decision.checkpointAt).toLocaleDateString('pt-BR')})` : 'Decisão ativa sem checkpoint definido'}
+              </div>
+            </div>
+            <span className={`item-meta ${decision.priority === 'critical' ? 'critical' : 'warning'}`}>
+              {decision.priority.toUpperCase()}
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -776,7 +819,9 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
   const topBlame = Object.entries(blameMap)
     .map(([name, values]) => {
       const maxDays = Math.max(...values.details.map(item => Number(item.daysOverdue) || 0), 0);
-      return { id: name, name, people: values.people, ...values, maxDays, urgency: ownerUrgency(maxDays) };
+      const daysInStatusList = values.details.map(item => item.daysInStatus).filter(v => v !== null && v !== undefined);
+      const avgDaysInStatus = daysInStatusList.length ? Math.round(daysInStatusList.reduce((a, b) => a + b, 0) / daysInStatusList.length) : null;
+      return { id: name, name, people: values.people, ...values, maxDays, avgDaysInStatus, urgency: ownerUrgency(maxDays) };
     })
     .sort((a, b) => b.maxDays - a.maxDays || Number(b.publication || 0) - Number(a.publication || 0) || b.count - a.count);
 
@@ -888,6 +933,8 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
               {topBlame.length > 5 && <button type="button" className="list-expand" onClick={() => setShowAllOwners(value => !value)}>{showAllOwners ? 'VER MENOS' : `VER MAIS (${topBlame.length - 5})`}</button>}
             </ul>
           </div>
+
+          <ActiveDecisionsPanel />
 
           <div className="data-panel animate-slide delay-2">
             <div className="data-panel-title">CLIENTES ATIVOS SEM EXECUÇÃO</div>
