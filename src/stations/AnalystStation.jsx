@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
 import { Activity, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { statusColorFor } from '../data/status-colors.js';
 import { PeopleAvatars } from '../components/PeopleAvatars.jsx';
@@ -151,6 +151,51 @@ function MyDayPanel({ myItems, memberId }) {
   );
 }
 
+function ExecutiveTrendChart() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/executive/snapshots')
+      .then(res => res.json())
+      .then(payload => {
+        if (!cancelled && payload.success) {
+          const chartData = payload.snapshots.reverse().map(snap => ({
+            date: new Date(snap.generatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            score: snap.portfolioStability?.score || 0,
+            atrasos: snap.delayDetails ? snap.delayDetails.filter(d => d.delayType?.includes('prazo interno')).length : 0
+          }));
+          setData(chartData);
+        }
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!data || data.length < 1) return null; // We can show even 1 point to indicate it's working
+
+  return (
+    <section className="data-panel animate-slide delay-2 full" aria-label="Evolução Executiva">
+      <div className="data-panel-title" style={{ color: 'var(--vybe-cyan)' }}>TENDÊNCIA OPERACIONAL (HISTÓRICO)</div>
+      <div style={{ width: '100%', height: 250, marginTop: '20px' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+            <XAxis dataKey="date" stroke="#666" tick={{ fill: '#666', fontSize: 10 }} />
+            <YAxis yAxisId="left" stroke="#00f3ff" tick={{ fill: '#00f3ff', fontSize: 10 }} domain={[0, 100]} />
+            <YAxis yAxisId="right" orientation="right" stroke="#ff4444" tick={{ fill: '#ff4444', fontSize: 10 }} />
+            <RechartsTooltip contentStyle={{ backgroundColor: '#111', borderColor: '#333' }} />
+            <Line yAxisId="left" type="monotone" dataKey="score" name="Health Score" stroke="#00f3ff" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            <Line yAxisId="right" type="monotone" dataKey="atrasos" name="Atrasos Internos" stroke="#ff4444" strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="visual-footnote" style={{ marginTop: '10px' }}>Comparativo histórico do Score da Carteira vs Volume de Atrasos internos salvos pelo autosave.</p>
+    </section>
+  );
+}
+
+
 export default function AnalystStation({ snapshot, onExit }) {
   const statusCounts = snapshot.quantitative?.statusCounts || {};
   const delayDetails = snapshot.delayDetails || [];
@@ -270,6 +315,23 @@ export default function AnalystStation({ snapshot, onExit }) {
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const updateFilter = (key, value) => setFilters(previous => ({ ...previous, [key]: value }));
 
+  const [copyStatus, setCopyStatus] = useState('');
+  const handleCopyWhatsApp = () => {
+    if (!filters.responsible || filteredDelays.length === 0) return;
+    const lines = [`Oi ${filters.responsible}, tudo bem? 👋`, `Estou acompanhando a fila de produção e vi que temos ${filteredDelays.length} item(ns) com você precisando de atenção:\n`];
+    filteredDelays.forEach(item => {
+      lines.push(`📌 *${item.name}* (${item.client})`);
+      lines.push(`   Etapa: ${item.status || item.stage}`);
+      if (item.daysInStatus) lines.push(`   ⏳ Parado nessa etapa há ${item.daysInStatus} dias`);
+      lines.push('');
+    });
+    lines.push(`Consegue me dar um panorama de quando conseguimos dar andamento neles? Qualquer bloqueio, me avisa! 🚀`);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopyStatus('Copiado!');
+      setTimeout(() => setCopyStatus(''), 2000);
+    });
+  };
+
   return (
     <div className="animate-fade" style={{ minHeight: '100vh' }}>
       <header className="app-header">
@@ -341,7 +403,14 @@ export default function AnalystStation({ snapshot, onExit }) {
           <label>ETAPA<select value={filters.stage} onChange={event => updateFilter('stage', event.target.value)}><option value="">Todas as etapas</option>{filterOptions.stages.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label>STATUS MONDAY<select value={filters.status} onChange={event => updateFilter('status', event.target.value)}><option value="">Todos os status</option>{filterOptions.statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
         </div>
-        {activeFilterCount > 0 ? <button type="button" className="list-expand analyst-filter-clear" onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button> : null}
+        <div className="analyst-filter-actions" style={{ display: 'flex', gap: '1rem', marginTop: '12px' }}>
+          {activeFilterCount > 0 && <button type="button" className="list-expand analyst-filter-clear" style={{ margin: 0, flex: 1 }} onClick={() => setFilters({ client: '', responsible: '', stage: '', status: '' })}>LIMPAR {activeFilterCount} FILTRO(S) · MOSTRAR TUDO</button>}
+          {filters.responsible && filteredDelays.length > 0 && (
+            <button type="button" className="list-expand" style={{ margin: 0, flex: 1, borderColor: '#25D366', color: '#25D366' }} onClick={handleCopyWhatsApp}>
+              {copyStatus || `GERAR MENSAGEM WHATSAPP (${filteredDelays.length})`}
+            </button>
+          )}
+        </div>
       </section>
 
       <div className="dashboard-grid full">
@@ -365,6 +434,8 @@ export default function AnalystStation({ snapshot, onExit }) {
             </ResponsiveContainer>
           </div>
         </div>
+
+        <ExecutiveTrendChart />
 
         {/* EVIDÊNCIAS DOS ATRASOS */}
         <div className="data-panel animate-slide delay-2" style={{ borderColor: 'var(--vybe-cyan)' }}>

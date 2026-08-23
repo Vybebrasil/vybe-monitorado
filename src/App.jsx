@@ -846,15 +846,30 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
         : worstClients.length > 0
           ? 'Abrir as evidências dos clientes com maior exposição.'
           : 'A carteira não apresenta um comando crítico nesta leitura.';
-  const initialJarvisMessage = stalledClients.length > 0
-    ? { text: `Encontrei ${stalledClients.length} cliente(s) ativo(s) sem conteúdo em produção ou demanda aberta. Esse é o primeiro ponto que eu investigaria com você.`, hint: 'O risco aqui é de previsibilidade: vamos confirmar o contexto antes de concluir qualquer coisa.' }
-    : internalDelays.length > 0
-      ? { text: `A carteira tem ${internalDelays.length} atraso(s) interno(s) concentrado(s) em ${topBlame.length || 1} responsável(is). Vou separar causa de volume para orientar a decisão.`, hint: calendarRiskCount > 0 ? `Também há ${calendarRiskCount} cliente(s) em risco sem reunião futura.` : 'Selecione um responsável ou cliente e eu abro a leitura completa.' }
-      : calendarRiskCount > 0
-        ? { text: `Encontrei ${calendarRiskCount} cliente(s) com risco operacional e nenhuma reunião futura identificada na agenda.`, hint: 'A reunião certa pode transformar um risco silencioso em decisão de recuperação.' }
-        : worstClients.length > 0
-          ? { text: `${worstClients[0].client} aparece com ${worstClients[0].riskPct}% de exposição no recorte. Vou começar pela evidência antes de recomendar qualquer intervenção.`, hint: 'A decisão vem depois da causa; primeiro vamos entender o sinal.' }
-          : { text: 'A leitura está organizada. Não encontrei um risco dominante, então vou acompanhar os sinais que podem mudar a decisão.', hint: 'Selecione uma evidência para investigar qualquer variação com contexto.' };
+  const buildIntelligentMessage = () => {
+    // 1. Histórico e Tendência
+    if (history?.available && history.score?.delta !== null) {
+      if (history.score.delta <= -5) {
+        const worstOffender = history.changes?.filter(c => c.delta > 0).sort((a, b) => b.delta - a.delta)[0];
+        const offenderText = worstOffender ? ` O principal ofensor foi "${worstOffender.label}" (+${worstOffender.delta} itens).` : '';
+        return { text: `Alerta: o Score da Carteira caiu ${Math.abs(history.score.delta)} pontos desde o último registro.${offenderText} Vamos investigar as causas.`, hint: 'A pressão operacional aumentou. Sugiro focar no painel de Gargalos ou nas Evidências.' };
+      }
+      if (history.score.delta >= 5) {
+        const bestImprover = history.changes?.filter(c => c.delta < 0).sort((a, b) => a.delta - b.delta)[0];
+        const improverText = bestImprover ? ` Reduzimos ${Math.abs(bestImprover.delta)} em "${bestImprover.label}".` : '';
+        return { text: `Boa notícia: o Score da Carteira subiu ${history.score.delta} pontos desde o último registro.${improverText} A operação está absorvendo os gargalos.`, hint: 'Mantenha o ritmo. Veja as Evidências para garantir que não há itens travados há muito tempo.' };
+      }
+    }
+    
+    // 2. Comandos Reativos Atuais
+    if (stalledClients.length > 0) return { text: `Encontrei ${stalledClients.length} cliente(s) ativo(s) sem conteúdo em produção ou demanda aberta. Esse é o primeiro ponto que eu investigaria com você.`, hint: 'O risco aqui é de previsibilidade: vamos confirmar o contexto antes de concluir qualquer coisa.' };
+    if (internalDelays.length > 0) return { text: `A carteira tem ${internalDelays.length} atraso(s) interno(s) concentrado(s) em ${topBlame.length || 1} responsável(is). Vou separar causa de volume para orientar a decisão.`, hint: calendarRiskCount > 0 ? `Também há ${calendarRiskCount} cliente(s) em risco sem reunião futura.` : 'Selecione um responsável ou cliente e eu abro a leitura completa.' };
+    if (calendarRiskCount > 0) return { text: `Encontrei ${calendarRiskCount} cliente(s) com risco operacional e nenhuma reunião futura identificada na agenda.`, hint: 'A reunião certa pode transformar um risco silencioso em decisão de recuperação.' };
+    if (worstClients.length > 0) return { text: `${worstClients[0].client} aparece com ${worstClients[0].riskPct}% de exposição no recorte. Vou começar pela evidência antes de recomendar qualquer intervenção.`, hint: 'A decisão vem depois da causa; primeiro vamos entender o sinal.' };
+    return { text: 'A leitura está organizada. Não encontrei um risco dominante, então vou acompanhar os sinais que podem mudar a decisão.', hint: 'Selecione uma evidência para investigar qualquer variação com contexto.' };
+  };
+
+  const initialJarvisMessage = buildIntelligentMessage();
   const activeJarvisMessage = jarvisMessage || initialJarvisMessage;
 
   return (
