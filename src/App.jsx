@@ -400,6 +400,45 @@ function RiskBars({ clients, showAll, onToggle, onSelect }) {
   );
 }
 
+function CalendarRiskPanel({ calendarSignals }) {
+  const riskClients = calendarSignals?.riskClientsWithoutMeeting || [];
+  const next7 = calendarSignals?.next7Count ?? null;
+  const available = calendarSignals?.quality?.status === 'ok';
+
+  if (!available && riskClients.length === 0) return null;
+
+  return (
+    <section className="data-panel visual-panel calendar-risk-panel" aria-label="Clientes em risco sem reunião futura">
+      <div className="data-panel-title">
+        <span>AGENDA · CLIENTES SEM REUNIÃO FUTURA</span>
+        {next7 !== null && <span className="panel-subtitle">{next7} REUNIÕES EM 7D</span>}
+      </div>
+      <div className="visual-question">Quem está em risco e não tem reunião agendada?</div>
+      {riskClients.length === 0 ? (
+        <div style={{ color: '#00ff66', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', padding: '1rem 0' }}>
+          ✓ Todos os clientes em risco têm reunião futura identificada na agenda.
+        </div>
+      ) : (
+        <ul className="data-list">
+          {riskClients.map((client, i) => {
+            const name = typeof client === 'string' ? client : client.client || client.name || String(i);
+            return (
+              <li key={name} className="data-list-item" style={{ cursor: 'default' }}>
+                <div>
+                  <div className="item-primary">{name}</div>
+                  <div className="item-sub">Nenhuma reunião futura identificada na agenda</div>
+                </div>
+                <span className="item-meta critical">SEM REUNIÃO</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="visual-footnote">Cruzamento entre os sinais de risco operacional e as reuniões futuras identificadas na agenda. Fonte: Google Calendar.</p>
+    </section>
+  );
+}
+
 const buildInvestigation = (panel, list) => {
   const internal = list.filter(item => item.delayType?.includes('prazo interno'));
   const publication = list.filter(item => item.delayType?.includes('veiculação'));
@@ -816,6 +855,7 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
             setJarvisMessage({ text: `${client.client} tem ${client.riskPct}% de exposição no recorte (${client.delayedItems} de ${client.openItems} itens). Vou abrir a evidência antes de sugerir qualquer decisão.`, hint: 'Próximo: entender se o risco é interno, de veiculação ou de contexto.' });
           }}
         />
+        <CalendarRiskPanel calendarSignals={calendarSignals} />
       </div>
 
       <div className="dashboard-grid">
