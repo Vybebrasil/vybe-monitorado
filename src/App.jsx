@@ -7,6 +7,7 @@ import { ExecutiveMeter } from './components/ExecutiveMeter.jsx';
 
 // Carregada sob demanda: só ela usa Recharts, que responde pela maior parte do bundle.
 const AnalystStation = lazy(() => import('./stations/AnalystStation.jsx'));
+const ZenStation = lazy(() => import('./stations/ZenStation.jsx'));
 
 // --- COMPONENTES VYBE OS ---
 
@@ -789,7 +790,7 @@ function JarvisCopilot({ message, nextCommand }) {
   );
 }
 
-function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
+function ManagerStation({ snapshot, history, onExit, onOpenAnalyst, onOpenZen }) {
   const [detailPanel, setDetailPanel] = useState(null);
   const [showAllOwners, setShowAllOwners] = useState(false);
   const [showAllClients, setShowAllClients] = useState(false);
@@ -878,9 +879,10 @@ function ManagerStation({ snapshot, history, onExit, onOpenAnalyst }) {
         <div className="app-header-title">
           <Target size={28} /> JARVIS / GUIA EXECUTIVO <span className="badge">GUIADO</span>
         </div>
-        <div className="app-header-meta">
+        <div className="app-header-meta" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <span>JARVIS ATIVO · RISCO, CAPACIDADE E DECISÃO</span>
-          <button className="jarvis-exit-analyst" onClick={onOpenAnalyst}>SAIR DO JARVIS · ABRIR ANALISTA &rarr;</button>
+          <button className="jarvis-exit-analyst" onClick={onOpenAnalyst}>ABRIR ANALISTA &rarr;</button>
+          <button className="jarvis-exit-analyst" style={{ background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }} onClick={onOpenZen}>ZEN MODE &rarr;</button>
         </div>
       </header>
 
@@ -1212,7 +1214,7 @@ function App() {
 
       {appMode === 'wake' && <JarvisWakeScreen stage={wakeStage} />}
 
-      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} />}
+      {appMode === 'manager' && <ManagerStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('wake')} onOpenAnalyst={() => setAppMode('analyst')} onOpenZen={() => setAppMode('zen')} />}
       {appMode === 'analyst' && (
         <Suspense fallback={(
           <div className="loading-wrapper">
@@ -1221,6 +1223,11 @@ function App() {
           </div>
         )}>
           <AnalystStation snapshot={metrics.executiveSnapshot} onExit={() => setAppMode('manager')} />
+        </Suspense>
+      )}
+      {appMode === 'zen' && (
+        <Suspense fallback={<div className="loading-wrapper"><div className="loading-text">CARREGANDO ZEN MODE</div></div>}>
+          <ZenStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('manager')} />
         </Suspense>
       )}
     </>
