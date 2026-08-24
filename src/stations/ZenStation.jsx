@@ -18,29 +18,30 @@ export default function ZenStation({ snapshot, history, onExit }) {
     });
   });
 
-  const topOffender = Object.entries(blameMap)
+  const topOffenders = Object.entries(blameMap)
     .map(([name, values]) => ({ name, ...values }))
-    .sort((a, b) => b.count - a.count)[0];
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
 
   // 2. Generate WhatsApp Text
-  const handleCopyWhatsApp = () => {
-    if (!topOffender) return;
-    const lines = [`Oi ${topOffender.name}, tudo bem? 👋`, `Vi aqui pelo sistema que temos ${topOffender.count} item(ns) na sua fila aguardando avanço:\n`];
+  const handleCopyWhatsApp = (offender) => {
+    if (!offender) return;
+    const lines = [`Oi ${offender.name}, tudo bem? 👋`, `Vi aqui pelo sistema que temos ${offender.count} item(ns) na sua fila aguardando avanço:\n`];
     
     // Pegar até os 5 piores
-    const worst = topOffender.details.sort((a, b) => (b.daysInStatus || 0) - (a.daysInStatus || 0)).slice(0, 5);
+    const worst = offender.details.sort((a, b) => (b.daysInStatus || 0) - (a.daysInStatus || 0)).slice(0, 5);
     worst.forEach(item => {
       lines.push(`📌 *${item.name}* (${item.client})`);
       if (item.daysInStatus) lines.push(`   ⏳ Na etapa "${item.status || item.stage}" há ${item.daysInStatus} dias`);
       lines.push('');
     });
     
-    if (topOffender.count > 5) lines.push(`*(e mais ${topOffender.count - 5} outros itens...)*\n`);
+    if (offender.count > 5) lines.push(`*(e mais ${offender.count - 5} outros itens...)*\n`);
     lines.push(`Consegue me dar um panorama de quando conseguimos destravar isso? Abs!`);
     
     navigator.clipboard.writeText(lines.join('\n')).then(() => {
-      setCopyStatus('Copiado para colar no WhatsApp!');
-      setTimeout(() => setCopyStatus(''), 3000);
+      setCopyStatus(offender.name);
+      setTimeout(() => setCopyStatus(null), 3000);
     });
   };
 
@@ -77,19 +78,23 @@ export default function ZenStation({ snapshot, history, onExit }) {
         </h1>
         
         <p className="zen-subtitle">
-          Em vez de olhar para todos os gráficos, o sistema isolou o maior ofensor de fluxo agora. Resolver isso é a ação de maior impacto para o dia.
+          Em vez de olhar para todos os gráficos, o sistema isolou os maiores ofensores de fluxo agora. Destravar essas filas é a ação de maior impacto para o dia.
         </p>
 
-        {topOffender ? (
-          <div className="zen-card">
-            <div className="zen-card-title">Gargalo Principal: {topOffender.name}</div>
-            <div className="zen-card-meta">
-              <span>{topOffender.count} demandas internas atrasadas sob responsabilidade de {topOffender.name}.</span>
-              <span>A ação recomendada é iniciar o desbloqueio destas entregas via comunicação direta.</span>
-            </div>
-            <button className="zen-action-btn" onClick={handleCopyWhatsApp}>
-              {copyStatus || `Cobrar ${topOffender.name} no WhatsApp`}
-            </button>
+        {topOffenders.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {topOffenders.map((offender, i) => (
+              <div className="zen-card" key={offender.name}>
+                <div className="zen-card-title">{i + 1}º Gargalo: {offender.name}</div>
+                <div className="zen-card-meta">
+                  <span>{offender.count} demandas internas atrasadas sob responsabilidade de {offender.name}.</span>
+                  <span>Ação: iniciar o desbloqueio destas entregas via comunicação direta.</span>
+                </div>
+                <button className="zen-action-btn" onClick={() => handleCopyWhatsApp(offender)} style={{ marginTop: '1.5rem' }}>
+                  {copyStatus === offender.name ? 'Copiado para colar no WhatsApp!' : `Cobrar ${offender.name}`}
+                </button>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="zen-card">
