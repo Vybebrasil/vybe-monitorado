@@ -990,17 +990,17 @@ function ManagerStation({ snapshot, history, timeSeries, intelligence, onExit, o
         onOpenAnalyst={onOpenAnalyst}
       /> : null}
 
-      {activeView === 'analytics' ? <ExecutiveAnalyticsCenter
-        snapshot={snapshot}
-        history={history}
-        timeSeries={timeSeries}
-        onSelect={(selection) => {
-          setDetailPanel({ ...selection, type: 'analytics', targetType: selection.type });
-          setJarvisMessage({ text: `Abrindo ${selection.title || 'esta leitura'} com os dados observáveis disponíveis.`, hint: 'O painel analítico mantém a evidência, a fonte e o link para investigação.' });
-        }}
-        onOpenAnalyst={onOpenAnalyst}
-        onOpenHistory={() => setActiveView('history')}
-      /> : null}
+      {activeView === 'analytics' ? (
+        <Suspense fallback={<div className="loading-wrapper"><div className="loading-text">Carregando o modo Analista</div><div className="loading-bar"></div></div>}>
+          <AnalystStation snapshot={snapshot} history={history} onExit={() => setActiveView('summary')} />
+        </Suspense>
+      ) : null}
+
+      {activeView === 'zen' ? (
+        <Suspense fallback={<div className="loading-wrapper"><div className="loading-text">CARREGANDO ZEN MODE</div></div>}>
+          <ZenStation snapshot={snapshot} history={history} onExit={() => setActiveView('summary')} />
+        </Suspense>
+      ) : null}
 
       {activeView === 'portfolio' ? <div className="executive-visual-grid">
         <StatusComposition snapshot={snapshot} />
@@ -1325,11 +1325,6 @@ function App() {
           </div>
         )}>
           <AnalystStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('manager')} />
-        </Suspense>
-      )}
-      {appMode === 'zen' && (
-        <Suspense fallback={<div className="loading-wrapper"><div className="loading-text">CARREGANDO ZEN MODE</div></div>}>
-          <ZenStation snapshot={metrics.executiveSnapshot} history={metrics.history} onExit={() => setAppMode('manager')} />
         </Suspense>
       )}
     </>

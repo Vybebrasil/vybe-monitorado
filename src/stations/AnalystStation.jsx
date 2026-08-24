@@ -209,13 +209,8 @@ export default function AnalystStation({ snapshot, history, onExit }) {
   };
 
   return (
-    <div className="animate-fade analyst-station" style={{ minHeight: '100vh' }}>
-      <header className="analyst-station-header">
-        <div className="analyst-station-brand"><Activity size={20} aria-hidden="true" /><span>Analista · investigação executiva</span><span className="badge">Foco</span></div>
-        <div className="analyst-station-header-actions"><span>causa · impacto · evidência</span><button type="button" onClick={onExit}>&larr; Voltar ao JARVIS</button></div>
-      </header>
-
-      <ExecutiveInsightHeader
+      <div className="animate-fade analyst-station">
+        <ExecutiveInsightHeader
         className="analyst-insight"
         eyebrow={<><Activity size={14} aria-hidden="true" /> Investigação guiada</>}
         title={filteredDelays.length ? 'Qual é a causa deste sinal?' : 'O que merece ser investigado?'}

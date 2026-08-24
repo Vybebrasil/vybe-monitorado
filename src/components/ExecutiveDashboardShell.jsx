@@ -3,10 +3,11 @@ import { formatNumber } from './executive-helpers.js';
 
 const NAV_ITEMS = [
   { id: 'summary', label: 'Resumo executivo', short: 'Resumo', icon: LayoutDashboard, detail: 'decisão e risco' },
+  { id: 'zen', label: 'Zen Mode', short: 'Zen Mode', icon: Activity, detail: 'foco em gargalos' },
   { id: 'portfolio', label: 'Carteira', short: 'Carteira', icon: Briefcase, detail: 'capacidade e previsibilidade' },
   { id: 'demands', label: 'Demandas', short: 'Demandas', icon: ListChecks, detail: 'solicitações à agência' },
   { id: 'team', label: 'Time & performance', short: 'Time', icon: Users, detail: 'capacidade observável' },
-  { id: 'analytics', label: 'Analytics Center', short: 'Analytics', icon: Activity, detail: 'volume, risco e fluxo' },
+  { id: 'analytics', label: 'Analytics Center', short: 'Analytics', icon: Search, detail: 'volume, risco e fluxo' },
   { id: 'history', label: 'História & Logs', short: 'História', icon: Clock3, detail: 'evolução e causas' }
 ];
 
@@ -85,8 +86,6 @@ export function ExecutiveDashboardShell({
           <div className="nexus-breadcrumb"><span>VYBE NEXUS</span><i>/</i><strong>{activeItem.label}</strong></div>
           <div className="nexus-topbar-actions">
             <span className="nexus-topbar-live"><Wifi size={13} /> {freshness === 'fresh' || freshness === 'live' ? 'Dados ao vivo' : freshness === 'stale' ? 'Leitura desatualizada' : freshness === 'fallback' ? 'Leitura de contingência' : 'Leitura pendente'}</span>
-            <button type="button" className="nexus-topbar-analyst" onClick={onOpenZen} style={{ marginRight: '10px', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}><Activity size={13} /> ZEN MODE</button>
-            <button type="button" className="nexus-topbar-analyst" onClick={onOpenAnalyst}><Search size={13} /> Analista</button>
             <button type="button" className="nexus-topbar-refresh" onClick={onRefresh} disabled={refreshing} aria-label="Atualizar dados executivos"><RefreshCw size={14} className={refreshing ? 'is-spinning' : ''} /> {refreshing ? 'Lendo' : 'Atualizar'}</button>
           </div>
         </header>

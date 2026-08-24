@@ -75,12 +75,21 @@ export default function ExecutiveCommandCenter({ snapshot, timeSeries, intellige
       context="Produção de Conteúdo e Solicitações de Demandas seguem separadas nesta leitura."
     />
 
-    <div className="command-metric-grid" aria-label="Indicadores de apoio à decisão">
-      <Metric label="Em fluxo" value={formatNumber(active)} note={`${formatPct(total ? active / total * 100 : null)} da base`} onClick={() => onSelect?.('active')} />
+    <div style={{ marginTop: '2rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+      <h3 style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Risco e Perda de Previsibilidade</h3>
+    </div>
+    <div className="command-metric-grid" aria-label="Indicadores Críticos">
       <Metric label="Atrasos · Produção" value={formatNumber(delayed)} note={`${formatPct(active ? delayed / active * 100 : null)} dos ativos`} tone={delayed ? 'critical' : 'stable'} onClick={() => onSelect?.('delays')} priority="primary" />
       <Metric label="Demandas vencidas" value={demandDelayed === null ? 'N/D' : formatNumber(demandDelayed)} note={demandDataNote} tone={demandDelayed ? 'warning' : 'stable'} onClick={() => onSelect?.('health')} priority="primary" />
-      <Metric label="Prontos para agendar" value={formatNumber(ready)} note={`${formatPct(active ? ready / active * 100 : null)} dos ativos`} tone="cyan" onClick={() => onSelect?.('ready')} />
       <Metric label="Sem execução" value={formatNumber(stalled)} note="clientes ativos" tone={stalled ? 'warning' : 'stable'} onClick={() => onSelect?.('execution')} priority="primary" />
+    </div>
+
+    <div style={{ marginTop: '2rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+      <h3 style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Volume de Operação</h3>
+    </div>
+    <div className="command-metric-grid" aria-label="Indicadores de Fluxo">
+      <Metric label="Em fluxo" value={formatNumber(active)} note={`${formatPct(total ? active / total * 100 : null)} da base`} onClick={() => onSelect?.('active')} />
+      <Metric label="Prontos para agendar" value={formatNumber(ready)} note={`${formatPct(active ? ready / active * 100 : null)} dos ativos`} tone="cyan" onClick={() => onSelect?.('ready')} />
     </div>
 
     <section className={`command-live-changes${liveChanges?.available ? ' available' : ''}`} aria-label="Mudanças desde a última sincronização">

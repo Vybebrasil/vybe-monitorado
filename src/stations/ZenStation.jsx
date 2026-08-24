@@ -66,10 +66,7 @@ export default function ZenStation({ snapshot, history, onExit }) {
 
   return (
     <div className="zen-container animate-fade">
-      <nav className="zen-nav">
-        <div><strong style={{ opacity: 0.5 }}>Vybe Nexus</strong> <span style={{ opacity: 0.3 }}>/ Zen Mode</span></div>
-        <button className="zen-nav-btn" onClick={onExit}>Voltar ao Painel Avançado (Jarvis)</button>
-      </nav>
+
 
       <main className="zen-main">
         <h1 className="zen-hero">
