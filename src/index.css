@@ -4234,3 +4234,5 @@ button:active:not(:disabled), a:active { transform: scale(.985); }
 .analytics-scope-comparison-item.purple > i > b { background: #bf8cff; }
 @media (max-width: 780px) { .analytics-scope-comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .analytics-scope-comparison { padding: .8rem; } .analytics-scope-comparison-grid { grid-template-columns: 1fr 1fr; } }
+
+
