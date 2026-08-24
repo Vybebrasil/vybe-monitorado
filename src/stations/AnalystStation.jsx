@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
-import { Activity } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts';
+import { Activity, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { statusColorFor } from '../data/status-colors.js';
 import { PeopleAvatars } from '../components/PeopleAvatars.jsx';
 import { ExecutiveInsightHeader, ExecutiveSectionHeader } from '../components/ExecutiveInsightHeader.jsx';
@@ -39,6 +39,40 @@ export default function AnalystStation({ snapshot, history, onExit }) {
     if (!body || typeof body !== 'object') throw new Error('Vybe Painel retornou uma resposta inválida nesta leitura.');
     return body;
   };
+
+  // Detecta o membro logado via ?vybe_member na URL
+  const memberId = useMemo(() => getMemberIdFromUrl(), []);
+
+  // Nome do membro a partir dos delayDetails (responsavel que contenha o ID)
+  // O Monday retorna o nome — o ID numérico é o que vem na URL.
+  // Como o delayDetails traz 'responsavel' (nome) e não o ID do Monday,
+  // vamos identificar o membro pelo responsável mais frequente nos itens
+  // que têm o ID do Monday matching — ou deixar o filtro de nome ser manual.
+  // Para o "Meu Dia": filtramos todos os itens onde responsavel_id === memberId
+  // (campo responsavelId que pode existir) ou deixamos o filtro por nome.
+  const memberItems = useMemo(() => {
+    if (!memberId) return [];
+    // Tenta filtrar por responsavelId (campo numérico, se disponível)
+    const byId = delayDetails.filter(item =>
+      String(item.responsavelId || '') === memberId ||
+      (Array.isArray(item.responsavelIds) && item.responsavelIds.map(String).includes(memberId))
+    );
+    if (byId.length > 0) return byId;
+    // Se não tiver ID numérico, retorna array vazio — não força um match errado
+    return [];
+  }, [memberId, delayDetails]);
+
+  // Auto-aplica filtro de responsável se veio via URL (pelo nome se tivermos match)
+  const memberName = useMemo(() => {
+    if (memberItems.length === 0) return null;
+    return memberItems[0]?.responsavel || null;
+  }, [memberItems]);
+
+  // Busca só o contexto dos itens que a investigação realmente mostra.
+  const evidenceIds = useMemo(
+    () => [...new Set((delayDetails || []).map(item => String(item?.id || '').trim()).filter(Boolean))],
+    [delayDetails]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -112,13 +146,11 @@ export default function AnalystStation({ snapshot, history, onExit }) {
     }
   };
 
-  // Transform statusCounts object to array for Recharts pipeline
   const pipelineData = Object.entries(statusCounts)
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 
-  // Evidências de atraso ordenadas para investigação executiva
   const allDelaysSorted = useMemo(() => [...delayDetails].sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0)), [delayDetails]);
   const panelItemsById = useMemo(() => new Map((panelSnapshot?.items || []).map(item => [String(item.id), item])), [panelSnapshot?.items]);
   const panelAffectedItems = useMemo(() => allDelaysSorted
@@ -133,6 +165,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
     const values = key => [...new Set(delayDetails.map(item => String(item?.[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     return { clients: values('client'), responsible: values('responsavel'), stages: values('stage'), statuses: values('status') };
   }, [delayDetails]);
+
   const filteredDelays = useMemo(() => allDelaysSorted.filter(item => {
     const matches = (key, selected) => !selected || String(item?.[key] || '') === selected;
     const sourceMatches = !filters.source
@@ -157,6 +190,23 @@ export default function AnalystStation({ snapshot, history, onExit }) {
     ? `${primaryDelay.name || 'Item sem nome'} · ${primaryDelay.daysOverdue || 0} dias de atraso · ${primaryDelay.client || 'cliente não informado'}.`
     : 'Nenhuma evidência de atraso combina com o recorte atual.';
   const scrollToEvidence = () => document.querySelector('.analyst-evidence-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const [copyStatus, setCopyStatus] = useState('');
+  const handleCopyWhatsApp = () => {
+    if (!filters.responsible || filteredDelays.length === 0) return;
+    const lines = [`Oi ${filters.responsible}, tudo bem? 👋`, `Estou acompanhando a fila de produção e vi que temos ${filteredDelays.length} item(ns) com você precisando de atenção:\n`];
+    filteredDelays.forEach(item => {
+      lines.push(`📌 *${item.name}* (${item.client})`);
+      lines.push(`   Etapa: ${item.status || item.stage}`);
+      if (item.daysInStatus) lines.push(`   ⏳ Parado nessa etapa há ${item.daysInStatus} dias`);
+      lines.push('');
+    });
+    lines.push(`Consegue me dar um panorama de quando conseguimos dar andamento neles? Qualquer bloqueio, me avisa! 🚀`);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopyStatus('Copiado!');
+      setTimeout(() => setCopyStatus(''), 2000);
+    });
+  };
 
   return (
     <div className="animate-fade analyst-station" style={{ minHeight: '100vh' }}>
@@ -259,6 +309,8 @@ export default function AnalystStation({ snapshot, history, onExit }) {
           </div>
         </div>
 
+        <ExecutiveTrendChart />
+
         {/* EVIDÊNCIAS DOS ATRASOS */}
         <div className="data-panel analyst-evidence-panel animate-slide delay-2">
           <div className="data-panel-title">Evidências do Monday · itens afetados</div>
@@ -270,6 +322,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
                   <th>Tarefa</th>
                   <th>Cliente</th>
                   <th>Status (Etapa)</th>
+                  <th>Tempo Parado</th>
                   <th>Responsável</th>
                   <th>Atraso</th>
                   <th>Evidência</th>
@@ -282,6 +335,13 @@ export default function AnalystStation({ snapshot, history, onExit }) {
                     <td className="item-primary">{item.name}</td>
                     <td style={{ color: 'var(--vybe-cyan)' }}>{item.client}</td>
                     <td><span className="monday-status-badge" style={{ color: statusColorFor(item.status, snapshot.quantitative?.statusColors), borderColor: statusColorFor(item.status, snapshot.quantitative?.statusColors) }}>{item.status || item.stage}</span></td>
+                    <td>
+                      {item.daysInStatus !== null && item.daysInStatus !== undefined ? (
+                        <span className={`item-meta ${item.daysInStatus >= 10 ? 'critical' : item.daysInStatus >= 5 ? 'warning' : ''}`} title={`Mudou em ${item.statusChangedAt}`}>
+                          {item.daysInStatus}D
+                        </span>
+                      ) : <span className="item-meta">N/A</span>}
+                    </td>
                     <td><PeopleAvatars people={item.responsavelPeople} names={item.responsavel} label="Responsável" /></td>
                     <td>
                       {item.daysOverdue > 0 ? (
@@ -295,7 +355,7 @@ export default function AnalystStation({ snapshot, history, onExit }) {
                 ))}
                 {filteredDelays.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>{activeFilterCount ? 'Nenhuma evidência combina com os filtros selecionados.' : 'Nenhum atraso encontrado nesta leitura do Monday.'}</td>
+                    <td colSpan="8" style={{ textAlign: 'center', color: 'var(--vybe-text-muted)' }}>{activeFilterCount ? 'Nenhuma evidência combina com os filtros selecionados.' : 'Nenhum atraso encontrado nesta leitura do Monday.'}</td>
                   </tr>
                 )}
               </tbody>

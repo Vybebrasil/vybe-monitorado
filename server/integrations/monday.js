@@ -1,3 +1,4 @@
+import { isBeforeToday, isWithinNextDays, daysOverdue, daysSince } from '../time.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -64,26 +65,6 @@ function parseDateValue(value) {
 const PAGE_LIMIT = 500;
 const PRIORITY_COLUMN_ID = process.env.MONDAY_PRODUCTION_PRIORITY_COLUMN_ID || 'color_mm164yv8';
 const EDITOR_DESIGNER_COLUMN_ID = process.env.MONDAY_PRODUCTION_EDITOR_DESIGNER_COLUMN_ID || 'multiple_person_mm18b2p0';
-
-function isBeforeToday(dateString, today) {
-  return Boolean(dateString) && new Date(`${dateString}T23:59:59Z`) < today;
-}
-
-function isWithinNextDays(dateString, today, days = 7) {
-  if (!dateString) return false;
-  const date = new Date(`${dateString}T00:00:00Z`);
-  const end = new Date(today);
-  end.setUTCDate(end.getUTCDate() + days);
-  return date >= today && date <= end;
-}
-
-function daysOverdue(dateString, today = new Date()) {
-  if (!dateString) return 0;
-  const due = new Date(`${dateString}T00:00:00Z`);
-  const base = new Date(today);
-  base.setUTCHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((base.getTime() - due.getTime()) / 86400000));
-}
 
 class MondayIntegration {
   constructor() {
@@ -347,7 +328,6 @@ class MondayIntegration {
     const postsByClient = {};
     let totalDelayed = 0;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const statusCounts = {};
     const clientCounts = {};
     const groupCounts = {};
@@ -386,10 +366,14 @@ class MondayIntegration {
       let editorDesigner = '';
       let responsavelRefs = [];
       let editorDesignerRefs = [];
+      let statusChangedAt = null;
 
       item.column_values.forEach(c => {
         if (c.id === 'lista_suspensa_mkmqnjbv') cliente = normalizeClientName(c.text);
-        if (c.id === 'status') status = c.text || '';
+        if (c.id === 'status') {
+          status = c.text || '';
+          statusChangedAt = c.updated_at || null;
+        }
         if (c.id === 'person') {
           responsavel = c.text || '';
           responsavelRefs = parsePeopleColumn(c);
@@ -509,11 +493,14 @@ class MondayIntegration {
         itemRow.isDelayedVeiculacao = isDelayedVeiculacao;
         itemRow.isDelayed = isDelayedPrazo || isDelayedVeiculacao;
 
+        const daysInStatus = statusChangedAt ? daysSince(statusChangedAt, today) : null;
         postsByClient[cliente].details.push({
           id: item.id,
           name: item.name,
           quadro: item.group ? item.group.title : 'Sem Quadro',
           status,
+          statusChangedAt,
+          daysInStatus,
           prazo: prazoStr,
           veiculacao: veiculacaoStr,
           responsavel,
@@ -600,6 +587,8 @@ class MondayIntegration {
           name: post.name,
           stage: post.quadro,
           status: post.status,
+          statusChangedAt: post.statusChangedAt,
+          daysInStatus: post.daysInStatus,
           prazo: post.prazo,
           veiculacao: post.veiculacao,
           responsavel: post.responsavel,
@@ -856,7 +845,6 @@ class MondayIntegration {
 
     // Processamento pós-agrupamento (ordenação e dias sem reunião)
     const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
 
     Object.values(clientLogs).forEach(client => {
       // Ordena reuniões da mais recente para a mais antiga
@@ -867,9 +855,9 @@ class MondayIntegration {
 
       if (pastMeetings.length > 0) {
         client.lastMeetingDate = pastMeetings[0].date;
-        const lastDate = new Date(client.lastMeetingDate);
-        const diffTime = Math.abs(hoje - lastDate);
-        client.daysSinceLastMeeting = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Dias de calendário na régua da agência: reunião de hoje é 0 dia,
+        // não 1 como resultava do arredondamento sobre a diferença bruta.
+        client.daysSinceLastMeeting = daysSince(client.lastMeetingDate, hoje);
       }
     });
 
